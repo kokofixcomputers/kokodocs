@@ -1,0 +1,14 @@
+[Unit]
+Description=KokoDocs
+After=network.target
+
+[Service]
+User=kokodocs
+WorkingDirectory=/opt/kokodocs/backend
+Environment=KOKO_DATA_DIR=/var/lib/kokodocs
+# Optional: Environment=KOKO_SECRET=<long random string>
+ExecStart=/opt/kokodocs/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

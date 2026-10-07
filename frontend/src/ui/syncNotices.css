@@ -1,0 +1,6 @@
+.sync-pill { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 45000; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 24px); padding: 10px 20px 10px 16px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); box-shadow: 0 10px 36px rgba(0, 0, 0, .3); pointer-events: none; user-select: none; animation: sync-in .28s var(--ease); }
+.sync-pill svg { flex: none; }
+.sp-text { display: grid; line-height: 1.25; } .sp-text b { font-size: 14px; font-weight: 600; } .sp-text em { font-style: normal; font-size: 12.5px; opacity: .75; }
+@keyframes sync-in { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } to { opacity: 1; transform: translate(-50%, 0); } }
+.status-pill.offline { background: var(--danger-soft); color: var(--danger); }
+@media (max-width: 720px) { .sync-pill { bottom: calc(170px + var(--kb, 0px)); } }

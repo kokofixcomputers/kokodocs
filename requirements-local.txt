@@ -1,0 +1,3 @@
+# Optional: fully local voice typing (no API key, no audio leaves your server).
+# The model downloads on first use: tiny.en ~75 MB, base.en ~150 MB, small.en ~480 MB. CPU only.
+faster-whisper>=1.0

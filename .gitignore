@@ -1,0 +1,13 @@
+node_modules/
+dist/
+backend/.venv/
+backend/data/
+__pycache__/
+
+# generated or local
+frontend/public/twemoji/
+frontend/src/generated/
+*.tar.gz
+.DS_Store
+.env
+*.log
