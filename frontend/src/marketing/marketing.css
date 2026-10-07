@@ -86,3 +86,30 @@ main { display: block; }
 @media (max-width: 760px) { .show-sm { display: inline-grid !important; } }
 @media (max-width: 480px) { .hide-xs { display: none !important; } .mk-list { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) { .home-nav .hide-sm { display: none !important; } }
+
+/* voice typing demo (also the frames of the GIF) */
+.vd-capture { display: grid; place-items: center; min-height: 100vh; background: var(--bg); }
+.vd-stage { position: relative; width: 760px; height: 440px; background: var(--canvas); border-radius: 20px; overflow: hidden; font-family: 'Inter', sans-serif; color: var(--ink); }
+.vd-doc { position: absolute; inset: 22px 90px 78px; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-1); overflow: hidden; border: 1px solid var(--line); }
+.vd-doc-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 14px; } .vd-logo { width: 22px; height: 22px; border-radius: 7px; background: var(--accent); } .vd-saved { margin-left: auto; font-size: 12px; color: var(--muted); background: var(--accent-soft); padding: 3px 10px; border-radius: 999px; }
+.vd-page { background: var(--sheet); margin: 14px auto; width: 78%; padding: 22px 26px; border-radius: 10px; min-height: 230px; box-shadow: 0 1px 3px rgba(0, 0, 0, .08); } .vd-page h4 { margin: 0 0 12px; font: 700 21px 'Lexend', sans-serif; }
+.vd-line { margin: 0 0 8px; font-size: 14px; color: var(--ink); } .vd-next { margin: 16px 0 6px; font-size: 14px; } .vd-typed { margin: 0; font-size: 14px; line-height: 1.55; min-height: 44px; }
+.vd-caret { display: inline-block; width: 2px; height: 1.1em; background: var(--accent); vertical-align: text-bottom; margin-left: 1px; }
+.vd-key { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); display: grid; justify-items: center; gap: 8px; width: 74px; }
+.vd-key span { display: grid; place-items: center; width: 74px; height: 50px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 5px 0 var(--line); font: 600 12.5px 'Inter', sans-serif; transition: transform .08s, box-shadow .08s; }
+.vd-key.down span { transform: translateY(5px); box-shadow: 0 0 0 var(--line); background: var(--accent); color: var(--accent-ink); border-color: var(--accent); } .vd-key em { font-style: normal; font-size: 11.5px; color: var(--muted); text-align: center; }
+.vd-pill { position: absolute; left: 50%; bottom: 20px; transform: translate(-50%, 14px); opacity: 0; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 999px; background: var(--ink); color: var(--bg); box-shadow: var(--shadow-2); min-width: 220px; justify-content: center; } .vd-pill.on { opacity: 1; transform: translate(-50%, 0); }
+.vd-rec { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; flex: none; }
+.vd-bars { display: flex; align-items: center; gap: 3px; height: 36px; } .vd-bars span { width: 3px; border-radius: 3px; background: currentColor; opacity: .85; }
+.vd-ptext { display: grid; line-height: 1.25; } .vd-ptext b { font-size: 13.5px; } .vd-ptext em { font-style: normal; font-size: 11.5px; opacity: .65; }
+.vd-x, .vd-ok { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: rgba(128, 128, 128, .25); } .vd-ok { background: var(--bg); color: var(--ink); }
+.vd-mic { position: absolute; left: 20px; bottom: 24px; display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+.vd-ptext em { white-space: nowrap; }
+
+/* voice typing section */
+.mk-voice-card { margin-top: 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.mic-test { display: grid; gap: 12px; }
+.mic-bars { display: flex; align-items: center; justify-content: center; gap: 3px; height: 44px; }
+.mic-bars span { width: 4px; height: 6px; border-radius: 4px; background: var(--accent); opacity: .85; transition: height .06s linear; }
+.mic-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; } .mic-msg { font-size: 13.5px; color: var(--muted); } .mic-msg.ok { color: var(--ok); font-weight: 600; }
+.mk-gif .win-body { background: var(--canvas); } .mk-gif img { image-rendering: auto; }

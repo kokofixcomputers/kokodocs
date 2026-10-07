@@ -53,7 +53,7 @@ export function MarketingLayout({ children, title = 'KokoDocs: your whole worksp
       <footer className="mk-foot">
         <div className="mk-foot-in">
           <div className="mk-foot-brand"><span className="brand"><Logo size={24} /><span>KokoDocs</span></span><p>Documents, spreadsheets, slides, forms and wikis, with an assistant that asks before it edits. Runs on your own server.</p></div>
-          <div><h4>Product</h4><Link to="/features">Features</Link><Link to="/features#documents">Documents</Link><Link to="/features#spreadsheets">Spreadsheets</Link><Link to="/features#forms">Forms</Link><Link to="/features#wikis">Wikis</Link></div>
+          <div><h4>Product</h4><Link to="/features">Features</Link><Link to="/features#documents">Documents</Link><Link to="/features#spreadsheets">Spreadsheets</Link><Link to="/features#forms">Forms</Link><Link to="/features#voice">Voice typing</Link><Link to="/features#wikis">Wikis</Link></div>
           <div><h4>Learn</h4><Link to="/why">Why KokoDocs</Link><Link to="/self-host">Self-host guide</Link><Link to="/features#assistant">The assistant</Link><Link to="/features#security">Security</Link></div>
           <div><h4>Account</h4><Link to="/login">Sign in</Link>{signup && <Link to="/signup">Create an account</Link>}</div>
         </div>

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { Cta, MarketingLayout, useSignup } from '../marketing/Layout'
 import { Frame, Phone, Shot } from '../marketing/Shot'
+import { MicTest } from '../marketing/MicTest'
 
 const TOOLS = [
   { id: 'docs', icon: FileText, name: 'Documents', shot: 'doc', url: 'docs.example.com/d/q3-launch-plan', title: 'Write like it is a real page', text: 'A calm, fast editor for everything from meeting notes to long reports.', bullets: ['Pages with headers, footers and page numbers', 'Tables with merged cells, callouts, checklists and images', '1,950 fonts, comments, mentions and live cursors', 'Import Word, Markdown and HTML; export PDF, Word and more'], link: '/features#documents' },
@@ -19,7 +20,7 @@ const SPOTS = [
   { icon: Users, eyebrow: 'Collaboration', shot: 'share', title: 'Edit together without stepping on toes', text: 'See everyone’s cursor and changes the moment they happen. Go offline, keep typing, and your edits merge cleanly when you are back.', bullets: ['Live cursors and presence avatars', 'Comments with @mentions, notifications and optional email', 'Viewer, Editor and “Can manage” roles, per person or per link', 'Password-protected links and whole-folder sharing'] },
   { icon: Bot, eyebrow: 'Assistant', shot: 'assistant', title: 'An assistant that asks before it edits', text: 'Ask it to read, summarise, rewrite or build. Every change shows up as a card you approve first, so nothing happens behind your back.', bullets: ['Works with any OpenAI-compatible model, including your own', 'Reads and edits documents, spreadsheets, slides and wikis', 'Shows exactly what it will change, then waits', 'Your key is stored encrypted and never sent back to the browser'] },
   { icon: History, eyebrow: 'History', shot: 'history', title: 'Nothing gets lost', text: 'Every file keeps its history. Compare any version to the one before it, or to now, and restore with one click.', bullets: ['Automatic and named versions', 'A clear “what changed” view, line by line', 'Restoring keeps a copy of what you replaced', 'A recycle bin that holds deleted files for 30 days'] },
-  { icon: SpellCheck, eyebrow: 'Writing', shot: 'proofread', title: 'Proofreading that speaks your English', text: 'Spelling and grammar checks run on your own server. Choose US, UK, Canadian, Australian and other variants, so “colour” is right when it should be.', bullets: ['Eight English variants, with suggestions in your spelling', 'Optional LanguageTool server for deeper grammar rules', 'Voice typing: hold a key, or tap on your phone, and talk', 'Right-click menus, a slash menu and keyboard shortcuts'] },
+  { icon: SpellCheck, eyebrow: 'Writing', shot: 'proofread', title: 'Proofreading that speaks your English', text: 'Spelling and grammar checks run on your own server. Choose US, UK, Canadian, Australian and other variants, so “colour” is right when it should be.', bullets: ['Eight English variants, with suggestions in your spelling', 'Optional LanguageTool server for deeper grammar rules', 'Right-click menus, a slash menu and keyboard shortcuts'] },
   { icon: Webhook, eyebrow: 'Wikis', shot: 'wiki', title: 'API docs with a Try it button', text: 'Readers can change the address, headers or body and press Send. Their changes stay in their browser, and your docs stay as you wrote them.', bullets: ['Method badges, status and timing, formatted replies', 'Variables for the server address, and private ones for tokens', 'A server fallback for APIs that block browser requests', 'Not tied to one API: it is just an HTTP request you can document'] },
   { icon: HardDrive, eyebrow: 'Control', shot: 'settings', title: 'Know where every byte is', text: 'See what takes up space, by file and by kind. Identical pictures are stored once, and admins set limits per person.', bullets: ['A colour-coded storage breakdown for you and for each file', 'Duplicate pictures merged automatically', 'Two-factor sign-in, Google sign-in and email confirmation', 'An admin panel for people, files and server settings'] },
 ] as const
@@ -94,6 +95,21 @@ export function Home() {
           <div className="mk-spot-shot"><Frame name={s.shot} alt={s.title} /></div>
         </section>
       ))}
+
+      <section id="voice" className="mk-spot mk-gif">
+        <div className="mk-spot-copy">
+          <span className="mk-eyebrow"><Mic size={15} />Voice typing</span>
+          <h2>Just say it</h2>
+          <p>Hold a key, or tap the microphone on your phone, and talk. When you let go, your words land at the cursor, ready to edit like anything else you typed.</p>
+          <ul className="mk-ticks">
+            <li><Check size={16} />Push to talk with a key you choose (Right Ctrl by default)</li>
+            <li><Check size={16} />Runs on Groq (Whisper large v3 or the faster turbo), Mistral, OpenAI, any compatible server, or fully on your own machine</li>
+            <li><Check size={16} />Your admin picks the provider once, and it works for everyone</li>
+          </ul>
+          <div className="mk-voice-card"><MicTest /></div>
+        </div>
+        <div className="mk-spot-shot"><Frame name="voice-typing" ext="gif" alt="Holding a key, speaking, and the sentence appearing in a document" url="docs.example.com/d/weekly-sync" /></div>
+      </section>
 
       <section className="mk-sec mk-devices">
         <div className="mk-head"><span className="mk-eyebrow">Everywhere you work</span><h2>On your phone, and easy on the eyes</h2><p className="lead">Menus open with a long-press, pages reflow to fit, and dark mode is a first-class citizen, not an afterthought.</p></div>

@@ -10,6 +10,7 @@ import { Home } from './pages/Home'
 import { Features } from './pages/Features'
 import { Why } from './pages/Why'
 import { SelfHost } from './pages/SelfHost'
+import { VoiceDemoFrame } from './marketing/VoiceDemo'
 import { EditorPage } from './pages/EditorPage'
 import { FolderPage } from './pages/FolderPage'
 import { DialogHost } from './ui/Dialogs'
@@ -49,6 +50,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/features" element={<Features />} />
           <Route path="/why" element={<Why />} />
           <Route path="/self-host" element={<SelfHost />} />
+          {import.meta.env.DEV && <Route path="/__demo/voice" element={<VoiceDemoFrame />} />}
           <Route path="/admin" element={<RequireAuth><AdminPage /></RequireAuth>} />
           <Route path="/d/:id" element={<EditorPage />} />
           <Route path="/f/:id" element={<FolderPage />} />

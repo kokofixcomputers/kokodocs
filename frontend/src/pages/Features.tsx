@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
-import { BookOpen, Bot, Check, ClipboardList, FileText, FolderTree, Presentation, ShieldCheck, Table2, Users } from 'lucide-react'
+import { BookOpen, Bot, Mic, Check, ClipboardList, FileText, FolderTree, Presentation, ShieldCheck, Table2, Users } from 'lucide-react'
 import { Cta, MarketingLayout } from '../marketing/Layout'
 import { Frame } from '../marketing/Shot'
+import { MicTest } from '../marketing/MicTest'
 
-interface Group { id: string; icon: typeof FileText; name: string; lead: string; shot?: string; url?: string; items: [string, string][] }
+interface Group { id: string; icon: typeof FileText; name: string; lead: string; shot?: string; gif?: boolean; url?: string; items: [string, string][] }
 
 const GROUPS: Group[] = [
   { id: 'documents', icon: FileText, name: 'Documents', lead: 'A rich editor that stays out of your way, with real pages when you need them.', shot: 'doc', url: 'docs.example.com/d/q3-launch-plan', items: [
@@ -48,12 +49,18 @@ const GROUPS: Group[] = [
     ['Badges and tables', 'GET, POST, Required, Deprecated, Beta and any label of your own, plus starter parameter and response-code tables.'],
     ['Everything else', 'Version history with page-by-page comparison, the assistant with tools for pages, folders and requests, and voice typing.'],
   ] },
-  { id: 'assistant', icon: Bot, name: 'Assistant, voice and proofreading', lead: 'Help when you want it, quiet when you do not.', shot: 'assistant', url: 'docs.example.com/d/q3-launch-plan', items: [
+  { id: 'assistant', icon: Bot, name: 'Assistant and proofreading', lead: 'Help when you want it, quiet when you do not.', shot: 'assistant', url: 'docs.example.com/d/q3-launch-plan', items: [
     ['Bring your own model', 'Connect any OpenAI-compatible service under Settings. The key is stored encrypted and never returned to the browser.'],
     ['Approval first', 'The assistant reads freely but shows each edit as a card you approve, or approve for the session.'],
     ['Knows each file', 'It has tools for documents, spreadsheets, slides and wikis, and keeps a history of past conversations.'],
-    ['Voice typing', 'Hold a key (Right Ctrl by default, and you can change it) or tap the microphone on a phone, and your words land at the cursor.'],
     ['Proofreading', 'A built-in offline spelling and grammar checker with one-click fixes, in eight English variants. Optional LanguageTool for more.'],
+  ] },
+  { id: 'voice', icon: Mic, name: 'Voice typing', lead: 'Talk instead of typing, anywhere you can type.', shot: 'voice-typing', gif: true, url: 'docs.example.com/d/weekly-sync', items: [
+    ['Push to talk', 'Hold a key (Right Ctrl by default, and you can change it, even to a lone modifier or an F-key), speak, let go. Your words land at the cursor.'],
+    ['On a phone', 'A floating microphone button starts and stops dictation with a tap, and a pill with a live waveform shows while you talk.'],
+    ['Pick your provider', 'Admins choose Groq (whisper-large-v3-turbo by default, or whisper-large-v3), Mistral Voxtral, OpenAI, any OpenAI-compatible server, or a local faster-whisper model, from the admin dashboard, with a Test button.'],
+    ['Private if you want it', 'The local option keeps the audio on your server. Keys for the others are stored encrypted and never shown again.'],
+    ['Works everywhere', 'Documents, wiki pages and more, with the same pill and shortcut, and a language you can pin.'],
   ] },
   { id: 'collaboration', icon: Users, name: 'Collaboration and sharing', lead: 'Share exactly as much as you mean to.', items: [
     ['Live', 'Cursors, presence avatars and conflict-free simultaneous editing. Connection hiccups are repaired and explained.'],
@@ -94,7 +101,7 @@ export function Features() {
         <section key={g.id} id={g.id} className={`mk-feature ${i % 2 ? 'alt' : ''}`}>
           <div className="mk-feature-in">
             <header><span className="feat-ico"><g.icon size={20} /></span><h2>{g.name}</h2><p>{g.lead}</p></header>
-            {g.shot && <div className="mk-feature-shot"><Frame name={g.shot} alt={`${g.name} in KokoDocs`} url={g.url} /></div>}
+            {g.shot && <div className={`mk-feature-shot ${g.gif ? 'mk-gif' : ''}`}><Frame name={g.shot} ext={g.gif ? 'gif' : undefined} alt={`${g.name} in KokoDocs`} url={g.url} />{g.gif && <div className="mk-voice-card"><MicTest /></div>}</div>}
             <dl className="mk-list">
               {g.items.map(([k, v]) => <div key={k}><dt><Check size={15} />{k}</dt><dd>{v}</dd></div>)}
             </dl>
