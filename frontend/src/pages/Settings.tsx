@@ -6,7 +6,7 @@ import { api, getToken, type AiSettings, type Storage, type StorageItems } from 
 import { KindIcon } from '../ui/KindIcon'
 import { fmtBytes, tier } from '../ui/StorageMeter'
 import { useAuth } from '../auth'
-import { useTheme } from '../theme'
+import { useTheme, type ThemePref } from '../theme'
 import { Avatar } from '../ui/Avatar'
 import { toast } from '../ui/Toast'
 import { AiSettingsBody } from '../assistant/AiSettings'
@@ -130,20 +130,23 @@ function Security() {
 }
 
 function Appearance() {
-  const { theme, setTheme } = useTheme()
-  const opts: { v: 'light' | 'dark'; label: string; icon: ReactNode }[] = [{ v: 'light', label: 'Light', icon: <Sun size={18} /> }, { v: 'dark', label: 'Dark', icon: <Moon size={18} /> }]
+  const { pref, theme, setPref } = useTheme()
+  const opts: { v: ThemePref; label: string; hint: string; icon: ReactNode }[] = [
+    { v: 'system', label: 'System', hint: 'Follows your device', icon: <Monitor size={18} /> },
+    { v: 'light', label: 'Light', hint: 'Always light', icon: <Sun size={18} /> },
+    { v: 'dark', label: 'Dark', hint: 'Always dark', icon: <Moon size={18} /> },
+  ]
   return (
     <Section title="Appearance">
       <Card>
         <b className="st-label">Theme</b>
         <div className="st-themes">
           {opts.map((o) => (
-            <button key={o.v} className={`st-theme ${theme === o.v ? 'on' : ''}`} data-preview={o.v} onClick={() => setTheme(o.v)} aria-pressed={theme === o.v}>
-              <span className="st-swatch"><i /><i /><i /></span>
-              <span className="st-theme-name">{o.icon}{o.label}{theme === o.v && <Check size={15} />}</span>
+            <button key={o.v} className={`st-theme ${pref === o.v ? 'on' : ''}`} data-preview={o.v} onClick={() => setPref(o.v)} aria-pressed={pref === o.v}>
+              <span className={`st-swatch ${o.v === 'system' ? 'sys' : ''}`}><i /><i /><i /></span>
+              <span className="st-theme-name">{o.icon}{o.label}{pref === o.v && <Check size={15} />}</span>
+              <span className="st-theme-hint">{o.v === 'system' ? `${o.hint} (now ${theme})` : o.hint}</span>
             </button>))}
-          <button className="st-theme" onClick={() => { localStorage.removeItem('koko.theme'); window.dispatchEvent(new Event('koko:theme')); setTheme(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') }}>
-            <span className="st-swatch sys"><i /><i /><i /></span><span className="st-theme-name"><Monitor size={18} />Match system</span></button>
         </div>
       </Card>
       <Card>

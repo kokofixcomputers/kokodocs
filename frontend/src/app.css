@@ -473,3 +473,6 @@ a.brand { color: var(--ink); text-decoration: none; }
 .sg-detail { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); } .sg-detail > span { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
 .sg-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); flex: none; }
 .proof-lang { display: flex; align-items: center; gap: 10px; padding: 0 6px 10px; font-size: 13px; color: var(--muted); } .proof-lang .select-btn { height: 32px; }
+.st-theme-hint { font-size: 12.5px; color: var(--muted); margin-top: -4px; }
+.st-theme[data-preview="system"] .st-swatch { background: linear-gradient(110deg, #f4f4f4 50%, #131313 50%); }
+.st-theme[data-preview="system"] .st-swatch i { background: transparent; border-color: rgba(128,128,128,.4); }

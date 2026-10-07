@@ -206,3 +206,7 @@ The built-in spell checker leaves short forms alone: units and measures (km, cm,
 Wiki pages can hold **Tabs**: a row of panels that show one at a time, for things like cURL / JavaScript / Python or Windows / macOS. Each panel holds any blocks (text, tables, code, request blocks). Click a tab to switch (readers' choice is just their own view), double-click a tab name to rename it, use + to add a panel and × to remove the open one. Insert them from the toolbar, or type `/tabs`. In Markdown (the assistant, exports) they are written `:::tabs`, then `::tab Title` followed by the panel's content for each panel, then `:::`.
 
 The wiki editor's formatting toolbar also has buttons for the things that used to need the `/` menu: **API request**, **Tabs**, **Badge** (a menu of GET, POST, Required, Beta and so on) and **Parameters table**.
+
+## Theme
+
+Settings, Appearance offers **System**, **Light** and **Dark**. System is the default: it follows the device and changes live when the device switches (for example at sunset). The sun/moon button in every header flips between light and dark and counts as an explicit choice, so it stops following the system until you pick System again. The theme is applied before the page paints, so there is no flash of the wrong one.
