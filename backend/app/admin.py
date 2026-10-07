@@ -1,11 +1,15 @@
 """Admin panel API: see everyone on the instance, promote/demote, suspend, reset passwords, delete accounts."""
+import io
 import os
+import re
+import time
+import wave
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import access
-from . import quota
+from . import quota, stt
 from .db import UPLOAD_DIR, get_db, settings_get, settings_set
 from .authx import redirect_uri
 from .emailauth import email_enabled, send_email, smtp_config
@@ -106,7 +110,18 @@ def settings_view(db, request: Request):
             "google_secret_set": bool(settings_get(db, "google_client_secret")), "public_url": settings_get(db, "public_url"), "default_quota_mb": quota.default_mb(db),
             "smtp_host": settings_get(db, "smtp_host"), "smtp_port": int(settings_get(db, "smtp_port", "587") or 587), "smtp_security": settings_get(db, "smtp_security", "starttls"),
             "smtp_user": settings_get(db, "smtp_user"), "smtp_password_set": bool(settings_get(db, "smtp_password")), "smtp_from": settings_get(db, "smtp_from"),
-            "email_active": email_enabled(db), "redirect_uri": redirect_uri(request, db)}
+            "email_active": email_enabled(db), "redirect_uri": redirect_uri(request, db), "stt": stt_view(db)}
+
+
+def stt_view(db) -> dict:
+    """Voice typing as the admin sees it: what is chosen, which keys exist (never the keys), and what is in use right now."""
+    g = lambda k, d="": settings_get(db, k, d)
+    now = stt.config(db)
+    return {"provider": g("stt_provider") if g("stt_provider") in stt.PROVIDERS else "auto",
+            "models": {p: (g(f"stt_model_{p}") or "") for p in stt.PROVIDERS}, "url": g("stt_url"), "language": g("stt_language"),
+            "key_set": {p: bool(g(f"stt_key_{p}")) for p in stt.PROVIDERS}, "env_key": {"groq": bool(os.environ.get("GROQ_API_KEY")), "mistral": bool(os.environ.get("MISTRAL_API_KEY")), "openai": bool(os.environ.get("OPENAI_API_KEY"))},
+            "groq_models": stt.GROQ_MODELS, "local_models": stt.LOCAL_MODELS, "local_installed": stt._local_available(),
+            "active": {"available": bool(now and now.ready), "provider": now.provider if now else None, "model": now.model if now else None}}
 
 
 class SettingsIn(BaseModel):
@@ -121,6 +136,12 @@ class SettingsIn(BaseModel):
     smtp_user: str | None = Field(None, max_length=200)
     smtp_password: str | None = Field(None, max_length=500)
     smtp_from: str | None = Field(None, max_length=200)
+    stt_provider: str | None = Field(None, pattern="^(auto|groq|mistral|openai|openai-compatible|local)$")
+    stt_model: dict[str, str] | None = None            # provider -> model
+    stt_key: dict[str, str] | None = None              # provider -> new API key (never sent back)
+    stt_clear_key: str | None = Field(None, pattern="^(groq|mistral|openai|openai-compatible)$")
+    stt_url: str | None = Field(None, max_length=300)
+    stt_language: str | None = Field(None, max_length=12)
 
 
 @router.get("/settings")
@@ -153,6 +174,28 @@ def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin), db=
         settings_set(db, "smtp_ok", "0")   # must pass a test email again before accounts depend on it
     if b.default_quota_mb is not None:
         settings_set(db, "default_quota_mb", str(b.default_quota_mb))
+    if b.stt_provider is not None:
+        settings_set(db, "stt_provider", "" if b.stt_provider == "auto" else b.stt_provider)
+    for prov, model in (b.stt_model or {}).items():
+        if prov in stt.PROVIDERS:
+            m = model.strip()[:100]
+            if prov == "groq" and m not in stt.GROQ_MODELS:
+                raise HTTPException(422, "Choose whisper-large-v3-turbo or whisper-large-v3")
+            if prov == "local" and m not in stt.LOCAL_MODELS:
+                raise HTTPException(422, "Unknown local model")
+            settings_set(db, f"stt_model_{prov}", m)
+    for prov, key in (b.stt_key or {}).items():
+        if prov in stt.PROVIDERS and prov != "local" and key.strip():
+            settings_set(db, f"stt_key_{prov}", encrypt_secret(key.strip()))
+    if b.stt_clear_key:
+        settings_set(db, f"stt_key_{b.stt_clear_key}", "")
+    if b.stt_url is not None:
+        u = b.stt_url.strip()
+        if u and not re.match(r"^https?://", u):
+            raise HTTPException(422, "The speech service address must start with http:// or https://")
+        settings_set(db, "stt_url", u)
+    if b.stt_language is not None:
+        settings_set(db, "stt_language", b.stt_language.strip().lower())
     if b.public_url is not None:
         settings_set(db, "public_url", b.public_url.strip().rstrip("/"))
     db.commit()
@@ -203,3 +246,22 @@ def email_remove(admin=Depends(must_admin), db=Depends(get_db)):
         settings_set(db, k, "")
     db.commit()
     return {"ok": True}
+
+
+@router.post("/stt/test")
+async def stt_test(admin=Depends(must_admin), db=Depends(get_db)):
+    """Sends a second of silence to the chosen speech service, so a wrong key or model shows up here instead of in somebody's document."""
+    c = stt.config(db)
+    if c is None or not c.ready:
+        raise HTTPException(400, "Choose a provider and save its key first" if c is None or c.provider != "local" else "Local voice typing needs faster-whisper installed (pip install -r requirements-local.txt)")
+    if c.provider == "local":
+        return {"ok": True, "provider": c.provider, "model": c.model, "ms": 0, "note": "faster-whisper is installed. The model downloads the first time someone dictates."}
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b"\x00\x00" * 16000)
+    t0 = time.time()
+    try:
+        await stt.transcribe(buf.getvalue(), "test.wav", "audio/wav", None, db)
+    except stt.STTError as e:
+        raise HTTPException(502, str(e))
+    return {"ok": True, "provider": c.provider, "model": c.model, "ms": int((time.time() - t0) * 1000)}

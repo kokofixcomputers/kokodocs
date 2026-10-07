@@ -1,6 +1,8 @@
 """Speech-to-text for voice typing. The browser records a short WAV; this turns it into text.
 
-Providers (first one configured wins, or force one with KOKO_STT_PROVIDER):
+The admin dashboard (Settings, Voice typing) picks the provider, key and model and wins over everything below. With "Automatic" it
+falls back to the environment, where the first one configured wins (or force one with KOKO_STT_PROVIDER):
+  * groq               GROQ_API_KEY               Whisper on Groq; whisper-large-v3-turbo (default) or whisper-large-v3
   * openai-compatible  KOKO_STT_URL (+ KOKO_STT_KEY, KOKO_STT_MODEL)  any server with /audio/transcriptions
   * mistral            MISTRAL_API_KEY            Voxtral, model voxtral-mini-latest (override: KOKO_STT_MODEL)
   * openai             OPENAI_API_KEY             model whisper-1 (override: KOKO_STT_MODEL)
@@ -11,11 +13,20 @@ import io
 import os
 import threading
 import wave
+from dataclasses import dataclass
 
 import httpx
 
+from .db import settings_get
+from .security import decrypt_secret
+
 MISTRAL_URL = "https://api.mistral.ai/v1/audio/transcriptions"
 OPENAI_URL = "https://api.openai.com/v1/audio/transcriptions"
+GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+GROQ_MODELS = ["whisper-large-v3-turbo", "whisper-large-v3"]
+LOCAL_MODELS = ["tiny.en", "base.en", "small.en", "medium.en", "small", "medium", "large-v3"]
+PROVIDERS = ["groq", "mistral", "openai", "openai-compatible", "local"]
+DEFAULT_MODEL = {"groq": "whisper-large-v3-turbo", "mistral": "voxtral-mini-latest", "openai": "whisper-1", "openai-compatible": "whisper-1", "local": "base.en"}
 MAX_BYTES = 12 * 1024 * 1024
 
 
@@ -33,24 +44,68 @@ def _local_available() -> bool:
         return False
 
 
-def provider() -> str | None:
-    forced = os.environ.get("KOKO_STT_PROVIDER", "").strip().lower()
-    if forced:
-        return forced if forced in {"openai-compatible", "mistral", "openai", "local"} else None
-    if os.environ.get("KOKO_STT_URL"):
-        return "openai-compatible"
-    if os.environ.get("MISTRAL_API_KEY"):
-        return "mistral"
-    if os.environ.get("OPENAI_API_KEY"):
-        return "openai"
-    if _local_available():
-        return "local"
-    return None
+@dataclass
+class Cfg:
+    provider: str
+    model: str
+    url: str | None = None
+    key: str | None = None
+    language: str | None = None
+
+    @property
+    def ready(self) -> bool:
+        if self.provider == "local":
+            return _local_available()
+        if self.provider == "openai-compatible":
+            return bool(self.url)
+        return bool(self.key)
 
 
-def status() -> dict:
-    p = provider()
-    return {"available": p is not None, "provider": p}
+def _secret(db, name: str) -> str | None:
+    return decrypt_secret(settings_get(db, name)) if db is not None and settings_get(db, name) else None
+
+
+def config(db=None) -> Cfg | None:
+    """What to use right now: the admin's choice if there is one, otherwise whatever the server's environment provides."""
+    env = os.environ.get
+    language = (settings_get(db, "stt_language") if db is not None else "") or env("KOKO_STT_LANGUAGE") or None
+    chosen = settings_get(db, "stt_provider") if db is not None else ""
+    if chosen in PROVIDERS:
+        model = (settings_get(db, f"stt_model_{chosen}") if db is not None else "") or ""
+        if chosen == "groq":
+            return Cfg("groq", model if model in GROQ_MODELS else DEFAULT_MODEL["groq"], GROQ_URL, _secret(db, "stt_key_groq") or env("GROQ_API_KEY"), language)
+        if chosen == "mistral":
+            return Cfg("mistral", model or env("KOKO_STT_MODEL") or DEFAULT_MODEL["mistral"], MISTRAL_URL, _secret(db, "stt_key_mistral") or env("MISTRAL_API_KEY"), language)
+        if chosen == "openai":
+            return Cfg("openai", model or env("KOKO_STT_MODEL") or DEFAULT_MODEL["openai"], OPENAI_URL, _secret(db, "stt_key_openai") or env("OPENAI_API_KEY"), language)
+        if chosen == "openai-compatible":
+            return Cfg("openai-compatible", model or env("KOKO_STT_MODEL") or DEFAULT_MODEL["openai-compatible"], settings_get(db, "stt_url") or env("KOKO_STT_URL"), _secret(db, "stt_key_openai-compatible") or env("KOKO_STT_KEY"), language)
+        return Cfg("local", model if model in LOCAL_MODELS else env("KOKO_WHISPER_MODEL") or DEFAULT_MODEL["local"], None, None, language)
+    forced = env("KOKO_STT_PROVIDER", "").strip().lower()
+    if forced and forced not in PROVIDERS:
+        return None
+    pick = forced or ("openai-compatible" if env("KOKO_STT_URL") else "mistral" if env("MISTRAL_API_KEY") else "openai" if env("OPENAI_API_KEY") else "groq" if env("GROQ_API_KEY") else "local" if _local_available() else "")
+    if not pick:
+        return None
+    if pick == "openai-compatible":
+        return Cfg(pick, env("KOKO_STT_MODEL") or "whisper-1", env("KOKO_STT_URL"), env("KOKO_STT_KEY"), language)
+    if pick == "local":
+        return Cfg(pick, env("KOKO_WHISPER_MODEL") or DEFAULT_MODEL["local"], None, None, language)
+    key = {"mistral": env("MISTRAL_API_KEY"), "openai": env("OPENAI_API_KEY"), "groq": env("GROQ_API_KEY")}[pick]
+    url = {"mistral": MISTRAL_URL, "openai": OPENAI_URL, "groq": GROQ_URL}[pick]
+    model = env("KOKO_STT_MODEL") or DEFAULT_MODEL[pick]
+    return Cfg(pick, model, url, key, language)
+
+
+def provider(db=None) -> str | None:
+    c = config(db)
+    return c.provider if c and c.ready else None
+
+
+def status(db=None) -> dict:
+    c = config(db)
+    ok = bool(c and c.ready)
+    return {"available": ok, "provider": c.provider if ok else None}
 
 
 async def _remote(url: str, key: str | None, model: str, audio: bytes, filename: str, content_type: str, language: str | None) -> str:
@@ -75,7 +130,7 @@ async def _remote(url: str, key: str | None, model: str, audio: bytes, filename:
         raise STTError("Unexpected response from the speech service") from e
 
 
-_model = None
+_models: dict[str, object] = {}
 _model_lock = threading.Lock()
 
 
@@ -96,38 +151,34 @@ def _wav_to_array(audio: bytes):
     return x
 
 
-def _local_transcribe(audio: bytes, language: str | None) -> str:
-    global _model
+def _local_transcribe(audio: bytes, language: str | None, name: str) -> str:
     with _model_lock:
-        if _model is None:
+        if name not in _models:
             from faster_whisper import WhisperModel
 
-            name = os.environ.get("KOKO_WHISPER_MODEL", "base.en")
-            _model = WhisperModel(name, device="cpu", compute_type="int8")
-        model = _model
+            _models[name] = WhisperModel(name, device="cpu", compute_type="int8")
+        model = _models[name]
     source = _wav_to_array(audio) if audio[:4] == b"RIFF" else io.BytesIO(audio)
     segments, _ = model.transcribe(source, language=language or None, beam_size=1, vad_filter=True, condition_on_previous_text=False)
     return " ".join(s.text.strip() for s in segments).strip()
 
 
-async def transcribe(audio: bytes, filename: str = "speech.wav", content_type: str = "audio/wav", language: str | None = None) -> str:
-    p = provider()
-    language = language or os.environ.get("KOKO_STT_LANGUAGE") or None
-    if p is None:
+async def transcribe(audio: bytes, filename: str = "speech.wav", content_type: str = "audio/wav", language: str | None = None, db=None) -> str:
+    c = config(db)
+    if c is None or not c.ready:
         raise STTError("Voice typing isn't set up on this server", 503)
+    language = language or c.language
     if len(audio) > MAX_BYTES:
         raise STTError("That recording is too long", 413)
-    if p == "local":
+    if c.provider == "local":
         try:
-            return await asyncio.to_thread(_local_transcribe, audio, language)
+            return await asyncio.to_thread(_local_transcribe, audio, language, c.model)
         except STTError:
             raise
         except Exception as e:
             raise STTError(f"Local transcription failed ({type(e).__name__})") from e
-    if p == "mistral":
-        return await _remote(MISTRAL_URL, os.environ.get("MISTRAL_API_KEY"), os.environ.get("KOKO_STT_MODEL", "voxtral-mini-latest"), audio, filename, content_type, language)
-    if p == "openai":
-        return await _remote(OPENAI_URL, os.environ.get("OPENAI_API_KEY"), os.environ.get("KOKO_STT_MODEL", "whisper-1"), audio, filename, content_type, language)
-    base = os.environ["KOKO_STT_URL"].rstrip("/")
-    url = base if base.endswith("/transcriptions") else base + "/audio/transcriptions"
-    return await _remote(url, os.environ.get("KOKO_STT_KEY"), os.environ.get("KOKO_STT_MODEL", "whisper-1"), audio, filename, content_type, language)
+    url = c.url or ""
+    if c.provider == "openai-compatible":
+        url = url.rstrip("/")
+        url = url if url.endswith("/transcriptions") else url + "/audio/transcriptions"
+    return await _remote(url, c.key, c.model, audio, filename, content_type, language)

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Copy, HardDrive, ExternalLink, FileText, KeyRound, Search, ShieldCheck, ShieldOff, Table2, Trash2, UserX, UserCheck } from 'lucide-react'
-import { api, type AdminFile, type AdminSettings, type AdminStats, type AdminUser } from '../api'
+import { api, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
 import { askConfirm, askText } from '../ui/Dialogs'
@@ -160,6 +160,76 @@ function EmailSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   )
 }
 
+const STT_NAMES: Record<string, string> = { groq: 'Groq', mistral: 'Mistral (Voxtral)', openai: 'OpenAI', 'openai-compatible': 'Other OpenAI-compatible server', local: 'Local (on this server)' }
+const GROQ_LABEL: Record<string, string> = { 'whisper-large-v3-turbo': 'whisper-large-v3-turbo (fast, default)', 'whisper-large-v3': 'whisper-large-v3 (most accurate)' }
+
+/** Which speech-to-text service turns dictation into text, with its key and model. */
+function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
+  const v = s.stt
+  const [prov, setProv] = useState<'auto' | SttProvider>(v.provider)
+  const [key, setKey] = useState('')
+  const [model, setModel] = useState('')
+  const [url, setUrl] = useState(v.url)
+  const [lang, setLang] = useState(v.language)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  // each provider remembers its own model, so switching back and forth keeps what was chosen
+  const savedModel = (p: SttProvider) => v.models[p] || (p === 'groq' ? 'whisper-large-v3-turbo' : p === 'local' ? 'base.en' : '')
+  const effModel = prov !== 'auto' && model !== '' ? model : prov !== 'auto' ? savedModel(prov) : ''
+  const change = (p: 'auto' | SttProvider) => { setProv(p); setModel(''); setKey(''); setMsg(null) }
+  const save = async () => {
+    setBusy(true); setMsg(null)
+    try {
+      const body: Parameters<typeof api.adminSaveSettings>[0] = { stt_provider: prov, stt_language: lang.trim() }
+      if (prov !== 'auto') {
+        body.stt_model = { [prov]: effModel }
+        if (key.trim() && prov !== 'local') body.stt_key = { [prov]: key.trim() }
+        if (prov === 'openai-compatible') body.stt_url = url.trim()
+      }
+      apply(await api.adminSaveSettings(body)); setKey(''); toast('Voice typing saved')
+    } catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
+  }
+  const test = async () => {
+    setBusy(true); setMsg(null)
+    try { const r = await api.adminSttTest(); setMsg({ ok: true, text: r.note ?? `Works: ${STT_NAMES[r.provider] ?? r.provider}, ${r.model}, answered in ${r.ms} ms.` }) }
+    catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
+  }
+  const clearKey = async () => { if (prov === 'auto' || prov === 'local') return; setBusy(true); try { apply(await api.adminSaveSettings({ stt_clear_key: prov })); toast('Key removed') } catch (e) { toast((e as Error).message) } finally { setBusy(false) } }
+  const changed = prov !== v.provider || !!key.trim() || lang.trim() !== v.language || (prov !== 'auto' && effModel !== savedModel(prov)) || (prov === 'openai-compatible' && url.trim() !== v.url)
+  const hasKey = prov !== 'auto' && prov !== 'local' && v.key_set[prov]
+  const envKey = (prov === 'groq' || prov === 'mistral' || prov === 'openai') && v.env_key[prov]
+  const active = v.active
+  return (
+    <>
+      <div>
+        <h3 style={{ margin: '8px 0 4px' }}>Voice typing <span className={`tag ${active.available ? '' : 'warn'}`} style={{ marginLeft: 6, verticalAlign: 'middle' }}>{active.available ? `${STT_NAMES[active.provider ?? ''] ?? active.provider}, ${active.model}` : 'Off'}</span></h3>
+        <p className="muted hint" style={{ marginTop: 0 }}>Pick the service that turns speech into text, add its key, and it works for everyone. Keys are stored encrypted and never shown again. “Automatic” uses whatever the server's environment provides.</p>
+      </div>
+      <div className="ps-row">
+        <div className="ai-field" style={{ flex: 1, minWidth: 220 }}><span>Provider</span>
+          <Select label="Speech provider" value={prov} onChange={change} options={[{ value: 'auto', label: 'Automatic (server environment)' }, ...(['groq', 'mistral', 'openai', 'openai-compatible', 'local'] as SttProvider[]).map((p) => ({ value: p, label: STT_NAMES[p] }))]} /></div>
+        {prov === 'groq' && <div className="ai-field" style={{ flex: 1, minWidth: 220 }}><span>Model</span>
+          <Select label="Groq model" value={effModel} onChange={setModel} options={v.groq_models.map((m) => ({ value: m, label: GROQ_LABEL[m] ?? m }))} /></div>}
+        {prov === 'local' && <div className="ai-field" style={{ flex: 1, minWidth: 220 }}><span>Model</span>
+          <Select label="Local model" value={effModel} onChange={setModel} options={v.local_models.map((m) => ({ value: m, label: m }))} /></div>}
+      </div>
+      {prov === 'openai-compatible' && <label className="ai-field"><span>Server address</span><span className="field"><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://host/v1" spellCheck={false} /></span></label>}
+      {(prov === 'mistral' || prov === 'openai' || prov === 'openai-compatible') && <label className="ai-field"><span>Model (leave empty for the default)</span><span className="field"><input value={effModel} onChange={(e) => setModel(e.target.value)} placeholder={prov === 'mistral' ? 'voxtral-mini-latest' : 'whisper-1'} spellCheck={false} /></span></label>}
+      {prov !== 'auto' && prov !== 'local' && (
+        <label className="ai-field"><span>API key{prov === 'openai-compatible' ? ' (if the server needs one)' : ''}</span>
+          <span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={hasKey ? 'Saved. Leave blank to keep it' : envKey ? 'Using the key from the server environment' : prov === 'groq' ? 'gsk_…' : 'sk-…'} /></span></label>)}
+      {prov === 'local' && <p className="muted hint" style={{ margin: 0 }}>{v.local_installed ? 'faster-whisper is installed. The model downloads the first time someone dictates, and audio never leaves this server.' : 'faster-whisper is not installed on this server: run pip install -r requirements-local.txt and restart.'}</p>}
+      <label className="ai-field" style={{ maxWidth: 260 }}><span>Language (optional, like en; empty detects it)</span><span className="field"><input value={lang} onChange={(e) => setLang(e.target.value)} maxLength={12} spellCheck={false} placeholder="auto" /></span></label>
+      {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'}>{msg.text}</p>}
+      <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+        <button className="btn btn-pill btn-primary" disabled={busy || !changed} onClick={save}>Save</button>
+        <button className="btn btn-pill btn-soft" disabled={busy || changed || !active.available} onClick={test}>{busy ? <span className="spinner sm" style={{ borderTopColor: 'var(--ink)' }} /> : 'Test'}</button>
+        {hasKey && <button className="btn btn-pill btn-ghost" disabled={busy} onClick={clearKey}>Remove key</button>}
+      </div>
+    </>
+  )
+}
+
 function SettingsTab() {
   const [s, setS] = useState<AdminSettings | null>(null)
   const [cid, setCid] = useState('')
@@ -184,6 +254,7 @@ function SettingsTab() {
           <button className="btn btn-pill btn-soft btn-sm" disabled={busy || !/^\d+$/.test(quotaText.trim()) || Number(quotaText) === s.default_quota_mb} onClick={() => save({ default_quota_mb: Number(quotaText) }, 'Default storage limit saved')}>Save</button></span>
         <span className="muted hint">Counts documents, spreadsheets, version history, uploaded images and files people attach to forms. Individual users can be given their own limit in the Users tab.</span></label>
       <EmailSettings s={s} apply={setS} />
+      <VoiceSettings s={s} apply={setS} />
       <div>
         <h3 style={{ margin: '8px 0 4px' }}>Sign in with Google</h3>
         <p className="muted hint" style={{ marginTop: 0 }}>Create an OAuth client (type: Web application) in Google Cloud Console, add the redirect URI below, then paste the client ID and secret here.</p>

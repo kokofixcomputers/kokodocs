@@ -210,3 +210,7 @@ The wiki editor's formatting toolbar also has buttons for the things that used t
 ## Theme
 
 Settings, Appearance offers **System**, **Light** and **Dark**. System is the default: it follows the device and changes live when the device switches (for example at sunset). The sun/moon button in every header flips between light and dark and counts as an explicit choice, so it stops following the system until you pick System again. The theme is applied before the page paints, so there is no flash of the wrong one.
+
+## Voice typing from the admin dashboard
+
+Admin, Settings, **Voice typing**: choose the provider from a dropdown (Automatic, **Groq**, Mistral, OpenAI, any OpenAI-compatible server, or Local), paste its API key, pick a model and Save. The key is stored encrypted and never shown again; **Test** sends a second of silence to the service so a wrong key or model shows up there. For Groq the models are `whisper-large-v3-turbo` (the default, fast) and `whisper-large-v3` (most accurate). Local runs faster-whisper on the server (choose tiny.en to large-v3; `pip install -r requirements-local.txt`) and audio never leaves it. An optional language code (like `en`) pins the language; empty detects it. A choice made here wins over the environment variables; "Automatic" falls back to them (`GROQ_API_KEY` is now recognised too). Tests: `backend/tests/test_stt_admin.py`.

@@ -3,7 +3,9 @@ import type { Answers, FormItem, PublicForm } from './forms/model'
 export interface User { id: string; email: string; name: string; color: string; is_admin?: boolean; has_password?: boolean; notify_email?: boolean; totp?: boolean; google?: string | null }
 export interface AdminUser { id: string; email: string; name: string; color: string; created_at: number; is_admin: boolean; builtin_admin: boolean; disabled: boolean; used: number; quota_mb: number | null; limit_mb: number; totp: boolean; docs: number; sheets: number }
 export interface AdminFile { id: string; title: string; kind: DocKind; created_at: number; updated_at: number; deleted_at: number | null; link_access: LinkAccess; link_role: string; owner_id: string; owner_name: string; owner_email: string }
-export interface AdminSettings { signup_enabled: boolean; google_client_id: string; google_secret_set: boolean; public_url: string; default_quota_mb: number; smtp_host: string; smtp_port: number; smtp_security: 'starttls' | 'ssl' | 'none'; smtp_user: string; smtp_password_set: boolean; smtp_from: string; email_active: boolean; redirect_uri: string }
+export type SttProvider = 'groq' | 'mistral' | 'openai' | 'openai-compatible' | 'local'
+export interface SttAdmin { provider: 'auto' | SttProvider; models: Record<SttProvider, string>; url: string; language: string; key_set: Record<SttProvider, boolean>; env_key: { groq: boolean; mistral: boolean; openai: boolean }; groq_models: string[]; local_models: string[]; local_installed: boolean; active: { available: boolean; provider: string | null; model: string | null } }
+export interface AdminSettings { stt: SttAdmin; signup_enabled: boolean; google_client_id: string; google_secret_set: boolean; public_url: string; default_quota_mb: number; smtp_host: string; smtp_port: number; smtp_security: 'starttls' | 'ssl' | 'none'; smtp_user: string; smtp_password_set: boolean; smtp_from: string; email_active: boolean; redirect_uri: string }
 export type LoginResult = { token: string; user: User } | { mfa_required: true; mfa_token: string }
 export interface Storage { used: number; limit: number; documents: number; versions: number; images: number; files?: number }
 export interface StorageItem { id: string; title: string; kind: DocKind; trashed: boolean; text: number; versions: number; images: number; files: number; total: number }
@@ -191,8 +193,9 @@ export const api = {
   resolveComment: (id: string, cid: string, resolved: boolean) => request(`/api/docs/${id}/comments/${cid}/resolved`, { method: 'PUT', ...json({ resolved }) }, id),
   deleteComment: (id: string, cid: string) => request(`/api/docs/${id}/comments/${cid}`, { method: 'DELETE' }, id),
   adminUsers: () => request<AdminUser[]>('/api/admin/users'),
+  adminSttTest: () => request<{ ok: boolean; provider: string; model: string; ms: number; note?: string }>('/api/admin/stt/test', { method: 'POST', body: '{}' }),
   adminSettings: () => request<AdminSettings>('/api/admin/settings'),
-  adminSaveSettings: (b: Partial<{ smtp_host: string; smtp_port: number; smtp_security: string; smtp_user: string; smtp_password: string; smtp_from: string; default_quota_mb: number; signup_enabled: boolean; google_client_id: string; google_client_secret: string; public_url: string }>) => request<AdminSettings>('/api/admin/settings', { method: 'PUT', ...json(b) }),
+  adminSaveSettings: (b: Partial<{ stt_provider: string; stt_model: Record<string, string>; stt_key: Record<string, string>; stt_clear_key: string; stt_url: string; stt_language: string; smtp_host: string; smtp_port: number; smtp_security: string; smtp_user: string; smtp_password: string; smtp_from: string; default_quota_mb: number; signup_enabled: boolean; google_client_id: string; google_client_secret: string; public_url: string }>) => request<AdminSettings>('/api/admin/settings', { method: 'PUT', ...json(b) }),
   adminFiles: (p: { owner?: string; q?: string }) => request<AdminFile[]>(`/api/admin/files?${new URLSearchParams(Object.entries(p).filter(([, v]) => v) as [string, string][])}`),
   adminDeleteFile: (id: string) => request(`/api/admin/files/${id}`, { method: 'DELETE' }),
   deleteAccount: (b: { email: string; password?: string; code?: string }) => request('/api/auth/delete', { method: 'POST', ...json(b) }),

@@ -500,8 +500,8 @@ async def proofread(body: ProofIn):
 
 # ───────────────────────── voice typing ─────────────────────────
 @router.get("/stt/status")
-def stt_status():
-    return stt.status()
+def stt_status(db=Depends(get_db)):
+    return stt.status(db)
 
 
 @router.post("/docs/{doc_id}/transcribe")
@@ -515,7 +515,7 @@ async def transcribe(doc_id: str, request: Request, file: UploadFile = File(...)
     if len(audio) < 1000:
         return {"text": ""}
     try:
-        text = await stt.transcribe(audio, file.filename or "speech.wav", file.content_type or "audio/wav", language)
+        text = await stt.transcribe(audio, file.filename or "speech.wav", file.content_type or "audio/wav", language, db)
     except stt.STTError as e:
         raise HTTPException(e.status, str(e))
     return {"text": text}
