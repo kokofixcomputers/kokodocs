@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useRef, useState, type ReactNode } 
 import { Node, type Editor, type Range } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import { Plugin } from '@tiptap/pm/state'
-import { Check, ChevronDown, Code2, Copy, Globe, Loader2, Plus, Send, Server, Tag, Table2, Trash2, Webhook } from 'lucide-react'
+import { Check, ChevronDown, Code2, Copy, Globe, Loader2, PanelsTopLeft, Plus, Send, Server, Tag, Table2, Trash2, Webhook } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { Popover } from '../ui/Popover'
@@ -224,9 +224,31 @@ const put = (e: Editor, r: Range, content: object) => e.chain().focus().deleteRa
 const badge = (label: string, hint: string, keys: string): SlashItem => ({ title: `Badge: ${label}`, hint, keys: `badge label tag ${keys}`, icon: Tag, run: (e, r) => put(e, r, [{ type: 'wikiBadge', attrs: { label } }, { type: 'text', text: ' ' }]) })
 
 export const wikiSlashItems: SlashItem[] = [
-  { title: 'API request', hint: 'A request you can edit and send', keys: 'api endpoint request http try rest send curl', icon: Webhook, run: (e, r) => put(e, r, { type: 'apiRequest' }) },
+  { title: 'Tabs', hint: 'Panels you switch between, like cURL and Python', keys: 'tabs panels switch code group os platform', icon: PanelsTopLeft, run: (e, r) => e.chain().focus().deleteRange(r).insertTabs().run() },
+  { title: 'API request', hint: 'A request you can edit and send', keys: 'api endpoint request http try rest send curl', icon: Webhook, run: (e, r) => put(e, r, [{ type: 'apiRequest' }, { type: 'paragraph' }]) },
   { title: 'Parameters table', hint: 'Name, type, required, description', keys: 'params fields table schema arguments', icon: Table2, run: (e, r) => put(e, r, { type: 'table', content: [row(['Name', 'Type', 'Required', 'Description'], true), row(['', 'string', 'Yes', '']), row(['', 'string', 'No', ''])] }) },
   { title: 'Response codes table', hint: 'Status codes and what they mean', keys: 'status http errors codes responses table', icon: Table2, run: (e, r) => put(e, r, { type: 'table', content: [row(['Status', 'Meaning'], true), row(['200', 'Success']), row(['400', 'Bad request']), row(['401', 'Unauthorized']), row(['404', 'Not found'])] }) },
   ...(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const).map((m) => badge(m, 'Coloured method label', m.toLowerCase())),
   badge('Required', 'Red label', 'mandatory'), badge('Optional', 'Green label', ''), badge('Deprecated', 'Amber label', 'old legacy'), badge('Beta', 'Blue label', 'preview experimental'), badge('New', 'Green label', ''),
 ]
+
+const BADGES = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'Required', 'Optional', 'Deprecated', 'Beta', 'New']
+const tbBtn = 'tb-btn'
+
+/** The wiki's own buttons for the formatting toolbar: things you would otherwise find through the "/" menu. */
+export function WikiToolbarExtras({ editor }: { editor: Editor }) {
+  const run = () => editor.chain().focus()
+  return (
+    <div className="tb-group">
+      <button type="button" className={tbBtn} title="API request" aria-label="API request" onMouseDown={(e) => e.preventDefault()} onClick={() => run().insertContent([{ type: 'apiRequest' }, { type: 'paragraph' }]).run()}><Webhook size={17} /></button>
+      <button type="button" className={tbBtn} title="Tabs" aria-label="Tabs" onMouseDown={(e) => e.preventDefault()} onClick={() => run().insertTabs().run()}><PanelsTopLeft size={17} /></button>
+      <Popover className="pop-menu small" trigger={({ toggle }) => <button type="button" className={tbBtn} title="Badge" aria-label="Badge" onMouseDown={(e) => e.preventDefault()} onClick={toggle}><Tag size={17} /></button>}>
+        {(close) => (
+          <div className="wk-badge-pick" onMouseDown={(e) => e.preventDefault()}>
+            {BADGES.map((b) => <button key={b} type="button" className="menu-row" onClick={() => { close(); run().insertContent([{ type: 'wikiBadge', attrs: { label: b } }, { type: 'text', text: ' ' }]).run() }}><span className="wk-badge" data-tone={badgeTone(b)}>{b.toUpperCase() === b ? b : b}</span></button>)}
+          </div>)}
+      </Popover>
+      <button type="button" className={tbBtn} title="Parameters table" aria-label="Parameters table" onMouseDown={(e) => e.preventDefault()} onClick={() => run().insertContent({ type: 'table', content: [row(['Name', 'Type', 'Required', 'Description'], true), row(['', 'string', 'Yes', '']), row(['', 'string', 'No', ''])] }).run()}><Table2 size={17} /></button>
+    </div>
+  )
+}

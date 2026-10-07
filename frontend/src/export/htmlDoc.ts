@@ -37,6 +37,7 @@ tr:first-child > :first-child { border-top-left-radius: 13px; } tr:first-child >
 tr:last-child > :first-child { border-bottom-left-radius: 13px; } tr:last-child > :last-child { border-bottom-right-radius: 13px; }
 td > :last-child, th > :last-child { margin-bottom: 0; } tr { break-inside: avoid; }
 img { max-width: 100%; height: auto; border-radius: 10px; vertical-align: bottom; }
+.wk-tabs-block { margin: 0 0 .9em; } .wk-tab { border: 1px solid #ddd; border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; } .wk-tab::before { content: attr(data-title); display: block; font-weight: 700; margin-bottom: 4px; }
 .doc-shape { display: inline-block; vertical-align: bottom; line-height: 0; max-width: 100%; } .doc-shape svg { display: block; max-width: 100%; height: auto; overflow: visible; }
 sub, sup { line-height: 0; }
 `

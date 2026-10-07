@@ -75,6 +75,7 @@ export function fragLines(root: Y.XmlFragment): string[] {
       const name = c.nodeName
       if (name === 'image') { out.push('[Image]'); continue }
       if (name === 'horizontalRule') { out.push('────'); continue }
+      if (name === 'wikiTab') out.push(`[Tab: ${String(c.getAttribute('title') ?? '')}]`)
       if (name === 'apiRequest') { out.push(`[Request] ${String(c.getAttribute('method') ?? 'GET')} ${String(c.getAttribute('url') ?? '')}`); continue }
       const kids = c.toArray()
       const leaf = kids.some((k) => k instanceof Y.XmlText || (k instanceof Y.XmlElement && INLINE_ATOMS[k.nodeName])) || kids.length === 0

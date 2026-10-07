@@ -34,7 +34,8 @@ import { ShareDialog } from '../editor/ShareDialog'
 import { VersionHistory, fullLabel } from '../editor/VersionHistory'
 import { DiffToggle, VersionDiff } from '../editor/VersionDiff'
 import { guestIdentity, usePresence, useProviderStatus } from '../editor/DocEditor'
-import { ApiRequest, KVEditor, MethodBadge, WikiBadge, WikiContext, wikiSlashItems } from './WikiNodes'
+import { ApiRequest, KVEditor, MethodBadge, WikiBadge, WikiContext, WikiToolbarExtras, wikiSlashItems } from './WikiNodes'
+import { WikiTab, WikiTabs } from './WikiTabs'
 import { METHODS, type KV, type Vars } from './request'
 import { ancestors, children, descendants, nextPos, place, reading, uid, type Entry, type Tree } from './tree'
 import { NotionImport } from './NotionImport'
@@ -301,7 +302,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           </div>
         </header>
 
-        {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar voice={voice} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
+        {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar voice={voice} extras={<WikiToolbarExtras editor={ed} />} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
 
         <div className="wiki-body">
           {navOpen && !preview && <button className="wk-scrim" aria-label="Close contents" onClick={() => setNavOpen(false)} />}
@@ -390,7 +391,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
       },
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
-    ApiRequest, WikiBadge,
+    ApiRequest, WikiBadge, WikiTabs, WikiTab,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions }, [])
@@ -521,7 +522,7 @@ function WikiPreview({ live, docId, version, onRestore, onClose }: { live: Y.Doc
 function PreviewPage({ snap, id, title }: { snap: Y.Doc; id: string; title: string }) {
   const editor = useEditor({
     editable: false, editorProps: { attributes: { spellcheck: 'false', class: 'koko-prose' } },
-    extensions: [...baseExtensions(), ApiRequest, WikiBadge, Collaboration.configure({ document: snap, field: 'p:' + id })],
+    extensions: [...baseExtensions(), ApiRequest, WikiBadge, WikiTabs, WikiTab, Collaboration.configure({ document: snap, field: 'p:' + id })],
   }, [snap, id])
   return <article className="wiki-page wiki-preview-page"><h1 className="wiki-title static">{title || 'Untitled'}</h1><EditorContent editor={editor} /></article>
 }

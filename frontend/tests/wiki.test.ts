@@ -72,5 +72,10 @@ ok('a wiki flattens to a heading line per page', wikiLines(A).join('|') === '§ 
 const df = diffDocs('wiki', A, B)
 ok('adding a page and editing a line are both found', df.added === 2 && df.changed === 1 && !df.same, JSON.stringify([df.added, df.changed, df.removed]))
 ok('the same wiki has no differences', diffDocs('wiki', A, mk({ a: ['Intro', ['Hello world']], b: ['Auth', ['Use a token']] })).same)
+const tabsMd = toMarkdown({ type: 'doc', content: [{ type: 'wikiTabs', content: [
+  { type: 'wikiTab', attrs: { title: 'cURL' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Run curl.' }] }] },
+  { type: 'wikiTab', attrs: { title: 'Python' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Use requests.' }] }] },
+] }] } as never)
+ok('tabs are written as :::tabs with a ::tab line per panel', tabsMd.startsWith(':::tabs\n::tab cURL\nRun curl.\n::tab Python\nUse requests.\n:::'), tabsMd)
 console.log(`${pass} passed, ${fail} failed`)
 if (fail) process.exit(1)

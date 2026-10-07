@@ -48,7 +48,7 @@ function TablePicker({ onPick }: { onPick: (r: number, c: number) => void }) {
   )
 }
 
-export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, voice }: { editor: Editor; onImage: (f: File) => void; onHeaderFooter?: () => void; onPageSetup?: () => void; onFind?: () => void; voice?: Voice }) {
+export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, voice, extras }: { extras?: React.ReactNode; editor: Editor; onImage: (f: File) => void; onHeaderFooter?: () => void; onPageSetup?: () => void; onFind?: () => void; voice?: Voice }) {
   const file = useRef<HTMLInputElement>(null)
   const painter = useFormatPainter(editor)
   const ts = editor.getAttributes('textStyle')
@@ -168,6 +168,8 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
           <TBtn icon={<Subscript size={17} />} label="Subscript" active={editor.isActive('subscript')} onClick={() => run().toggleSubscript().run()} />
           <TBtn icon={<RemoveFormatting size={17} />} label="Clear formatting" onClick={() => run().unsetAllMarks().clearNodes().run()} />
         </div>
+
+        {extras}
 
         {voice && <div className="tb-group"><VoiceControl voice={voice} editable={can} /></div>}
 

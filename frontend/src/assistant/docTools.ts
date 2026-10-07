@@ -35,6 +35,13 @@ const kindOf = (n: PMNodeType) => {
 
 /** Markdown (what the model writes) → the HTML Tiptap parses, including GFM tables and task lists. */
 export function mdToHtml(md: string): string {
+  // a wiki's tabs travel as  :::tabs / ::tab Title / content / :::  (each panel's content is ordinary Markdown)
+  md = md.replace(/^:::tabs[ \t]*\n([\s\S]*?)\n:::[ \t]*$/gm, (whole, inner: string) => {
+    const parts = inner.split(/^::tab[ \t]+/m).slice(1)
+    if (!parts.length) return whole
+    const panels = parts.map((p) => { const nl = p.indexOf('\n'); const title = (nl < 0 ? p : p.slice(0, nl)).trim().replace(/"/g, '&quot;').replace(/</g, '&lt;'); return `<div data-wk-tab data-title="${title || 'Tab'}">\n\n${nl < 0 ? '' : p.slice(nl + 1).trim()}\n\n</div>\n` })
+    return `<div data-wk-tabs>\n\n${panels.join('\n')}\n</div>\n`
+  })
   const html = marked.parse(md, { async: false, gfm: true, breaks: false }) as string
   const doc = new DOMParser().parseFromString(html, 'text/html')
   doc.querySelectorAll('blockquote').forEach((bq) => {

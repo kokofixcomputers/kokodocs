@@ -82,6 +82,7 @@ function block(n: PMNode, depth = 0): string {
     }
     case 'codeBlock': return '```' + (n.attrs?.language ?? '') + '\n' + (n.content ?? []).map((t) => t.text ?? '').join('') + '\n```\n\n'
     case 'horizontalRule': return '---\n\n'
+    case 'wikiTabs': return ':::tabs\n' + (n.content ?? []).map((t) => `::tab ${String(t.attrs?.title ?? 'Tab').replace(/\n/g, ' ')}\n${(t.content ?? []).map((c) => block(c, depth)).join('').trim()}\n`).join('') + ':::\n\n'
     case 'apiRequest': return '```api-request\n' + JSON.stringify(n.attrs ?? {}, null, 2) + '\n```\n\n'
     case 'table': return table(n)
     default: return (n.content ?? []).map((c) => block(c, depth)).join('')

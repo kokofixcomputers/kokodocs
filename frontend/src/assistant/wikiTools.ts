@@ -5,6 +5,7 @@ import { DEFAULT_META } from '../editor/Pagination'
 import { baseExtensions } from '../editor/extensions'
 import { fragLines } from '../editor/diff'
 import { ApiRequestSchema, WikiBadge } from '../wiki/WikiNodes'
+import { WikiTab, WikiTabs } from '../wiki/WikiTabs'
 import { METHODS, type Vars } from '../wiki/request'
 import { ancestors, children, descendants, type Tree } from '../wiki/tree'
 import { type Adapter, type Tool, clip, tool } from './adapter'
@@ -61,7 +62,7 @@ export function createWikiAdapter(d: WikiDeps): Adapter {
   const headless = async (id: string): Promise<Editor> => {
     const ed = new Editor({
       element: document.createElement('div'), editable: true,
-      extensions: [...baseExtensions(), ApiRequestSchema, WikiBadge, Collaboration.configure({ document: d.ydoc, field: 'p:' + id })],
+      extensions: [...baseExtensions(), ApiRequestSchema, WikiBadge, WikiTabs, WikiTab, Collaboration.configure({ document: d.ydoc, field: 'p:' + id })],
     })
     const frag = d.ydoc.getXmlFragment('p:' + id)
     // the hidden editor fills in from the shared document a moment after it is created
@@ -244,7 +245,7 @@ export function createWikiAdapter(d: WikiDeps): Adapter {
     guide: `You are working in a wiki: documentation made of pages and folders (shown in a sidebar), where each page is a rich-text document. Start with list_pages to see the structure, then read_page for the one you need. Pages are identified by id (use list_pages); most page tools default to the page the user has open.
 Make the smallest edit that does the job. Use create_page / create_folder / move_item to organise, and edit_page_block, insert_page_blocks, replace_in_page for text.
 Wikis often document HTTP APIs, so request blocks matter. A request block is shown in read_page as a fenced \`\`\`api-request block holding JSON: {"method","url","query":[{"k","v"}],"headers":[{"k","v"}],"body","bodyType":"none|json|text|form","example","title"}. Create them with add_api_request and change them with edit_api_request (never retype the fence by hand when a tool exists). Addresses should start with {{baseUrl}} so people can point them at another server; check get_variables and use set_variable for shared values. Never put API keys in shared variables or in a request block: tell the user to add secrets under Variables, "Only in this browser", and refer to them as {{name}} (for example an Authorization header of Bearer {{token}}).
-Badges inside text are written [[badge:Required]] (GET, POST, PUT, PATCH, DELETE, Required, Optional, Deprecated, Beta and New are coloured). Parameter tables are normal Markdown tables with the columns Name, Type, Required, Description. Use callouts (> [!note] ...) for warnings. Do not invent endpoints, fields or behaviour: write only what the user told you or what you read in the wiki, and ask when something is missing. You cannot send requests yourself.`,
+Tabs (a row of panels, such as one per language) are written :::tabs, then for each panel a line ::tab Title followed by ordinary Markdown, then :::. Badges inside text are written [[badge:Required]] (GET, POST, PUT, PATCH, DELETE, Required, Optional, Deprecated, Beta and New are coloured). Parameter tables are normal Markdown tables with the columns Name, Type, Required, Description. Use callouts (> [!note] ...) for warnings. Do not invent endpoints, fields or behaviour: write only what the user told you or what you read in the wiki, and ask when something is missing. You cannot send requests yourself.`,
     context: () => {
       const cur = d.getCur(), ed = d.getEditor()
       let s = cur ? `The user has the page “${titleOf(cur)}” (id=${cur}) open${ancestors(tree(), cur).length ? ` inside ${ancestors(tree(), cur).map(titleOf).join(' / ')}` : ''}.` : 'The wiki has no pages yet.'

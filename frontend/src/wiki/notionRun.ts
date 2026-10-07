@@ -7,6 +7,7 @@ import { prosemirrorJSONToYXmlFragment } from 'y-prosemirror'
 import { baseExtensions } from '../editor/extensions'
 import { mdToHtml } from '../assistant/docTools'
 import { ApiRequestSchema, WikiBadge } from './WikiNodes'
+import { WikiTab, WikiTabs } from './WikiTabs'
 import { IMAGE_EXT, notionId, notionMarkdown, planNotion, referencedImages, resolvePath, type Plan, type PlanItem } from './notion'
 import { nextPos, uid, type Entry, type Tree } from './tree'
 
@@ -57,7 +58,7 @@ const clean = (html: string) => DOMPurify.sanitize(html, { ADD_ATTR: ['data-call
 
 /** Create the pages and folders in the wiki's shared document, with their content and pictures. */
 export async function runImport(plan: Plan, src: Source, o: RunOptions): Promise<RunResult> {
-  const schema = getSchema([...baseExtensions(), ApiRequestSchema, WikiBadge])
+  const schema = getSchema([...baseExtensions(), ApiRequestSchema, WikiBadge, WikiTabs, WikiTab])
   const parser = PMDOMParser.fromSchema(schema)
   const ytree = o.ydoc.getMap<Entry>('tree')
   const total = plan.items.length
