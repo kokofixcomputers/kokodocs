@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import access
-from . import quota, stt
+from . import quota, stt, sttmodels
 from .db import UPLOAD_DIR, get_db, settings_get, settings_set
 from .authx import redirect_uri
 from .emailauth import email_enabled, send_email, smtp_config
@@ -120,7 +120,7 @@ def stt_view(db) -> dict:
     return {"provider": g("stt_provider") if g("stt_provider") in stt.PROVIDERS else "auto",
             "models": {p: (g(f"stt_model_{p}") or "") for p in stt.PROVIDERS}, "url": g("stt_url"), "language": g("stt_language"),
             "key_set": {p: bool(g(f"stt_key_{p}")) for p in stt.PROVIDERS}, "env_key": {"groq": bool(os.environ.get("GROQ_API_KEY")), "mistral": bool(os.environ.get("MISTRAL_API_KEY")), "openai": bool(os.environ.get("OPENAI_API_KEY"))},
-            "groq_models": stt.GROQ_MODELS, "local_models": stt.LOCAL_MODELS, "local_installed": stt._local_available(),
+            "groq_models": stt.GROQ_MODELS, "local_models": stt.LOCAL_MODELS + [m["repo"] for m in sttmodels.list_models(stt.builtin_repos()) if m["state"] == "ready" and not m["builtin"]], "local_installed": stt._local_available(),
             "active": {"available": bool(now and now.ready), "provider": now.provider if now else None, "model": now.model if now else None}}
 
 
@@ -181,8 +181,8 @@ def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin), db=
             m = model.strip()[:100]
             if prov == "groq" and m not in stt.GROQ_MODELS:
                 raise HTTPException(422, "Choose whisper-large-v3-turbo or whisper-large-v3")
-            if prov == "local" and m not in stt.LOCAL_MODELS:
-                raise HTTPException(422, "Unknown local model")
+            if prov == "local" and m and m not in stt.LOCAL_MODELS and not sttmodels.is_ready(m):
+                raise HTTPException(422, "Choose a model that is on this server (add it first)")
             settings_set(db, f"stt_model_{prov}", m)
     for prov, key in (b.stt_key or {}).items():
         if prov in stt.PROVIDERS and prov != "local" and key.strip():
@@ -265,3 +265,46 @@ async def stt_test(admin=Depends(must_admin), db=Depends(get_db)):
     except stt.STTError as e:
         raise HTTPException(502, str(e))
     return {"ok": True, "provider": c.provider, "model": c.model, "ms": int((time.time() - t0) * 1000)}
+
+
+def _models_view() -> dict:
+    return {"dir": str(sttmodels.MODELS_DIR), "max_mb": sttmodels.MAX_BYTES // sttmodels.MB, "models": sttmodels.list_models(stt.builtin_repos()), "installed": stt._local_available()}
+
+
+@router.get("/stt/models")
+def stt_models(admin=Depends(must_admin)):
+    return _models_view()
+
+
+class ModelIn(BaseModel):
+    repo: str = Field(max_length=300)
+
+
+@router.post("/stt/models")
+async def stt_add_model(b: ModelIn, admin=Depends(must_admin)):
+    """Download a Hugging Face model to this server's disk (in the background; poll GET /stt/models for progress)."""
+    if not stt._local_available():
+        raise HTTPException(400, "Local voice typing needs faster-whisper installed first (pip install -r requirements-local.txt)")
+    try:
+        repo = sttmodels.parse_repo(b.repo)
+        if sttmodels.is_ready(repo):
+            raise sttmodels.ModelError("That model is already on this server.", status=409)
+        info = await sttmodels.check(repo)
+        sttmodels.start_download(repo, info["size"])
+    except sttmodels.ModelError as e:
+        raise HTTPException(e.status, {"message": str(e), "suggestion": e.suggestion})
+    return _models_view()
+
+
+@router.delete("/stt/models")
+def stt_delete_model(repo: str, admin=Depends(must_admin), db=Depends(get_db)):
+    try:
+        r = sttmodels.parse_repo(repo)
+        freed = sttmodels.delete(r)
+    except sttmodels.ModelError as e:
+        raise HTTPException(e.status, str(e))
+    stt.forget(r)
+    short = stt.builtin_repos().get(r)
+    if settings_get(db, "stt_model_local") in (r, short):
+        settings_set(db, "stt_model_local", ""); db.commit()   # fall back to the default rather than point at nothing
+    return {**_models_view(), "freed": freed}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Copy, HardDrive, ExternalLink, FileText, KeyRound, Search, ShieldCheck, ShieldOff, Table2, Trash2, UserX, UserCheck } from 'lucide-react'
-import { api, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
+import { ArrowLeft, Copy, HardDrive, ExternalLink, FileText, Download, KeyRound, Search, ShieldCheck, ShieldOff, Table2, Trash2, UserX, UserCheck } from 'lucide-react'
+import { api, ApiError, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
 import { askConfirm, askText } from '../ui/Dialogs'
@@ -164,6 +164,60 @@ const STT_NAMES: Record<string, string> = { groq: 'Groq', mistral: 'Mistral (Vox
 const GROQ_LABEL: Record<string, string> = { 'whisper-large-v3-turbo': 'whisper-large-v3-turbo (fast, default)', 'whisper-large-v3': 'whisper-large-v3 (most accurate)' }
 
 /** Which speech-to-text service turns dictation into text, with its key and model. */
+const fmtMB = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${Math.round(n / 1e6)} MB`)
+
+/** The Hugging Face models kept on this server's disk for local voice typing: add one, watch it download, delete it to free the space. */
+function LocalModels({ reload, onUse }: { reload: () => void; onUse: (m: string) => void }) {
+  const [data, setData] = useState<SttModels | null>(null)
+  const [repo, setRepo] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<{ text: string; suggestion?: string } | null>(null)
+  const load = () => api.adminSttModels().then(setData).catch((e) => setErr({ text: e.message }))
+  useEffect(() => { void load() }, [])
+  const downloading = data?.models.some((m) => m.state === 'downloading')
+  useEffect(() => {
+    if (!downloading) return
+    const t = window.setInterval(() => { void api.adminSttModels().then((d) => { setData(d); if (!d.models.some((m) => m.state === 'downloading')) reload() }).catch(() => {}) }, 1800)
+    return () => window.clearInterval(t)
+  }, [downloading]) // eslint-disable-line react-hooks/exhaustive-deps
+  const add = async (r = repo) => {
+    setBusy(true); setErr(null)
+    try { setData(await api.adminSttAddModel(r)); setRepo('') }
+    catch (e) { const d = (e as ApiError).detail; setErr({ text: (e as Error).message, suggestion: d && typeof d === 'object' ? d.suggestion ?? undefined : undefined }) } finally { setBusy(false) }
+  }
+  const remove = async (m: SttModel) => {
+    if (!(await askConfirm({ title: `Delete ${m.name}?`, text: `This removes ${fmtMB(m.size)} from this server's disk. You can add it again later.`, label: 'Delete from disk', danger: true }))) return
+    setBusy(true)
+    try { const d = await api.adminSttDeleteModel(m.repo); setData(d); reload(); toast(`Deleted. ${fmtMB(d.freed ?? 0)} freed`) } catch (e) { toast((e as Error).message) } finally { setBusy(false) }
+  }
+  if (!data) return <span className="spinner" />
+  return (
+    <div className="stt-models">
+      <div className="stt-models-head"><b>Models on this server</b><span className="muted">{fmtMB(data.models.reduce((n, m) => n + m.size, 0))} used in <code>{data.dir}</code></span></div>
+      {data.models.length === 0 && <p className="muted hint" style={{ margin: 0 }}>None yet. The built-in sizes download the first time someone dictates; add one below to download it now.</p>}
+      {data.models.map((m) => (
+        <div key={m.repo} className={`stt-model ${m.state}`}>
+          <div className="stt-model-main"><b>{m.name}</b>{m.builtin && <span className="tag">built-in</span>}<span className="muted">{m.builtin ? m.repo : 'Hugging Face'}</span></div>
+          {m.state === 'downloading' ? (
+            <div className="stt-model-prog"><div className="meter ok"><i style={{ width: `${Math.min(100, ((m.size / Math.max(1, m.total ?? 1)) * 100))}%` }} /></div><span>{fmtMB(m.size)} of {fmtMB(m.total ?? 0)}</span></div>
+          ) : m.state === 'error' ? <span className="form-error" style={{ margin: 0 }}>{m.error}</span>
+          : <span className="muted">{m.state === 'incomplete' ? 'Incomplete, ' : ''}{fmtMB(m.size)}</span>}
+          <span className="stt-model-btns">
+            {m.state === 'ready' && <button className="btn btn-pill btn-soft btn-sm" onClick={() => onUse(m.builtin ? m.name : m.repo)}>Use</button>}
+            <button className="icon-btn sm" aria-label={`Delete ${m.name}`} title="Delete from disk" disabled={busy || m.state === 'downloading'} onClick={() => remove(m)}><Trash2 size={16} /></button>
+          </span>
+        </div>))}
+      <div className="ps-row" style={{ alignItems: 'flex-end' }}>
+        <label className="ai-field" style={{ flex: 1, minWidth: 220 }}><span>Add a Hugging Face model (name or link)</span>
+          <span className="field"><input value={repo} onChange={(e) => setRepo(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && repo.trim() && add()} placeholder="Systran/faster-distil-whisper-small.en" spellCheck={false} /></span></label>
+        <button className="btn btn-pill btn-primary" disabled={busy || !repo.trim() || !data.installed} onClick={() => add()}>{busy ? <span className="spinner sm" /> : <><Download size={16} />Download</>}</button>
+      </div>
+      <p className="muted hint" style={{ margin: 0 }}>Must be a public Whisper model in CTranslate2 format (a model.bin next to config.json), up to {data.max_mb} MB. Look for “faster-” versions, such as Systran/faster-distil-whisper-small.en.</p>
+      {err && <p className="form-error" style={{ margin: 0 }}>{err.text}{err.suggestion && <> <button className="btn btn-pill btn-soft btn-sm" disabled={busy} onClick={() => { setRepo(err.suggestion!); void add(err.suggestion) }}>Download {err.suggestion}</button></>}</p>}
+    </div>
+  )
+}
+
 function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
   const v = s.stt
   const [prov, setProv] = useState<'auto' | SttProvider>(v.provider)
@@ -218,7 +272,8 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
       {prov !== 'auto' && prov !== 'local' && (
         <label className="ai-field"><span>API key{prov === 'openai-compatible' ? ' (if the server needs one)' : ''}</span>
           <span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={hasKey ? 'Saved. Leave blank to keep it' : envKey ? 'Using the key from the server environment' : prov === 'groq' ? 'gsk_…' : 'sk-…'} /></span></label>)}
-      {prov === 'local' && <p className="muted hint" style={{ margin: 0 }}>{v.local_installed ? 'faster-whisper is installed. The model downloads the first time someone dictates, and audio never leaves this server.' : 'faster-whisper is not installed on this server: run pip install -r requirements-local.txt and restart.'}</p>}
+      {prov === 'local' && <p className="muted hint" style={{ margin: 0 }}>{v.local_installed ? 'faster-whisper is installed. Audio never leaves this server.' : 'faster-whisper is not installed on this server: run pip install -r requirements-local.txt and restart.'}</p>}
+      {prov === 'local' && v.local_installed && <LocalModels reload={() => { void api.adminSettings().then(apply) }} onUse={(m) => setModel(m)} />}
       <label className="ai-field" style={{ maxWidth: 260 }}><span>Language (optional, like en; empty detects it)</span><span className="field"><input value={lang} onChange={(e) => setLang(e.target.value)} maxLength={12} spellCheck={false} placeholder="auto" /></span></label>
       {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'}>{msg.text}</p>}
       <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>

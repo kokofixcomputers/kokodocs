@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import httpx
 
+from . import sttmodels
 from .db import settings_get
 from .security import decrypt_secret
 
@@ -39,6 +40,7 @@ class STTError(Exception):
 def _local_available() -> bool:
     try:
         import faster_whisper  # noqa: F401
+        import huggingface_hub  # noqa: F401
         return True
     except ImportError:
         return False
@@ -80,7 +82,7 @@ def config(db=None) -> Cfg | None:
             return Cfg("openai", model or env("KOKO_STT_MODEL") or DEFAULT_MODEL["openai"], OPENAI_URL, _secret(db, "stt_key_openai") or env("OPENAI_API_KEY"), language)
         if chosen == "openai-compatible":
             return Cfg("openai-compatible", model or env("KOKO_STT_MODEL") or DEFAULT_MODEL["openai-compatible"], settings_get(db, "stt_url") or env("KOKO_STT_URL"), _secret(db, "stt_key_openai-compatible") or env("KOKO_STT_KEY"), language)
-        return Cfg("local", model if model in LOCAL_MODELS else env("KOKO_WHISPER_MODEL") or DEFAULT_MODEL["local"], None, None, language)
+        return Cfg("local", model if model and (model in LOCAL_MODELS or sttmodels.is_ready(model)) else env("KOKO_WHISPER_MODEL") or DEFAULT_MODEL["local"], None, None, language)
     forced = env("KOKO_STT_PROVIDER", "").strip().lower()
     if forced and forced not in PROVIDERS:
         return None
@@ -156,7 +158,7 @@ def _local_transcribe(audio: bytes, language: str | None, name: str) -> str:
         if name not in _models:
             from faster_whisper import WhisperModel
 
-            _models[name] = WhisperModel(name, device="cpu", compute_type="int8")
+            _models[name] = WhisperModel(name, device="cpu", compute_type="int8", download_root=str(sttmodels.MODELS_DIR))
         model = _models[name]
     source = _wav_to_array(audio) if audio[:4] == b"RIFF" else io.BytesIO(audio)
     segments, _ = model.transcribe(source, language=language or None, beam_size=1, vad_filter=True, condition_on_previous_text=False)
@@ -182,3 +184,15 @@ async def transcribe(audio: bytes, filename: str = "speech.wav", content_type: s
         url = url.rstrip("/")
         url = url if url.endswith("/transcriptions") else url + "/audio/transcriptions"
     return await _remote(url, c.key, c.model, audio, filename, content_type, language)
+
+
+def builtin_repos() -> dict[str, str]:
+    """The repositories behind the short model names (tiny.en, small, large-v3...), so the disk list can show them by name."""
+    return {f"Systran/faster-whisper-{n}": n for n in LOCAL_MODELS}
+
+
+def forget(repo: str) -> None:
+    """Drop a deleted model from memory too."""
+    short = builtin_repos().get(repo)
+    for k in (repo, short):
+        _models.pop(k, None) if k else None
