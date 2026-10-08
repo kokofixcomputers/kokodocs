@@ -38,6 +38,7 @@ import { useVoiceTyping } from '../voice/useVoiceTyping'
 import { VoicePill } from '../voice/VoicePill'
 import { VoiceFab } from '../voice/VoiceControl'
 import { LinkHover } from './LinkHover'
+import { useBatchedRerender } from './useBatchedRerender'
 import { DocContextMenu } from './TextContextMenu'
 import { StatsPill } from './StatsPill'
 import { PasteChecklists } from './PasteChecklists'
@@ -169,7 +170,8 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       CommentMark,
     ], [provider, identity, ydoc, upload])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
-  const editor = useEditor({ editable: !readOnly, editorProps, extensions }, [])
+  const editor = useEditor({ editable: !readOnly, editorProps, extensions, shouldRerenderOnTransaction: false }, [])
+  useBatchedRerender(editor)
 
   // a file imported from the documents screen fills this (empty) document once it has synced
   useEffect(() => {

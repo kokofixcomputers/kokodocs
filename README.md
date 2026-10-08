@@ -333,3 +333,7 @@ Forms and boards have an **Assistant** button in the top bar (for signed-in peop
 - **Boards:** it can read the whole board (fields, columns, cards with their values) and add, edit, move and delete cards, add, rename, recolour, reorder and delete columns, and add, edit and delete fields (including select options and required). It uses option labels and `YYYY-MM-DD` dates, and a card that breaks a field's rules (a missing required value, a number outside its limits) is refused with the reason, so Koko can correct itself. People who can only view a board can ask questions about it but not change it.
 
 Code: `frontend/src/assistant/formTools.ts` and `boardTools.ts`. On wide screens the page makes room beside the panel; on a phone the panel covers the page.
+
+## Editor re-rendering
+
+The document and wiki editors re-render once per animation frame when the editor changes (`frontend/src/editor/useBatchedRerender.ts`, with Tiptap's `shouldRerenderOnTransaction: false`), instead of once per transaction. Tiptap's default re-renders the whole page synchronously for every transaction, and a key press makes several (the text, the collaboration cursor, proofreading marks, page breaks). Typing quickly in a long document could pile enough of them into one burst that React stopped with "Maximum update depth exceeded" (error #185, seen in the production build only). Batching to the next frame removed it; the toolbar, word count and menus are still right by the next paint.

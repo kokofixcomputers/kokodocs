@@ -26,6 +26,7 @@ import { SlashCommand, SlashMenu } from '../editor/SlashMenu'
 import { EmojiSuggest, EmojiSuggestMenu } from '../editor/EmojiSuggest'
 import { CalloutMenu, ImageMenu, ShapeMenu, TableMenu } from '../editor/BubbleMenus'
 import { LinkHover } from '../editor/LinkHover'
+import { useBatchedRerender } from '../editor/useBatchedRerender'
 import { DocContextMenu } from '../editor/TextContextMenu'
 import { Toolbar } from '../editor/Toolbar'
 import { useVoiceTyping } from '../voice/useVoiceTyping'
@@ -405,7 +406,8 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
     ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
-  const editor = useEditor({ editable: !readOnly, editorProps, extensions }, [])
+  const editor = useEditor({ editable: !readOnly, editorProps, extensions, shouldRerenderOnTransaction: false }, [])
+  useBatchedRerender(editor)
   useEffect(() => { onEditor(editor); return () => onEditor(null) }, [editor, onEditor])
   const titleRef = useRef<HTMLInputElement>(null)
   useEffect(() => { if (autoFocusTitle && titleRef.current) { titleRef.current.focus(); titleRef.current.select(); onFocused() } }, [autoFocusTitle, onFocused])
