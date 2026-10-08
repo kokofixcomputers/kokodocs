@@ -568,3 +568,8 @@ a.brand { color: var(--ink); text-decoration: none; }
 
 .gm-card.off { opacity: .7; } .gm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; } .gm-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; } .gm-title .muted { font-size: 13px; } .gm-actions { display: flex; align-items: center; gap: 6px; }
 .gm-edit { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+/* Koko in forms and boards: a panel on the right that leaves the page usable beside it on wide screens and covers it on narrow ones */
+.ai-drawer { position: fixed; z-index: 45; right: 12px; top: 64px; bottom: 12px; width: min(400px, calc(100vw - 24px)); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-2); overflow: auto; display: flex; flex-direction: column; }
+.ai-drawer > .side-close { position: absolute; top: 10px; right: 10px; z-index: 2; } .ai-drawer .ai-panel { flex: 1; min-height: 0; }
+@media (min-width: 1100px) { .editor-shell.ai-open .fm-body, .editor-shell.ai-open .bd-cols, .editor-shell.ai-open .bd-fields, .editor-shell.ai-open .bd-table-wrap, .editor-shell.ai-open .bd-cal, .editor-shell.ai-open .bd-road { margin-right: 424px; } }

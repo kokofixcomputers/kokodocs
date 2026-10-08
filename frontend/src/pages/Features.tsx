@@ -60,7 +60,7 @@ const GROUPS: Group[] = [
   { id: 'assistant', icon: Bot, name: 'Assistant and proofreading', lead: 'Help when you want it, quiet when you do not.', shot: 'assistant', url: 'docs.example.com/d/q3-launch-plan', items: [
     ['Bring your own model', 'Connect any OpenAI-compatible service under Settings. The key is stored encrypted and never returned to the browser.'],
     ['Approval first', 'The assistant reads freely but shows each edit as a card you approve, or approve for the session.'],
-    ['Knows each file', 'It has tools for documents, spreadsheets, slides and wikis, and keeps a history of past conversations.'],
+    ['Knows each file', 'It has tools for documents, spreadsheets, slides, wikis, forms and boards, and keeps a history of past conversations.'],
     ['Proofreading', 'A built-in offline spelling and grammar checker with one-click fixes, in eight English variants. Optional LanguageTool for more.'],
   ] },
   { id: 'voice', icon: Mic, name: 'Voice typing', lead: 'Talk instead of typing, anywhere you can type.', shot: 'voice-typing', gif: true, url: 'docs.example.com/d/weekly-sync', items: [

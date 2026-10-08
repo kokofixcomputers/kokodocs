@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { openSettings } from '../ui/settingsStore'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
 import {
   GitBranch, AlignLeft, AtSign, Calendar, ChevronDown, ChevronUp, CircleDot, Clipboard, Clock, Cloud, CloudOff, Copy, Eye, FileText, GripVertical, Hash, Inbox,
-  Image as ImageIcon, Palette, Paperclip, Info, Upload, Video, Link2, ListChecks, LogIn, Moon, Plus, Redo2, Settings2, Share2, SlidersHorizontal, SquareCheck, Sun, Trash2, Type, Undo2, X, Rows3, ClipboardList, ChevronsUpDown,
+  Image as ImageIcon, Palette, Paperclip, Info, Upload, Video, Link2, ListChecks, LogIn, Moon, Plus, Redo2, Settings2, Share2, SlidersHorizontal, SquareCheck, Sun, Trash2, Type, Undo2, X, Rows3, ClipboardList, ChevronsUpDown, Sparkles,
 } from 'lucide-react'
 import { api, type ApiError, type DocInfo } from '../api'
 import { useAuth } from '../auth'
@@ -26,6 +26,7 @@ import { OPS } from './flow'
 import { Responses } from './Responses'
 import { patternProblem } from './validate'
 import './forms.css'
+const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
 
 const ANIMALS = ['Otter', 'Fox', 'Koala', 'Panda', 'Heron', 'Lynx', 'Gecko', 'Falcon', 'Narwhal', 'Quokka']
 const COLORS = ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#0ea5e9', '#22c55e', '#f97316', '#d946ef']
@@ -82,6 +83,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
   const [tab, setTab] = useState<'questions' | 'preview' | 'responses' | 'settings'>('questions')
   const [sel, setSel] = useState<string | null>(null)
   const [share, setShare] = useState(false)
+  const [assistant, setAssistant] = useState(false)
   const [count, setCount] = useState<number | null>(null)
   const [people, setPeople] = useState<{ id: number; name: string; color: string }[]>([])
 
@@ -140,7 +142,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
   ] as const
 
   return (
-    <div className="editor-shell form-shell">
+    <div className={`editor-shell form-shell ${assistant ? 'ai-open' : ''}`}>
       <header className="ed-top">
         <div className="ed-left">
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
@@ -154,6 +156,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
           <button className="icon-btn" title="Redo" aria-label="Redo" onClick={() => model.undo.redo()}><Redo2 size={18} /></button>
           <button className="icon-btn" title="Copy form link" aria-label="Copy form link" onClick={copyLink}><Copy size={18} /></button>
           <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{uiTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
+          {user && <button className={`btn btn-pill btn-soft ${assistant ? 'active' : ''}`} aria-pressed={assistant} onClick={() => setAssistant((v) => !v)}><Sparkles size={16} /><span className="lbl">Assistant</span></button>}
           <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
           {user ? (
             <Popover align="end" trigger={({ toggle }) => <button className="avatar-btn" onClick={toggle}><Avatar name={user.name} color={user.color} size={34} /></button>}>
@@ -228,6 +231,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
         )}
       </div>
       {share && <ShareDialog info={info} onClose={() => setShare(false)} />}
+      {user && assistant && <aside className="ai-drawer" aria-label="Assistant"><Suspense fallback={null}><AssistantHost docId={info.id} user={user} onClose={() => setAssistant(false)} source={{ kind: 'form', deps: { model, docId: info.id, getTitle: () => title, setTitle: onTitle, canEdit: () => true } }} /></Suspense></aside>}
     </div>
   )
 }

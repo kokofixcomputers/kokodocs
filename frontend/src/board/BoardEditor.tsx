@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
-import { AlertCircle, ArrowLeft, ArrowRight, Calendar, CheckSquare, ChevronDown, ChevronUp, Cloud, CloudOff, Copy, GripVertical, Hash, Kanban, MessageSquare, CalendarDays, GanttChart, Table2, Link2, LogIn, Moon, MoreHorizontal, Plus, Redo2, Settings2, Share2, Sun, Tags, Trash2, Type, Undo2, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRight, Calendar, CheckSquare, ChevronDown, ChevronUp, Cloud, CloudOff, Copy, GripVertical, Hash, Kanban, MessageSquare, Sparkles, CalendarDays, GanttChart, Table2, Link2, LogIn, Moon, MoreHorizontal, Plus, Redo2, Settings2, Share2, Sun, Tags, Trash2, Type, Undo2, X } from 'lucide-react'
 import { api, type ApiError, type Comment, type DocInfo, type User } from '../api'
 import { useAuth } from '../auth'
 import { KokoProvider } from '../collab'
@@ -25,6 +25,7 @@ import { RoadmapView } from './RoadmapView'
 import { TableView } from './TableView'
 import type { OpenTarget } from './views'
 import './board.css'
+const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
 
 type C = { id: string } & Card
 const ICON: Record<FieldType, typeof Type> = { text: Type, number: Hash, date: Calendar, single: ChevronDown, multi: Tags, checkbox: CheckSquare, link: Link2 }
@@ -70,6 +71,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
   const [tab, setTabState] = useState<Tab>(() => { try { const t = localStorage.getItem('koko.boardview') as Tab; return TABS.some((x) => x.id === t) ? t : 'board' } catch { return 'board' } })
   const setTab = (t: Tab) => { setTabState(t); try { localStorage.setItem('koko.boardview', t) } catch { /* ignore */ } }
   const [share, setShare] = useState(false)
+  const [assistant, setAssistant] = useState(false)
   const [open, setOpen] = useState<OpenTarget | null>(null)
   const [people, setPeople] = useState<{ id: number; name: string; color: string }[]>([])
   const [filter, setFilter] = useState('')
@@ -112,7 +114,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
   const copyLink = () => navigator.clipboard.writeText(`${location.origin}/d/${info.id}`).then(() => toast('Board link copied'), () => toast(`${location.origin}/d/${info.id}`))
 
   return (
-    <div className="editor-shell bd-shell">
+    <div className={`editor-shell bd-shell ${assistant ? 'ai-open' : ''}`}>
       <header className="ed-top">
         <div className="ed-left">
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
@@ -125,6 +127,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
           {!readOnly && <button className="icon-btn" title="Redo" aria-label="Redo" onClick={() => model.undo.redo()}><Redo2 size={18} /></button>}
           <button className="icon-btn" title="Copy board link" aria-label="Copy board link" onClick={copyLink}><Copy size={18} /></button>
           <button className="icon-btn" onClick={toggle} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
+          {user && <button className={`btn btn-pill btn-soft ${assistant ? 'active' : ''}`} aria-pressed={assistant} onClick={() => setAssistant((v) => !v)}><Sparkles size={16} /><span className="lbl">Assistant</span></button>}
           {info.role !== 'viewer' && <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>}
           {user ? (
             <Popover align="end" trigger={({ toggle: t }) => <button className="avatar-btn" onClick={t}><Avatar name={user.name} color={user.color} size={34} /></button>}>
@@ -147,6 +150,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
 
       {open && <CardDialog model={model} fields={fields} cols={cols} target={open} readOnly={readOnly} onClose={() => setOpen(null)} docId={info.id} user={user} comments={comments} refreshComments={refreshComments} />}
       {share && <ShareDialog info={{ ...info, title }} onClose={() => setShare(false)} />}
+      {user && assistant && <aside className="ai-drawer" aria-label="Assistant"><Suspense fallback={null}><AssistantHost docId={info.id} user={user} onClose={() => setAssistant(false)} source={{ kind: 'board', deps: { model, getTitle: () => title, setTitle: onTitle, canEdit: () => !readOnly } }} /></Suspense></aside>}
     </div>
   )
 }
