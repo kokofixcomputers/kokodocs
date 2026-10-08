@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Check, Copy, Download, KeyRound, Lock, ShieldCheck } from 'lucide-react'
+import { Check, Copy, Download, KeyRound, Lock, ShieldCheck } from 'lucide-react'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { Modal } from '../ui/Modal'
@@ -18,7 +18,7 @@ function Report({ r, verb }: { r: BatchResult; verb: string }) {
   return (
     <div className="st-stack">
       <p style={{ margin: 0 }}><b>{r.done}</b> document{r.done === 1 ? '' : 's'} {verb}.</p>
-      {r.images > 0 && <p className="muted" style={{ margin: 0 }}><AlertTriangle size={14} style={{ verticalAlign: -2 }} /> {r.images} of them contain pictures. Pictures are still stored without encryption: they can't be encrypted yet.</p>}
+      {r.images > 0 && <p className="muted" style={{ margin: 0 }}>{r.images} of them contained pictures, which were encrypted too.</p>}
       {r.skipped.length > 0 && <div><p style={{ margin: '0 0 4px' }}><b>{r.skipped.length} left as they were</b></p><ul className="zk-list">{r.skipped.map((s) => <li key={s.id}><b>{s.title || 'Untitled'}</b><span>{s.why}</span></li>)}</ul></div>}
       {r.failed.length > 0 && <div><p style={{ margin: '0 0 4px' }} className="form-error"><b>{r.failed.length} couldn't be {verb}</b></p><ul className="zk-list">{r.failed.map((s) => <li key={s.id}><b>{s.title || 'Untitled'}</b><span>{s.why}</span></li>)}</ul></div>}
     </div>
@@ -96,7 +96,7 @@ function TurnOn({ status, onClose, onDone }: { status: ZkStatus; onClose: () => 
           <ul className="zk-points">
             <li>You sign in the same way. Your password now also protects your keys, so <b>forgetting it means using your recovery key</b>, which you'll get next.</li>
             <li>Live editing and sharing keep working, but only with people who have turned encryption on as well.</li>
-            <li>Things that need the server to read a document don't work in encrypted ones: Koko, voice typing, spelling and grammar checks, version history, pictures, public links and forms.</li>
+            <li>Koko and voice typing work, but they have to send what you give them through the server to an AI or speech service, so you're asked first (once per session). Spelling and grammar checks, version history, public links and forms aren't available in encrypted documents.</li>
           </ul>
           {!status.has_password && <p className="form-error">You need a password first: set one in Security, then come back.</p>}
           <label className="field"><Lock size={18} /><input type="password" autoComplete="current-password" placeholder="Your password" value={pw} onChange={(e) => setPw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && pw && status.has_password && start()} /></label>
@@ -223,7 +223,7 @@ function ConvertAll({ status, onClose }: { status: ZkStatus; onClose: () => void
     <Modal title="Encrypt your other documents" onClose={onClose}>
       {report ? <div className="st-stack"><Report r={report} verb="encrypted" /><div className="modal-actions"><button className="btn btn-pill btn-primary" onClick={onClose}>Done</button></div></div> : (
         <div className="st-stack">
-          <p style={{ margin: 0 }}>{status.plain - status.plain_blocked} document{status.plain - status.plain_blocked === 1 ? '' : 's'} will be encrypted. <b>Anyone you shared them with loses access</b> until you share them again (people need encryption turned on too). Comments, version history and search text for them are removed from the server.</p>
+          <p style={{ margin: 0 }}>{status.plain - status.plain_blocked} document{status.plain - status.plain_blocked === 1 ? '' : 's'} will be encrypted. <b>Anyone you shared them with loses access</b> until you share them again (people need encryption turned on too). Their comments and pictures are encrypted along with them; version history and search text the server held are removed.</p>
           <div className="modal-actions"><button className="btn btn-pill btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-pill btn-primary" disabled={busy} onClick={go}>Encrypt them</button></div>
         </div>)}
     </Modal>

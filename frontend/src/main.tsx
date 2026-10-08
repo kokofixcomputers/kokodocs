@@ -24,10 +24,12 @@ import { UpdateNotice } from './ui/UpdateNotice'
 import { DecryptingPage } from './zk/Decrypting'
 import { UnlockPage } from './zk/UnlockPage'
 import { installEmojiRecovery } from './emoji'
+import { installZkImages } from './zk/images'
 import './app.css'
 import './editor.css'
 
 installEmojiRecovery()
+installZkImages()   // pictures in encrypted documents are decrypted here, as they appear
 
 /** Signed-in people land on their documents; everyone else sees the home page. */
 function Root() {

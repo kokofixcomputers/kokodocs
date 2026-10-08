@@ -1,12 +1,13 @@
 // Turning encryption on and off, signing in with it, and moving documents between plain and encrypted. All the cryptography happens here,
 // in the browser; the server is only handed wrapped keys and ciphertext (see backend/app/zk.py).
 import * as Y from 'yjs'
-import { ApiError, request, type DocSummary, type User } from '../api'
+import { ApiError, request, type Comment, type DocSummary, type User } from '../api'
+import { picturesToEncrypted, picturesToNewKey, picturesToPlain } from './images'
 import {
   ARGON, b64, fromPassword, newKeypair, open256, openText, privWrapKey, random, recoveryFromText, recoveryToText, recoveryWrapKey, seal256, sealText, sealTo, unb64, type ArgonParams,
 } from './crypto'
 import {
-  decryptTitle, decryptUpdate, docKeyOf, encryptTitle, encryptUpdate, newDocKey, openDocKey, sealDocKeyForMe, setDocKey, zkErase, zkMaster, zkPriv, zkPub, zkRecall, zkRemember, zkSetKeys, zkUid,
+  decryptComment, decryptTitle, decryptUpdate, docKeyOf, encryptComment, encryptTitle, encryptUpdate, newDocKey, openDocKey, sealDocKeyForMe, setDocKey, zkErase, zkMaster, zkPriv, zkPub, zkRecall, zkRemember, zkSetKeys, zkUid,
 } from './session'
 
 const json = (b: unknown) => ({ body: JSON.stringify(b) })
@@ -104,10 +105,17 @@ async function encryptDocument(d: DocSummary): Promise<{ skipped?: string; image
     const p = await request<{ ydoc: string | null; title: string; kind: string; updated_at: number; blocked: string | null; has_images: boolean }>(`/api/zk/docs/${d.id}/plain`, {}, d.id)
     if (p.blocked) return { skipped: p.blocked }
     const key = newDocKey()
-    const state = p.ydoc ? unb64(p.ydoc) : Y.encodeStateAsUpdate(new Y.Doc())
+    let state = p.ydoc ? unb64(p.ydoc) : Y.encodeStateAsUpdate(new Y.Doc())
+    if (p.has_images) {   // its pictures are stored again, encrypted, and the document points at the new copies
+      const doc = new Y.Doc(); Y.applyUpdate(doc, state)
+      if ((await picturesToEncrypted(d.id, key, doc)).length) state = Y.encodeStateAsUpdate(doc)
+      doc.destroy()
+    }
+    const comments: Record<string, { body: string; quote: string }> = {}
+    for (const c of await request<Comment[]>(`/api/docs/${d.id}/comments`, {}, d.id)) comments[c.id] = { body: await encryptComment(key, d.id, c.body), quote: c.quote ? await encryptComment(key, d.id, c.quote) : '' }
     try {
       await request(`/api/zk/docs/${d.id}/encrypt`, { method: 'POST', ...json({
-        title_enc: await encryptTitle(key, d.id, p.title), sealed: await sealDocKeyForMe(key), checkpoint: b64(await encryptUpdate(key, d.id, state)), expect_updated_at: p.updated_at,
+        title_enc: await encryptTitle(key, d.id, p.title), sealed: await sealDocKeyForMe(key), checkpoint: b64(await encryptUpdate(key, d.id, state)), expect_updated_at: p.updated_at, comments,
       }) }, d.id)
     } catch (e) { if (e instanceof ApiError && e.code === 'changed' && attempt < 2) { await new Promise((r) => setTimeout(r, 600)); continue } throw e }
     setDocKey(d.id, key)
@@ -145,8 +153,11 @@ async function decryptDocument(d: DocSummary): Promise<void> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const { key, doc, last } = await readEncrypted(d.id, d.zk_sealed)
     const title = d.zk_title ? await decryptTitle(key, d.id, d.zk_title) : d.title
+    await picturesToPlain(d.id, doc)   // pictures are stored again, readable, and the document points at them
+    const comments: Record<string, { body: string; quote: string }> = {}
+    for (const c of await request<Comment[]>(`/api/docs/${d.id}/comments`, {}, d.id)) comments[c.id] = { body: await decryptComment(key, d.id, c.body), quote: c.quote ? await decryptComment(key, d.id, c.quote) : '' }
     try {
-      await request(`/api/zk/docs/${d.id}/decrypt`, { method: 'POST', ...json({ ydoc: b64(Y.encodeStateAsUpdate(doc)), title, last_id: last }) }, d.id)
+      await request(`/api/zk/docs/${d.id}/decrypt`, { method: 'POST', ...json({ ydoc: b64(Y.encodeStateAsUpdate(doc)), title, last_id: last, comments }) }, d.id)
       return
     } catch (e) { if (e instanceof ApiError && e.code === 'changed' && attempt < 2) { await new Promise((r) => setTimeout(r, 600)); continue } throw e }
   }
@@ -218,12 +229,15 @@ export async function sealKeyFor(pub: string, docKey: Uint8Array) { return sealT
 
 /** After someone lost access: a new key for the document, and everything re-encrypted with it, so what they could still fetch is useless. */
 export async function rotateKey(d: { id: string; zk_sealed?: string | null }, grants: { email: string; pub: string }[], title: string) {
-  const { doc, last } = await readEncrypted(d.id, d.zk_sealed)
+  const { doc, last, key: oldKey } = await readEncrypted(d.id, d.zk_sealed)
   const key = newDocKey()
   const sealedBy: Record<string, string> = {}
   for (const g of grants) sealedBy[g.email] = await sealTo(unb64(g.pub), key)
+  const images = await picturesToNewKey(d.id, oldKey, key, doc)   // pictures and comments were encrypted with the old key: they move to the new one
+  const comments: Record<string, { body: string; quote: string }> = {}
+  for (const c of await request<Comment[]>(`/api/docs/${d.id}/comments`, {}, d.id)) comments[c.id] = { body: await encryptComment(key, d.id, await decryptComment(oldKey, d.id, c.body)), quote: c.quote ? await encryptComment(key, d.id, await decryptComment(oldKey, d.id, c.quote)) : '' }
   await request(`/api/zk/docs/${d.id}/rotate`, { method: 'POST', ...json({
-    title_enc: await encryptTitle(key, d.id, title), checkpoint: b64(await encryptUpdate(key, d.id, Y.encodeStateAsUpdate(doc))), grants: sealedBy, last_id: last,
+    title_enc: await encryptTitle(key, d.id, title), checkpoint: b64(await encryptUpdate(key, d.id, Y.encodeStateAsUpdate(doc))), grants: sealedBy, last_id: last, images, comments,
   }) }, d.id)
   setDocKey(d.id, key)
 }

@@ -73,10 +73,30 @@ ok('opening it returns the sealed key', g['zk'] and g['zk_sealed'])
 ok('someone else cannot open it', call('GET', f'/api/docs/{did}', None, Bo)[0] == 403)
 ok('title update must be encrypted', call('PATCH', f'/api/docs/{did}', {'title': 'plain title'}, A)[0] == 422)
 ok('encrypted title update', call('PATCH', f'/api/docs/{did}', {'zk_title': b64(b'T2')}, A)[0] == 200)
-for what, path, method, body in (('images', f'/api/docs/{did}/images/import', 'POST', {'url': 'http://example.com/a.png'}), ('versions', f'/api/docs/{did}/versions', 'GET', None), ('proofread', f'/api/docs/{did}/proofread', 'POST', {'blocks': [], 'language': 'en-US'}),
-                                 ('Koko history', f'/api/docs/{did}/ai/conversations/abcd1234', 'PUT', {'title': 'x', 'data': []})):
+for what, path, method, body in (('versions', f'/api/docs/{did}/versions', 'GET', None), ('proofread', f'/api/docs/{did}/proofread', 'POST', {'blocks': [], 'language': 'en-US'})):
     s, r = call(method, path, body, A)
     ok(f'{what} are refused on an encrypted document', s == 409 and 'zk_unsupported' in json.dumps(r), s, r)
+s, r = call('PUT', f'/api/docs/{did}/ai/conversations/abcd1234', {'title': 'x', 'data': [{'zk': 'ciphertext'}]}, A)
+ok('Koko conversations can be stored (the browser encrypts them)', s == 200, s, r)
+def mp(path, tok, data, name='p.enc'):
+    b = uuid.uuid4().hex
+    body = (f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: application/octet-stream\r\n\r\n').encode() + data + f'\r\n--{b}--\r\n'.encode()
+    r = urllib.request.Request(B + path, body, {'content-type': f'multipart/form-data; boundary={b}', 'authorization': 'Bearer ' + tok}, method='POST')
+    try:
+        x = urllib.request.urlopen(r); return x.status, json.loads(x.read())
+    except urllib.error.HTTPError as e:
+        try: return e.code, json.loads(e.read())
+        except Exception: return e.code, {}
+cipher = b'0123456789abcdef' + os.urandom(200)
+s, r = mp(f'/api/zk/docs/{did}/images', A, cipher)
+ok('an encrypted picture is stored', s == 200 and r['url'].startswith('/api/zk/img/'), s, r)
+img1 = r['url']
+got = urllib.request.urlopen(B + img1)
+ok('and served back as the same opaque bytes', got.read() == cipher and got.headers['content-type'] == 'application/octet-stream')
+ok('too-short data is not a picture', mp(f'/api/zk/docs/{did}/images', A, b'x')[0] == 422)
+ok('a stranger can\'t add pictures', mp(f'/api/zk/docs/{did}/images', Bo, cipher)[0] == 403)
+ok('the classic picture address does not serve them', call('GET', '/api/images/' + img1.split('/')[-1] + '.zkimg')[0] in (404, 422))
+ok('fetching a web picture for the browser needs access', call('POST', f'/api/zk/docs/{did}/images/fetch', {'url': 'http://example.com/a.png'}, Bo)[0] == 403)
 ok('link sharing is refused', call('PUT', f'/api/docs/{did}/sharing', {'link_access': 'anyone', 'link_role': 'viewer', 'shares': []}, A)[0] == 409)
 
 async def relay():
@@ -149,8 +169,9 @@ ok('the log shows the snapshot', s == 200 and base64.urlsafe_b64decode(lg['check
 s, r = call('POST', f'/api/zk/docs/{did}/rotate', {'title_enc': b64(b'T3'), 'checkpoint': b64(b'new-key-snapshot'), 'grants': {ea: b64(b'new-sealed')}, 'last_id': 0}, A)
 ok('a rotation stale about the newest update is refused', s == 409 or s == 200, s)
 s, lg = call('GET', f'/api/zk/docs/{did}/log', None, A)
-s, r = call('POST', f'/api/zk/docs/{did}/rotate', {'title_enc': b64(b'T3'), 'checkpoint': b64(b'new-key-snapshot'), 'grants': {ea: b64(b'new-sealed')}, 'last_id': lg['upto'] + len(lg['updates']) and max([u['id'] for u in lg['updates']] + [lg['upto']])}, A)
+s, r = call('POST', f'/api/zk/docs/{did}/rotate', {'title_enc': b64(b'T3'), 'checkpoint': b64(b'new-key-snapshot'), 'grants': {ea: b64(b'new-sealed')}, 'last_id': lg['upto'] + len(lg['updates']) and max([u['id'] for u in lg['updates']] + [lg['upto']]), 'images': [], 'comments': {}}, A)
 ok('rotate', s == 200, s, r)
+ok('a rotation drops pictures not named as moved to the new key', urllib.request.urlopen(urllib.request.Request(B + img1)) is None if False else call('GET', img1)[0] == 404)
 s, g = call('GET', f'/api/docs/{did}', None, A)
 ok('the new sealed key replaced the old', g['zk_sealed'] == b64(b'new-sealed') and g['zk_title'] == b64(b'T3'))
 ok('rotation must name exactly the people with access', call('POST', f'/api/zk/docs/{did}/rotate', {'title_enc': 'x', 'checkpoint': 'x', 'grants': {ea: 'x', eb: 'y'}, 'last_id': 99}, A)[0] == 422)

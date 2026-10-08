@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { toast } from '../ui/Toast'
 import { Recorder } from './recorder'
+import { docKeyOf } from '../zk/session'
+import { ensureConsent, hasConsent } from '../zk/consent'
 
 const MAX_SECONDS = 120
 const MIN_SECONDS = 0.4
@@ -36,6 +38,7 @@ export function useComposerMic(docId: string, onText: (text: string) => void) {
 
   const start = useCallback(async () => {
     if (phaseRef.current !== 'idle') return
+    if (docKeyOf(docId) && !hasConsent('voice')) { void ensureConsent('voice'); return }   // an encrypted document: asked once per session
     setP('listening')
     const r = new Recorder(); rec.current = r
     try {
@@ -47,7 +50,7 @@ export function useComposerMic(docId: string, onText: (text: string) => void) {
       const name = (e as DOMException).name
       toast(name === 'NotAllowedError' ? 'Microphone access is blocked. Allow it in your browser’s site settings.' : name === 'NotFoundError' ? 'No microphone found.' : 'Could not start the microphone.')
     }
-  }, [stop])
+  }, [stop, docId])
 
   useEffect(() => () => { window.clearTimeout(timer.current); rec.current?.cancel() }, [])
   const toggle = useCallback(() => { if (phaseRef.current === 'listening') void stop(true); else void start() }, [start, stop])

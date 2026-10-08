@@ -427,7 +427,6 @@ async def upload_image(doc_id: str, file: UploadFile = File(...), c=Depends(ctx)
     if not ext:
         raise HTTPException(415, "Only PNG, JPEG, GIF and WebP images are supported")
     doc, _acc = access.require(db, doc_id, *c, minimum="editor")
-    access.zk_unsupported(doc, "Pictures")
     name = store_image(db, doc, doc_id, data, ext, "The document's owner" if _acc.role != "owner" else "Your account")
     return {"url": f"/api/images/{name}"}
 
@@ -456,16 +455,9 @@ async def assert_public(url: str) -> None:
             raise HTTPException(422, "That address isn't on the public internet")
 
 
-@router.post("/docs/{doc_id}/images/import")
-async def import_image(doc_id: str, body: ImportImage, request: Request, c=Depends(ctx), db=Depends(get_db)):
-    """Pasting from Google Docs, a web page or Word brings pictures as links to someone else's server. Fetch the picture and keep a copy
-    with the document, so it still shows when the original link expires or needs a login."""
-    doc, acc = access.require(db, doc_id, *c, minimum="editor")
-    access.zk_unsupported(doc, "Pictures")
-    who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
-    if not import_limiter.allow(f"imgimport:{who}"):
-        raise HTTPException(429, "Too many pictures at once. Try again in a minute.")
-    url, data = body.url.strip(), b""
+async def fetch_public_image(url: str) -> bytes:
+    """Download a picture from the public internet (redirects followed by hand so every hop is checked; size capped)."""
+    url, data = url.strip(), b""
     async with httpx.AsyncClient(follow_redirects=False, timeout=httpx.Timeout(12.0, connect=6.0), headers={"User-Agent": "Mozilla/5.0 (compatible; KokoDocs image import)", "Accept": "image/*"}) as client:
         for _hop in range(4):   # follow redirects by hand so every hop is checked
             await assert_public(url)
@@ -484,6 +476,18 @@ async def import_image(doc_id: str, body: ImportImage, request: Request, c=Depen
             break
         else:
             raise HTTPException(422, "Too many redirects")
+    return data
+
+
+@router.post("/docs/{doc_id}/images/import")
+async def import_image(doc_id: str, body: ImportImage, request: Request, c=Depends(ctx), db=Depends(get_db)):
+    """Pasting from Google Docs, a web page or Word brings pictures as links to someone else's server. Fetch the picture and keep a copy
+    with the document, so it still shows when the original link expires or needs a login."""
+    doc, acc = access.require(db, doc_id, *c, minimum="editor")
+    who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
+    if not import_limiter.allow(f"imgimport:{who}"):
+        raise HTTPException(429, "Too many pictures at once. Try again in a minute.")
+    data = await fetch_public_image(body.url)
     ext = sniff(data)
     if not ext:
         raise HTTPException(415, "That link isn't a PNG, JPEG, GIF or WebP picture")
@@ -537,7 +541,6 @@ def stt_status(db=Depends(get_db)):
 async def transcribe_draft(doc_id: str, request: Request, file: UploadFile = File(...), language: str | None = None, c=Depends(ctx), db=Depends(get_db)):
     """A rough live preview of a recording still in progress, from the small local model. The real text comes from /transcribe."""
     doc, acc = access.require(db, doc_id, *c, minimum="editor")
-    access.zk_unsupported(doc, "Voice typing")
     who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
     if not draft_limiter.allow(f"draft:{who}"):
         raise HTTPException(429, "Too many previews")
@@ -554,7 +557,6 @@ async def transcribe_draft(doc_id: str, request: Request, file: UploadFile = Fil
 async def transcribe(doc_id: str, request: Request, file: UploadFile = File(...), language: str | None = None, c=Depends(ctx), db=Depends(get_db)):
     """Turn a short recording into text. Requires edit access to the document (so strangers can't spend your API credits)."""
     doc, acc = access.require(db, doc_id, *c, minimum="editor")
-    access.zk_unsupported(doc, "Voice typing")
     who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
     if not stt_limiter.allow(f"stt:{who}"):
         raise HTTPException(429, "Slow down: too many voice requests. Try again in a minute.")

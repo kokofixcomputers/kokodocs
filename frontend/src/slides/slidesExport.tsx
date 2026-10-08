@@ -1,3 +1,4 @@
+import { imageBlob } from '../zk/images'
 import { FileCode2, FileText, Presentation as PresentationIcon, Printer } from 'lucide-react'
 import { fontCssUrl } from '../fonts'
 import { Menu, type Item } from '../export/ExportMenu'
@@ -16,7 +17,8 @@ const bgOf = (s: Slide, t: Theme) => /#[0-9a-fA-F]{6}/.exec(s.bg ?? '')?.[0] ?? 
 
 async function dataUrl(src: string): Promise<string | null> {
   try {
-    const b = await (await fetch(new URL(src, location.href).href)).blob()
+    const b = await imageBlob(new URL(src, location.href).href)
+    if (!b) return null
     return await new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => res(null); r.readAsDataURL(b) })
   } catch { return null }
 }

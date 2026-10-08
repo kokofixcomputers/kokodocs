@@ -1,4 +1,6 @@
 import { toast } from './ui/Toast'
+import { importZkImage, uploadZkImage } from './zk/images'
+import { openConversation, openConversationTitle, sealConversation } from './zk/conversations'
 import { decorate, decorateAll, decryptComment, docKeyOf, encryptComment, encryptTitle, newDocKey, sealDocKeyForMe, setDocKey, zkNewEncrypted, zkUnlocked, type ZkFields } from './zk/session'
 import type { Answers, FormItem, PublicForm } from './forms/model'
 export interface User { id: string; email: string; name: string; color: string; is_admin?: boolean; has_password?: boolean; notify_email?: boolean; totp?: boolean; google?: string | null; zk?: boolean; zk_pub?: string | null }
@@ -67,9 +69,6 @@ export interface FormFileRef { id: string; name: string; size: number }
 export interface FormResponse { id: string; created_at: number; name: string | null; email: string | null; answers: Record<string, string | string[] | FormFileRef> }
 export interface AiConversationInfo { id: string; title: string; created_at: number; updated_at: number }
 
-/** Pictures are stored on the server as they are, so they can't go into an encrypted document. */
-function noPictures(id: string) { if (docKeyOf(id)) throw new Error('Pictures can\'t be added to encrypted documents yet: they are stored on the server as they are.') }
-
 export class ApiError extends Error {
   constructor(public status: number, public code: string | null, message: string, public detail?: any) { super(message) }
 }
@@ -96,6 +95,14 @@ export async function request<T>(path: string, init: RequestInit = {}, docId?: s
     throw new ApiError(res.status, typeof detail === 'object' ? detail?.code ?? null : null, msg, detail)
   }
   return res.json()
+}
+
+/** Like fetch, with the sign-in (and document password) headers; for the few places that need the raw response. */
+export async function rawFetch(path: string, init: RequestInit = {}, docId?: string): Promise<Response> {
+  const headers = new Headers(init.headers)
+  const t = getToken(); if (t) headers.set('Authorization', `Bearer ${t}`)
+  const dt = docId && getDocToken(docId); if (dt) headers.set('X-Doc-Token', dt)
+  return fetch(path, { ...init, headers })
 }
 
 async function requestBlob(path: string, docId: string): Promise<Uint8Array> {
@@ -182,9 +189,13 @@ export const api = {
     request<Sharing>(`/api/docs/${id}/sharing`, { method: 'PUT', ...json(b) }, id),
   unlock: (id: string, password: string) =>
     request<{ token: string }>(`/api/docs/${id}/unlock`, { method: 'POST', ...json({ password }) }, id),
-  importImage: async (id: string, url: string) => { noPictures(id); return (await request<{ url: string }>(`/api/docs/${id}/images/import`, { method: 'POST', ...json({ url }) }, id)).url },
+  importImage: async (id: string, url: string) => {
+    const key = docKeyOf(id)
+    return key ? importZkImage(id, key, url) : (await request<{ url: string }>(`/api/docs/${id}/images/import`, { method: 'POST', ...json({ url }) }, id)).url
+  },
   uploadImage: async (id: string, file: File) => {
-    noPictures(id)
+    const key = docKeyOf(id)
+    if (key) return uploadZkImage(id, key, file)   // encrypted here first: the server only ever holds ciphertext
     const fd = new FormData()
     fd.append('file', file)
     return (await request<{ url: string }>(`/api/docs/${id}/images`, { method: 'POST', body: fd }, id)).url
@@ -206,10 +217,18 @@ export const api = {
   deleteAiModel: (id: string) => request<AiSettings>(`/api/ai/connections/${id}`, { method: 'DELETE' }),
   pickAiModel: (id: string) => request<AiSettings>('/api/ai/selection', { method: 'PUT', ...json({ id }) }),
   aiModels: (id?: string) => request<{ models: string[] }>(`/api/ai/models${id ? `?id=${encodeURIComponent(id)}` : ''}`),
-  aiConversations: (docId: string) => request<AiConversationInfo[]>(`/api/docs/${docId}/ai/conversations`, {}, docId),
-  aiConversation: (docId: string, cid: string) => request<AiConversationInfo & { data: unknown[] }>(`/api/docs/${docId}/ai/conversations/${cid}`, {}, docId),
-  saveAiConversation: (docId: string, cid: string, title: string, data: unknown[]) =>
-    request(`/api/docs/${docId}/ai/conversations/${cid}`, { method: 'PUT', ...json({ title, data }) }, docId),
+  aiConversations: async (docId: string) => {
+    const list = await request<AiConversationInfo[]>(`/api/docs/${docId}/ai/conversations`, {}, docId)
+    return docKeyOf(docId) ? Promise.all(list.map(async (c) => ({ ...c, title: await openConversationTitle(docId, c.id, c.title) }))) : list
+  },
+  aiConversation: async (docId: string, cid: string) => {
+    const c = await request<AiConversationInfo & { data: unknown[] }>(`/api/docs/${docId}/ai/conversations/${cid}`, {}, docId)
+    if (!docKeyOf(docId)) return c
+    return { ...c, title: await openConversationTitle(docId, cid, c.title), data: await openConversation(docId, cid, c.data) }
+  },
+  /** In an encrypted document the conversation is kept encrypted with a key only this person has, so the server stores nothing it can read. */
+  saveAiConversation: async (docId: string, cid: string, title: string, data: unknown[]) =>
+    request(`/api/docs/${docId}/ai/conversations/${cid}`, { method: 'PUT', ...json(docKeyOf(docId) ? await sealConversation(docId, cid, title, data) : { title, data }) }, docId),
   deleteAiConversation: (docId: string, cid: string) => request(`/api/docs/${docId}/ai/conversations/${cid}`, { method: 'DELETE' }, docId),
   getForm: (id: string) => request<PublicForm & { role: Role; submitted: boolean }>(`/api/forms/${id}`, {}, id),
   submitForm: (id: string, answers: Answers) => request<{ ok: boolean }>(`/api/forms/${id}/responses`, { method: 'POST', ...json({ answers }) }, id),

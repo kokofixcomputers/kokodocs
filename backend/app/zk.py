@@ -15,6 +15,7 @@ What the server still knows: who has an account, which documents exist, their ki
 with. It cannot read titles, content, comments or keys. See README ("Zero-knowledge encryption").
 """
 import base64
+import hashlib
 import json
 import re
 import time
@@ -22,13 +23,14 @@ import uuid
 from typing import Literal
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from . import access
 from .collab import evict_room, flush, rooms
-from .db import get_db
-from .routes import COLORS, EMAIL_RE, ctx, must_user, public_user
+from .db import UPLOAD_DIR, get_db
+from .routes import COLORS, EMAIL_RE, ctx, fetch_public_image, import_limiter, must_user, public_user, sniff
 from .security import SECRET, RateLimiter, check_password, hash_password, make_token
 
 router = APIRouter(prefix="/api")
@@ -325,7 +327,17 @@ async def plain_state(doc_id: str, c=Depends(ctx), user=Depends(must_zk), db=Dep
             "has_images": bool(db.execute("SELECT 1 FROM upload_refs WHERE doc_id = ? LIMIT 1", (doc_id,)).fetchone())}
 
 
+def move_comments(db, doc_id: str, comments: dict[str, dict[str, str]]) -> None:
+    """The browser re-encrypted (or decrypted) every comment; they must be exactly the ones there are, so none is left in the old form."""
+    have = {r["id"] for r in db.execute("SELECT id FROM comments WHERE doc_id = ?", (doc_id,))}
+    if set(comments) != have:
+        raise HTTPException(409, {"code": "changed", "message": "A comment was added while the document was being converted. Try again."})
+    for cid, c in comments.items():
+        db.execute("UPDATE comments SET body = ?, quote = ? WHERE id = ? AND doc_id = ?", (str(c.get("body", ""))[:12000], str(c.get("quote", ""))[:1600], cid, doc_id))
+
+
 class EncryptIn(BaseModel):
+    comments: dict[str, dict[str, str]] = Field(default_factory=dict)   # {id: {body, quote}} encrypted under the document's key
     title_enc: str = B64
     sealed: str = B64
     checkpoint: str = Field(max_length=MAX_BLOB_B64)   # the whole document, encrypted
@@ -345,15 +357,17 @@ async def encrypt_doc(doc_id: str, b: EncryptIn, c=Depends(ctx), user=Depends(mu
     doc = db.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
     if abs(doc["updated_at"] - b.expect_updated_at) > 1e-6:
         raise HTTPException(409, {"code": "changed", "message": "Someone changed the document while it was being encrypted. Try again."})
+    db.execute("PRAGMA secure_delete = ON")   # what is removed or replaced below is overwritten, not just unlinked, so the plain text doesn't linger in the file
+    move_comments(db, doc_id, b.comments)
     now = time.time()
-    db.execute("PRAGMA secure_delete = ON")   # what is removed below is overwritten, not just unlinked, so the plain text doesn't linger in the file
     db.execute("DELETE FROM shares WHERE doc_id = ?", (doc_id,))   # people it was shared with have no key yet: share it again once it is encrypted
     db.execute("UPDATE documents SET zk = 1, zk_title = ?, title = 'Encrypted document', ydoc = NULL, updated_at = ? WHERE id = ?", (b.title_enc, now, doc_id))
     db.execute("DELETE FROM zk_updates WHERE doc_id = ?", (doc_id,))
     db.execute("INSERT OR REPLACE INTO zk_checkpoints (doc_id, upto, blob, created_at) VALUES (?,?,?,?)", (doc_id, 0, unb64(b.checkpoint), now))
     db.execute("DELETE FROM zk_grants WHERE doc_id = ?", (doc_id,))
     db.execute("INSERT INTO zk_grants (doc_id, email, sealed, by_email, created_at) VALUES (?,?,?,?,?)", (doc_id, user["email"], b.sealed, user["email"], now))
-    for t in ("doc_fts", "versions", "ai_conversations", "comments"):   # everything the server had derived from the plain text goes
+    drop_plain_images(db, doc_id)   # the browser re-stored the pictures encrypted
+    for t in ("doc_fts", "versions", "ai_conversations"):   # everything the server had derived from the plain text goes
         try:
             db.execute(f"DELETE FROM {t} WHERE doc_id = ?", (doc_id,))
         except Exception:
@@ -379,6 +393,7 @@ def get_log(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
 
 
 class DecryptIn(BaseModel):
+    comments: dict[str, dict[str, str]] = Field(default_factory=dict)   # {id: {body, quote}} in plain text
     ydoc: str = Field(max_length=MAX_BLOB_B64)    # the plain document state
     title: str = Field(max_length=200)
     last_id: int       # the newest update this state includes (a newer one means someone edited meanwhile)
@@ -392,15 +407,17 @@ async def decrypt_doc(doc_id: str, b: DecryptIn, c=Depends(ctx), user=Depends(mu
     if newest_id(db, doc_id) > b.last_id:
         raise HTTPException(409, {"code": "changed", "message": "Someone edited the document while it was being decrypted. Try again."})
     state = unb64(b.ydoc)
+    move_comments(db, doc_id, b.comments)
     now = time.time()
     db.execute("UPDATE documents SET zk = 0, zk_title = NULL, title = ?, ydoc = ?, updated_at = ? WHERE id = ?", (b.title.strip() or "Untitled document", state, now, doc_id))
     db.execute("DELETE FROM zk_updates WHERE doc_id = ?", (doc_id,))
     db.execute("DELETE FROM zk_checkpoints WHERE doc_id = ?", (doc_id,))
     db.execute("DELETE FROM zk_grants WHERE doc_id = ?", (doc_id,))
-    try:   # comments were encrypted by the browser: they can't be read any more
-        db.execute("DELETE FROM comments WHERE doc_id = ?", (doc_id,))
+    try:   # Koko conversations were encrypted with each person's own key: they can't be read any more
+        db.execute("DELETE FROM ai_conversations WHERE doc_id = ?", (doc_id,))
     except Exception:
         pass
+    drop_zk_images(db, doc_id, set())   # the browser re-stored the pictures unencrypted
     db.commit()
     try:
         from . import searchindex
@@ -474,6 +491,8 @@ class RotateIn(BaseModel):
     checkpoint: str = Field(max_length=MAX_BLOB_B64)     # the whole document, encrypted under the new key
     grants: dict[str, str]                                   # email -> the new key sealed to them (everyone who keeps access, the owner included)
     last_id: int                                              # the newest update the new snapshot includes
+    images: list[str] = Field(default_factory=list, max_length=500)   # the pictures stored again under the new key (names); the old ones go
+    comments: dict[str, dict[str, str]] = Field(default_factory=dict)   # every comment, re-encrypted under the new key: {id: {body, quote}}
 
 
 @router.post("/zk/docs/{doc_id}/rotate")
@@ -489,12 +508,107 @@ async def rotate(doc_id: str, b: RotateIn, c=Depends(ctx), user=Depends(must_zk)
     allowed = {r["email"] for r in db.execute("SELECT email FROM zk_grants WHERE doc_id = ?", (doc_id,))}
     if set(b.grants) != allowed:
         raise HTTPException(422, "The new keys must cover exactly the people who have access")
+    have = {r["id"] for r in db.execute("SELECT id FROM comments WHERE doc_id = ?", (doc_id,))}
+    if set(b.comments) != have:
+        raise HTTPException(409, {"code": "changed", "message": "A comment was added while the key was changing. Try again."})
     now = time.time()
     db.execute("UPDATE documents SET zk_title = ?, updated_at = ? WHERE id = ?", (b.title_enc, now, doc_id))
+    for cid, c in b.comments.items():
+        db.execute("UPDATE comments SET body = ?, quote = ? WHERE id = ? AND doc_id = ?", (str(c.get("body", ""))[:12000], str(c.get("quote", ""))[:1600], cid, doc_id))
     db.execute("DELETE FROM zk_updates WHERE doc_id = ?", (doc_id,))
     db.execute("INSERT OR REPLACE INTO zk_checkpoints (doc_id, upto, blob, created_at) VALUES (?,?,?,?)", (doc_id, newest, unb64(b.checkpoint), now))
     for e, sealed in b.grants.items():
         db.execute("UPDATE zk_grants SET sealed = ?, by_email = ?, created_at = ? WHERE doc_id = ? AND email = ?", (sealed, acc.user["email"], now, doc_id, e))
+    drop_zk_images(db, doc_id, {f"{n}.zkimg" for n in b.images if ZK_IMG.match(n)})
     db.commit()
     await evict_room(doc_id)
     return {"ok": True}
+
+
+# ───────────────────────── pictures ─────────────────────────
+# A picture in an encrypted document is encrypted in the browser, so what is stored here is ciphertext under a random name.
+# The name is in the document (as /api/zk/img/<name>); the browser downloads the bytes, opens them with the document's key and shows the result.
+MAX_ZK_IMAGE = 12 * 1024 * 1024 + 4096    # the picture limit, plus the few bytes encryption adds
+ZK_IMG = re.compile(r"^[0-9a-f]{32}$")
+
+
+def shred(name: str) -> None:
+    """Remove a stored picture: overwritten first, so its bytes don't linger on the disk."""
+    path = UPLOAD_DIR / name
+    try:
+        if path.is_file():
+            n = path.stat().st_size
+            with open(path, "r+b") as f:
+                f.write(b"\0" * n)
+                f.flush()
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def drop_plain_images(db, doc_id: str) -> None:
+    """After a document is encrypted (its pictures were re-stored encrypted): the unencrypted copies go, unless another file still uses one."""
+    names = [r["name"] for r in db.execute("SELECT name FROM upload_refs WHERE doc_id = ?", (doc_id,)) if not r["name"].endswith(".zkimg")]
+    for n in names:
+        db.execute("DELETE FROM upload_refs WHERE name = ? AND doc_id = ?", (n, doc_id))
+        if db.execute("SELECT 1 FROM upload_refs WHERE name = ?", (n,)).fetchone():
+            db.execute("UPDATE uploads SET doc_id = (SELECT doc_id FROM upload_refs WHERE name = ? LIMIT 1) WHERE name = ?", (n, n))
+            continue
+        shred(n)
+        db.execute("DELETE FROM uploads WHERE name = ?", (n,))
+        for a in db.execute("SELECT name FROM image_aliases WHERE target = ?", (n,)).fetchall():
+            db.execute("DELETE FROM image_aliases WHERE name = ?", (a["name"],))
+
+
+def drop_zk_images(db, doc_id: str, keep: set[str]) -> None:
+    for r in db.execute("SELECT name FROM uploads WHERE doc_id = ? AND name LIKE '%.zkimg'", (doc_id,)).fetchall():
+        if r["name"] not in keep:
+            shred(r["name"])
+            db.execute("DELETE FROM uploads WHERE name = ?", (r["name"],))
+            db.execute("DELETE FROM upload_refs WHERE name = ?", (r["name"],))
+
+
+@router.post("/zk/docs/{doc_id}/images")
+async def upload_image(doc_id: str, file: UploadFile = File(...), c=Depends(ctx), db=Depends(get_db)):
+    """Store an already-encrypted picture. Allowed while a document is being converted too, hence no check that it is encrypted yet."""
+    from . import quota
+    doc, acc = access.require(db, doc_id, *c, minimum="editor")
+    data = await file.read(MAX_ZK_IMAGE + 1)
+    if len(data) > MAX_ZK_IMAGE:
+        raise HTTPException(413, "Image is larger than 12 MB")
+    if len(data) < 60:
+        raise HTTPException(422, "That isn't an encrypted picture")
+    quota.check(db, doc["owner_id"], len(data), "The document's owner" if acc.role != "owner" else "Your account")
+    name = uuid.uuid4().hex
+    (UPLOAD_DIR / f"{name}.zkimg").write_bytes(data)
+    db.execute("INSERT INTO uploads (name, doc_id, owner_id, size, created_at, hash) VALUES (?,?,?,?,?,?)", (f"{name}.zkimg", doc_id, doc["owner_id"], len(data), time.time(), hashlib.sha256(data).hexdigest()))
+    db.execute("INSERT OR IGNORE INTO upload_refs (name, doc_id) VALUES (?,?)", (f"{name}.zkimg", doc_id))
+    db.commit()
+    return {"url": f"/api/zk/img/{name}"}
+
+
+@router.get("/zk/img/{name}")
+def get_image(name: str):
+    """The encrypted bytes. Random name, useless without the document's key."""
+    path = UPLOAD_DIR / f"{name}.zkimg"
+    if not ZK_IMG.match(name) or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path, media_type="application/octet-stream", headers={"Cache-Control": "private, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})
+
+
+class FetchImage(BaseModel):
+    url: str = Field(max_length=2000)
+
+
+@router.post("/zk/docs/{doc_id}/images/fetch")
+async def fetch_image(doc_id: str, b: FetchImage, request: Request, c=Depends(ctx), db=Depends(get_db)):
+    """A picture pasted from the web: the server fetches it (a public picture, so nothing private is involved) and hands the bytes back,
+    for the browser to encrypt and store. Nothing is kept here."""
+    _, acc = access.require(db, doc_id, *c, minimum="editor")
+    who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
+    if not import_limiter.allow(f"imgimport:{who}"):
+        raise HTTPException(429, "Too many pictures at once. Try again in a minute.")
+    data = await fetch_public_image(b.url)
+    if not sniff(data):
+        raise HTTPException(415, "That link isn't a PNG, JPEG, GIF or WebP picture")
+    return Response(data, media_type="application/octet-stream")

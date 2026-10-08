@@ -10,6 +10,7 @@ import type { BoardDeps } from './boardTools'
 import AssistantPanel from './AssistantPanel'
 import { Lock, X } from 'lucide-react'
 import { docKeyOf } from '../zk/session'
+import { grantConsent, hasConsent, WHY } from '../zk/consent'
 
 export type HostSource = { kind: 'doc'; deps: DocDeps } | { kind: 'sheet'; deps: SheetDeps } | { kind: 'slides'; deps: SlideDeps } | { kind: 'wiki'; deps: WikiDeps } | { kind: 'form'; deps: FormDeps } | { kind: 'board'; deps: BoardDeps }
 
@@ -18,10 +19,11 @@ export default function AssistantHost({ source, docId, user, onClose, initialPro
   const [settings, setSettings] = useState<AiSettings | null>(null)
   const [adapter, setAdapter] = useState<Adapter | null>(null)
   const encrypted = !!docKeyOf(docId)
+  const [agreed, setAgreed] = useState(hasConsent('koko'))
   const src = useRef(source); src.current = source
   const kind = source.kind
 
-  useEffect(() => { if (encrypted) return; api.aiSettings().then(setSettings).catch(() => setSettings({ configured: false, models: [], selected: null })) }, [])
+  useEffect(() => { api.aiSettings().then(setSettings).catch(() => setSettings({ configured: false, models: [], selected: null })) }, [])
   useEffect(() => {
     let alive = true
     if (kind === 'doc') import('./docTools').then((m) => { if (alive) setAdapter(m.createDocAdapter(live('doc'))) })
@@ -43,11 +45,11 @@ export default function AssistantHost({ source, docId, user, onClose, initialPro
   function live(_k: 'board'): BoardDeps
   function live(_k: 'doc' | 'sheet' | 'slides' | 'wiki' | 'form' | 'board'): any { return new Proxy({}, { get: (_t, p) => (src.current.deps as any)[p] }) }
   const ready = useMemo(() => !!adapter && !!settings, [adapter, settings])
-  if (encrypted) return (   // Koko works by sending the document to an AI service through the server: the one thing an encrypted document never does
+  if (encrypted && !agreed) return (   // Koko works by sending the document's text through the server to an AI service: that needs a yes first
     <div className="side-body" style={{ padding: 20, display: 'grid', gap: 12, alignContent: 'start' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><b><Lock size={16} style={{ verticalAlign: -3 }} /> Koko isn't available here</b><button className="icon-btn" aria-label="Close" onClick={onClose}><X size={18} /></button></div>
-      <p className="muted" style={{ margin: 0 }}>This document is encrypted. To help, Koko would have to be sent its text through the server, and then on to an AI service, which would break the promise that nobody but you can read it.</p>
-      <p className="muted" style={{ margin: 0 }}>Koko works in documents that aren't encrypted.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><b><Lock size={16} style={{ verticalAlign: -3 }} /> Koko and encryption</b><button className="icon-btn" aria-label="Close" onClick={onClose}><X size={18} /></button></div>
+      <p className="muted" style={{ margin: 0 }}>{WHY.koko.text}</p>
+      <button className="btn btn-pill btn-primary" onClick={() => { grantConsent('koko'); setAgreed(true) }}>{WHY.koko.label}</button>
     </div>)
   if (!ready) return <div className="side-body"><div className="spinner" style={{ margin: '40px auto' }} /></div>
   return <AssistantPanel adapter={adapter!} docId={docId} user={user} settings={settings} onSettings={setSettings} onClose={onClose} initialPrompt={initialPrompt} />

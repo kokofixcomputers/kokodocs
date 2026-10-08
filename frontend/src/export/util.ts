@@ -1,3 +1,4 @@
+import { imageBlob } from '../zk/images'
 export function safeName(title: string, fallback = 'Untitled') {
   const t = (title || fallback).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)
   return t || fallback
@@ -37,9 +38,8 @@ export interface ImageData { data: Uint8Array; type: 'png' | 'jpg' | 'gif'; widt
 /** Fetch an image and normalise it to PNG/JPEG bytes with its real size (browser only). */
 export async function loadImageData(src: string): Promise<ImageData | null> {
   try {
-    const res = await fetch(src)
-    if (!res.ok) return null
-    const blob = await res.blob()
+    const blob = await imageBlob(src)
+    if (!blob) return null
     const bmp = await createImageBitmap(blob)
     if (blob.type === 'image/jpeg') return { data: new Uint8Array(await blob.arrayBuffer()), type: 'jpg', width: bmp.width, height: bmp.height }
     const canvas = document.createElement('canvas')
@@ -53,9 +53,8 @@ export async function loadImageData(src: string): Promise<ImageData | null> {
 
 export async function toDataUrl(src: string): Promise<string | null> {
   try {
-    const res = await fetch(src)
-    if (!res.ok) return null
-    const blob = await res.blob()
+    const blob = await imageBlob(src)
+    if (!blob) return null
     return await new Promise<string>((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.onerror = reject; r.readAsDataURL(blob) })
   } catch { return null }
 }

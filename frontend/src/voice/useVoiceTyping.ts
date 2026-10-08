@@ -3,6 +3,7 @@ import type { Editor } from '@tiptap/react'
 import { api } from '../api'
 import { toast } from '../ui/Toast'
 import { docKeyOf } from '../zk/session'
+import { ensureConsent, hasConsent } from '../zk/consent'
 import { Recorder } from './recorder'
 
 export interface Shortcut { code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
@@ -52,8 +53,8 @@ function stillHeld(e: KeyboardEvent, s: Shortcut) {
 
 /** `fieldsOnly`: for pages with no text editor (boards): dictation starts only while the cursor is in a text box, and goes into it. */
 export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = false }: { editor: Editor | null; docId: string; enabled: boolean; fieldsOnly?: boolean }) {
-  const encrypted = !!docKeyOf(docId)   // the recording would have to go to the server to be turned into text
-  const enabled = wanted && !encrypted
+  const encrypted = !!docKeyOf(docId)   // the recording goes to the server to be turned into text: needs a yes first, once per session
+  const enabled = wanted
   const [phase, setPhase] = useState<Phase>('idle')
   const [shortcut, setShortcutState] = useState<Shortcut>(loadShortcut)
   const [available, setAvailable] = useState<boolean | null>(null)
@@ -90,7 +91,7 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
     return () => { stopped = true; ac.abort(); window.clearInterval(id) }
   }, [phase, canDraft, docId])
 
-  useEffect(() => { api.sttStatus().then((s) => { setAvailable(s.available && !encrypted); setServerDraft(!!s.draft && !encrypted) }).catch(() => setAvailable(false)) }, [encrypted])
+  useEffect(() => { api.sttStatus().then((s) => { setAvailable(s.available); setServerDraft(!!s.draft) }).catch(() => setAvailable(false)) }, [])
 
   const target = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
   /** Type into a plain text field (like the assistant's message box) when that is where the user was focused. */
@@ -135,6 +136,7 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
   const start = useCallback(async (fromKey: boolean) => {
     if (!enabled || phaseRef.current !== 'idle') return
     if (available === false) { toast("Voice typing isn't set up on this server yet. An admin needs to add a speech provider (see the README)."); return }
+    if (encrypted && !hasConsent('voice')) { void ensureConsent('voice'); return }   // asked once; try again after saying yes
     viaKey.current = fromKey
     const ae = document.activeElement
     target.current = (ae instanceof HTMLTextAreaElement || (ae instanceof HTMLInputElement && /^(text|search|url|)$/.test(ae.type))) && !ae.closest('.ProseMirror') && !ae.readOnly ? ae : null
@@ -151,7 +153,7 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
       const name = (e as DOMException).name
       toast(name === 'NotAllowedError' ? 'Microphone access is blocked. Allow it in your browser’s site settings.' : name === 'NotFoundError' ? 'No microphone found.' : 'Could not start the microphone.')
     }
-  }, [enabled, available, stop, fieldsOnly])
+  }, [enabled, available, stop, fieldsOnly, encrypted])
 
   // push-to-talk: hold the shortcut, speak, release
   useEffect(() => {
