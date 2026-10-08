@@ -18,7 +18,26 @@ export function KeyboardFit() {
     }
     set()
     vv.addEventListener('resize', set); vv.addEventListener('scroll', set)
-    return () => { vv.removeEventListener('resize', set); vv.removeEventListener('scroll', set); root.classList.remove('kb-open'); root.style.removeProperty('--kb') }
+
+    // iOS draws its Cut / Copy / Paste callout above the selection, and only below it when there is no room above. Keep a selected
+    // piece of text (or a caret just tapped) out of the lowest part of the visible page so the callout never lands on our bar.
+    let tapped = 0, timer: number | undefined
+    const touched = () => { tapped = Date.now() }
+    const lift = () => {
+      if (!root.classList.contains('kb-open')) return
+      const sel = getSelection(); if (!sel || !sel.rangeCount) return
+      const node = sel.anchorNode, el = node && (node.nodeType === 1 ? (node as HTMLElement) : node.parentElement)
+      if (!el?.closest('.ProseMirror')) return
+      if (sel.isCollapsed && Date.now() - tapped > 600) return   // typing is left to the editor; only a tap or a selection is moved
+      const box = el.closest<HTMLElement>('.canvas, .wiki-body'); if (!box) return
+      const rect = sel.getRangeAt(0).getBoundingClientRect(); if (!rect.height && !rect.top) return
+      const b = box.getBoundingClientRect(), room = Math.min(b.bottom, vv.offsetTop + vv.height) - b.top
+      const limit = b.top + room * 0.5   // the selection should end in the upper half
+      if (rect.bottom > limit) box.scrollBy({ top: rect.bottom - limit, behavior: 'auto' })
+    }
+    const changed = () => { window.clearTimeout(timer); timer = window.setTimeout(lift, 120) }
+    document.addEventListener('touchend', touched, true); document.addEventListener('selectionchange', changed)
+    return () => { document.removeEventListener('touchend', touched, true); document.removeEventListener('selectionchange', changed); window.clearTimeout(timer); vv.removeEventListener('resize', set); vv.removeEventListener('scroll', set); root.classList.remove('kb-open'); root.style.removeProperty('--kb') }
   }, [])
   return null
 }
