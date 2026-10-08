@@ -7,6 +7,7 @@ By default the server refuses to call private / loopback addresses (SSRF protect
 local model servers such as Ollama or LM Studio.
 """
 import asyncio
+import re
 import ipaddress
 import json
 import os
@@ -18,7 +19,7 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import access
@@ -95,6 +96,8 @@ async def check_url(url: str) -> str:
     u = urlparse(url.strip())
     if u.scheme not in ("http", "https") or not u.hostname:
         raise HTTPException(422, "Enter a full URL such as https://api.mistral.ai/v1")
+    if u.hostname == "api.cloudflare.com" and not (CF_NATIVE.match(url.strip().rstrip("/")) or re.match(r"^https://api\.cloudflare\.com/client/v4/accounts/[0-9a-fA-F]{32}/ai/v1$", url.strip().rstrip("/"))):
+        raise HTTPException(422, "For Cloudflare Workers AI, enter your 32-character account id (it is on the Workers AI page of the Cloudflare dashboard)")
     if u.username or u.password:
         raise HTTPException(422, "Don't put credentials in the URL; use the API key field")
     if not allow_private():
@@ -206,9 +209,93 @@ def provider_error(r: httpx.Response, body: bytes = b"") -> str:
     return f"{names.get(r.status_code, f'The provider returned an error ({r.status_code})')}" + (f": {msg[:300]}" if msg else "")
 
 
+CF_NATIVE = re.compile(r"^(https://api\.cloudflare\.com/client/v4/accounts/[0-9a-fA-F]{32})/ai$")
+CF_MAX_TOKENS = 4096   # Workers AI answers in 256 tokens unless told otherwise, which cuts replies (and tool calls) off
+
+
+def _cf_tool_calls(raw) -> list[dict]:
+    """Tool calls as Workers AI returns them (OpenAI-shaped, or {name, arguments}) in the OpenAI shape the browser reads."""
+    out = []
+    for i, t in enumerate(raw or []):
+        if not isinstance(t, dict):
+            continue
+        fn = t.get("function") if isinstance(t.get("function"), dict) else t
+        name = fn.get("name")
+        if not name:
+            continue
+        args = fn.get("arguments", fn.get("parameters", {}))
+        out.append({"id": t.get("id") or f"call_{uuid.uuid4().hex[:12]}", "type": "function", "function": {"name": name, "arguments": args if isinstance(args, str) else json.dumps(args or {})}})
+    return out
+
+
+async def _cloudflare_run(account_url: str, s: dict, body) -> dict:
+    """One chat turn through the Workers AI REST API (.../ai/run/<model>, not AI Gateway). It isn't streamed: the whole answer comes back
+    as one JSON, which is passed on in the OpenAI shape the browser already understands."""
+    payload: dict = {"messages": body.messages, "max_tokens": CF_MAX_TOKENS}
+    if body.tools:
+        payload["tools"] = body.tools
+    if body.temperature is not None:
+        payload["temperature"] = body.temperature
+    raw = json.dumps(payload)
+    if len(raw) > MAX_BODY:
+        raise HTTPException(413, "That conversation is too large. Start a new one.")
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT), follow_redirects=False) as c:
+            r = await c.post(f"{account_url}/ai/run/{s['model']}", content=raw, headers=headers_for(s))
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Could not reach Cloudflare ({type(e).__name__})")
+    try:
+        j = r.json()
+    except ValueError:
+        j = {}
+    if r.status_code >= 400 or j.get("success") is False:
+        if r.status_code in (401, 403):
+            raise HTTPException(502, "Cloudflare rejected the token. It needs the Workers AI permission for this account.")
+        if r.status_code == 429:
+            raise HTTPException(429, "Cloudflare is rate limiting requests. Try again in a moment.")
+        why = "; ".join(str(e.get("message", "")) for e in (j.get("errors") or []) if isinstance(e, dict))[:300]
+        raise HTTPException(502, f"Cloudflare returned an error ({r.status_code}){': ' + why if why else ''}")
+    res = j.get("result", j)
+    if not isinstance(res, dict):
+        raise HTTPException(502, "Unexpected response from Cloudflare")
+    choice = (res.get("choices") or [{}])[0] if res.get("choices") else {}
+    msg = choice.get("message") or {}
+    content = msg.get("content") if "choices" in res else res.get("response")
+    calls = _cf_tool_calls(msg.get("tool_calls") if "choices" in res else res.get("tool_calls"))
+    if isinstance(content, (dict, list)):
+        content = json.dumps(content)
+    finish = choice.get("finish_reason") or ("tool_calls" if calls else "stop")
+    if not content and not calls:
+        if finish == "length":
+            raise HTTPException(502, "The model used all of its room before answering (reasoning models spend a lot of it on thinking). Try a model that doesn't reason, or ask for something smaller.")
+        raise HTTPException(502, "The model sent back an empty answer. Try again, or choose another model.")
+    return {"choices": [{"index": 0, "message": {"role": "assistant", "content": content or None, "tool_calls": calls}, "finish_reason": finish}]}
+
+
+async def _cloudflare_models(account_url: str, s: dict) -> list[str]:
+    """Text generation models on Cloudflare Workers AI (also tells a wrong account id or token apart from a working one)."""
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT), follow_redirects=False) as c:
+            r = await c.get(account_url + "/ai/models/search", params={"task": "Text Generation", "per_page": 100}, headers=headers_for(s))
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Could not reach Cloudflare ({type(e).__name__})")
+    if r.status_code in (401, 403):
+        raise HTTPException(502, "Cloudflare rejected the token. It needs the Workers AI permission for this account, and the account id in the address must be right.")
+    if r.status_code >= 400:
+        raise HTTPException(502, provider_error(r))
+    try:
+        return sorted({m["name"] for m in (r.json().get("result") or []) if isinstance(m, dict) and m.get("name")})
+    except Exception:
+        raise HTTPException(502, "Cloudflare's model list wasn't in the expected format")
+
+
 async def fetch_models(s: dict) -> list[str]:
     """Ask a provider which models it offers (also how the connection is tested)."""
-    url = await check_url(s["base_url"]) + "/models"
+    base = await check_url(s["base_url"])
+    cf = re.match(r"^(https://api\.cloudflare\.com/client/v4/accounts/[0-9a-fA-F]{32})/ai(/v1)?$", base)
+    if cf:   # Workers AI's OpenAI-compatible address has no /models; its own catalogue lists the text models instead
+        return await _cloudflare_models(cf.group(1), s)
+    url = base + "/models"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT), follow_redirects=False) as c:
             r = await c.get(url, headers=headers_for(s))
@@ -249,6 +336,9 @@ async def chat(body: ChatIn, user=Depends(must_user), db=Depends(get_db)):
         raise HTTPException(409, "Connect an AI provider in the assistant settings first")
     if not s.get("model"):
         raise HTTPException(409, "Choose a model in the assistant settings")
+    native = CF_NATIVE.match(s["base_url"].strip().rstrip("/"))
+    if native:   # Workers AI's own REST API: one JSON answer instead of a stream
+        return JSONResponse(await _cloudflare_run(native.group(1), s, body))
     payload: dict = {"model": s["model"], "messages": body.messages, "stream": True}
     if body.tools:
         payload["tools"] = body.tools

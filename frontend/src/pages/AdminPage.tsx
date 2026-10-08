@@ -10,7 +10,7 @@ import { fmtBytes } from '../ui/StorageMeter'
 import { Select } from '../ui/Select'
 import { KindIcon } from '../ui/KindIcon'
 import { Logo } from '../ui/Logo'
-import { PRESETS } from '../assistant/AiSettings'
+import { AddressField, PRESETS } from '../assistant/AiSettings'
 import { ProviderMark } from '../ui/ProviderMark'
 import { toast } from '../ui/Toast'
 
@@ -155,7 +155,7 @@ function EmailSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   )
 }
 
-const STT_NAMES: Record<string, string> = { groq: 'Groq', mistral: 'Mistral (Voxtral)', openai: 'OpenAI', 'openai-compatible': 'Other OpenAI-compatible server', local: 'Local (on this server)' }
+const STT_NAMES: Record<string, string> = { groq: 'Groq', mistral: 'Mistral (Voxtral)', openai: 'OpenAI', cloudflare: 'Cloudflare Workers AI', 'openai-compatible': 'Other OpenAI-compatible server', local: 'Local (on this server)' }
 const GROQ_LABEL: Record<string, string> = { 'whisper-large-v3-turbo': 'whisper-large-v3-turbo (fast, default)', 'whisper-large-v3': 'whisper-large-v3 (most accurate)' }
 
 /** Which speech-to-text service turns dictation into text, with its key and model. */
@@ -238,6 +238,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   const [key, setKey] = useState('')
   const [model, setModel] = useState('')
   const [url, setUrl] = useState(v.url)
+  const [cfAccount, setCfAccount] = useState(v.cf_account)
   const [lang, setLang] = useState(v.language)
   const [draftOn, setDraftOn] = useState(v.draft)
   const [draftModel, setDraftModel] = useState(v.draft_choice)
@@ -246,7 +247,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   // each provider remembers its own model, so switching back and forth keeps what was chosen
-  const savedModel = (p: SttProvider) => v.models[p] || (p === 'groq' ? 'whisper-large-v3-turbo' : p === 'local' ? 'base.en' : '')
+  const savedModel = (p: SttProvider) => v.models[p] || (p === 'groq' ? 'whisper-large-v3-turbo' : p === 'cloudflare' ? v.cf_models[0] : p === 'local' ? 'base.en' : '')
   const effModel = prov !== 'auto' && model !== '' ? model : prov !== 'auto' ? savedModel(prov) : ''
   const change = (p: 'auto' | SttProvider) => { setProv(p); setModel(''); setKey(''); setMsg(null) }
   const save = async () => {
@@ -257,6 +258,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
         body.stt_model = { [prov]: effModel }
         if (key.trim() && prov !== 'local') body.stt_key = { [prov]: key.trim() }
         if (prov === 'openai-compatible') body.stt_url = url.trim()
+        if (prov === 'cloudflare') body.stt_cf_account = cfAccount.trim()
       }
       apply(await api.adminSaveSettings(body)); setKey(''); toast('Voice typing saved')
     } catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
@@ -267,9 +269,9 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
     catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
   }
   const clearKey = async () => { if (prov === 'auto' || prov === 'local') return; setBusy(true); try { apply(await api.adminSaveSettings({ stt_clear_key: prov })); toast('Key removed') } catch (e) { toast((e as Error).message) } finally { setBusy(false) } }
-  const changed = draftOn !== v.draft || draftModel !== v.draft_choice || idleOn !== v.idle_unload || (idleOn && Number(idleMin) !== v.idle_minutes) || prov !== v.provider || !!key.trim() || lang.trim() !== v.language || (prov !== 'auto' && effModel !== savedModel(prov)) || (prov === 'openai-compatible' && url.trim() !== v.url)
+  const changed = draftOn !== v.draft || draftModel !== v.draft_choice || idleOn !== v.idle_unload || (idleOn && Number(idleMin) !== v.idle_minutes) || prov !== v.provider || !!key.trim() || lang.trim() !== v.language || (prov !== 'auto' && effModel !== savedModel(prov)) || (prov === 'openai-compatible' && url.trim() !== v.url) || (prov === 'cloudflare' && cfAccount.trim() !== v.cf_account)
   const hasKey = prov !== 'auto' && prov !== 'local' && v.key_set[prov]
-  const envKey = (prov === 'groq' || prov === 'mistral' || prov === 'openai') && v.env_key[prov]
+  const envKey = (prov === 'groq' || prov === 'mistral' || prov === 'openai' || prov === 'cloudflare') && v.env_key[prov]
   const active = v.active
   return (
     <>
@@ -279,17 +281,22 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
       </div>
       <div className="ps-row">
         <div className="ai-field" style={{ flex: 1, minWidth: 220 }}><span>Provider</span>
-          <Select label="Speech provider" value={prov} onChange={change} options={[{ value: 'auto', label: 'Automatic (server environment)' }, ...(['groq', 'mistral', 'openai', 'openai-compatible', 'local'] as SttProvider[]).map((p) => ({ value: p, label: STT_NAMES[p] }))]} /></div>
+          <Select label="Speech provider" value={prov} onChange={change} options={[{ value: 'auto', label: 'Automatic (server environment)' }, ...(['groq', 'mistral', 'openai', 'cloudflare', 'openai-compatible', 'local'] as SttProvider[]).map((p) => ({ value: p, label: STT_NAMES[p] }))]} /></div>
         {prov === 'groq' && <div className="ai-field" style={{ flex: 1, minWidth: 220 }}><span>Model</span>
           <Select label="Groq model" value={effModel} onChange={setModel} options={v.groq_models.map((m) => ({ value: m, label: GROQ_LABEL[m] ?? m }))} /></div>}
         {prov === 'local' && <div className="ai-field" style={{ flex: 1, minWidth: 220 }}><span>Model</span>
           <Select label="Local model" value={effModel} onChange={setModel} options={v.local_models.map((m) => ({ value: m, label: m }))} /></div>}
       </div>
+      {prov === 'cloudflare' && <>
+        <label className="ai-field"><span>Account id</span><span className="field"><input value={cfAccount} onChange={(e) => setCfAccount(e.target.value)} placeholder="32 letters and digits, from the Workers AI page" spellCheck={false} maxLength={64} /></span></label>
+        <div className="ai-field"><span>Model</span><span className="field"><ComboInput label="Cloudflare model" options={v.cf_models} value={effModel} onChange={setModel} placeholder="@cf/openai/whisper-large-v3-turbo" /></span></div>
+        <p className="muted hint" style={{ margin: 0 }}>Uses the Workers AI REST API directly (not AI Gateway). The token needs the “Workers AI” permission for this account.</p>
+      </>}
       {prov === 'openai-compatible' && <label className="ai-field"><span>Server address</span><span className="field"><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://host/v1" spellCheck={false} /></span></label>}
       {(prov === 'mistral' || prov === 'openai' || prov === 'openai-compatible') && <label className="ai-field"><span>Model (leave empty for the default)</span><span className="field"><input value={effModel} onChange={(e) => setModel(e.target.value)} placeholder={prov === 'mistral' ? 'voxtral-mini-latest' : 'whisper-1'} spellCheck={false} /></span></label>}
       {prov !== 'auto' && prov !== 'local' && (
         <label className="ai-field"><span>API key{prov === 'openai-compatible' ? ' (if the server needs one)' : ''}</span>
-          <span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={hasKey ? 'Saved. Leave blank to keep it' : envKey ? 'Using the key from the server environment' : prov === 'groq' ? 'gsk_…' : 'sk-…'} /></span></label>)}
+          <span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={hasKey ? 'Saved. Leave blank to keep it' : envKey ? 'Using the key from the server environment' : prov === 'groq' ? 'gsk_…' : prov === 'cloudflare' ? 'API token' : 'sk-…'} /></span></label>)}
       {prov === 'local' && <p className="muted hint" style={{ margin: 0 }}>{v.local_installed ? 'faster-whisper is installed. Audio never leaves this server.' : 'faster-whisper is not installed on this server: run pip install -r requirements-local.txt and restart.'}</p>}
       {v.local_installed && (prov === 'local' || v.draft || v.loaded.length > 0) && <LocalModels reload={() => { void api.adminSettings().then(apply) }} onUse={(m) => setModel(m)} />}
       <label className="ai-field" style={{ maxWidth: 260 }}><span>Language (optional, like en; empty detects it)</span><span className="field"><input value={lang} onChange={(e) => setLang(e.target.value)} maxLength={12} spellCheck={false} placeholder="auto" /></span></label>
@@ -393,7 +400,7 @@ function GlobalModelCard({ m, count, onChange, onDelete }: { m: AiAdminModel; co
       {edit && (
         <div className="ad-form gm-edit">
           <label className="ai-field"><span>Name in the model list</span><span className="field"><input value={label} maxLength={60} onChange={(e) => setLabel(e.target.value)} /></span></label>
-          <label className="ai-field"><span>Base URL</span><span className="field"><input value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} /></span></label>
+          <AddressField url={url} setUrl={setUrl} />
           <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={m.key_set ? 'Saved. Leave blank to keep it' : 'sk-…'} /></span></label>
           <label className="ai-field"><span>Model</span><span className="field"><ComboInput label="Model" options={models} value={model} onChange={setModel} /></span></label>
           <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
@@ -431,7 +438,7 @@ function AssistantSection() {
         <p className="muted hint" style={{ margin: 0 }}>Any OpenAI-compatible service. The key is encrypted on the server and never sent to a browser, not even yours.</p>
         <div className="ai-presets">{PRESETS.map((p) => <button key={p.name} className={`chip ${url === p.url ? 'on' : ''}`} onClick={() => { setUrl(p.url); setModel(p.model); if (!label) setLabel(p.name) }}>{p.name}</button>)}</div>
         <label className="ai-field"><span>Name in the model list</span><span className="field"><input placeholder="Mistral Large" value={label} maxLength={60} onChange={(e) => setLabel(e.target.value)} /></span></label>
-        <label className="ai-field"><span>Base URL</span><span className="field"><input placeholder="https://api.mistral.ai/v1" value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} /></span></label>
+        <AddressField url={url} setUrl={setUrl} placeholder="https://api.mistral.ai/v1" />
         <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-…" /></span></label>
         <label className="ai-field"><span>Model</span><span className="field"><input placeholder="mistral-large-latest" value={model} onChange={(e) => setModel(e.target.value)} spellCheck={false} /></span></label>
         {err && <p className="form-error">{err}</p>}

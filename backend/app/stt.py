@@ -6,12 +6,15 @@ falls back to the environment, where the first one configured wins (or force one
   * openai-compatible  KOKO_STT_URL (+ KOKO_STT_KEY, KOKO_STT_MODEL)  any server with /audio/transcriptions
   * mistral            MISTRAL_API_KEY            Voxtral, model voxtral-mini-latest (override: KOKO_STT_MODEL)
   * openai             OPENAI_API_KEY             model whisper-1 (override: KOKO_STT_MODEL)
+  * cloudflare         CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID   Workers AI REST API, @cf/openai/whisper-large-v3-turbo (override: KOKO_STT_MODEL)
   * local              pip install faster-whisper; model from KOKO_WHISPER_MODEL (default base.en, ~150 MB, CPU only)
 """
 import asyncio
+import base64
 import gc
 import io
 import os
+import re
 import threading
 import time
 import wave
@@ -28,8 +31,10 @@ OPENAI_URL = "https://api.openai.com/v1/audio/transcriptions"
 GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_MODELS = ["whisper-large-v3-turbo", "whisper-large-v3"]
 LOCAL_MODELS = ["tiny.en", "base.en", "small.en", "medium.en", "small", "medium", "large-v3"]
-PROVIDERS = ["groq", "mistral", "openai", "openai-compatible", "local"]
-DEFAULT_MODEL = {"groq": "whisper-large-v3-turbo", "mistral": "voxtral-mini-latest", "openai": "whisper-1", "openai-compatible": "whisper-1", "local": "base.en"}
+CF_URL = "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
+CF_MODELS = ["@cf/openai/whisper-large-v3-turbo", "@cf/openai/whisper", "@cf/openai/whisper-tiny-en"]
+PROVIDERS = ["groq", "mistral", "openai", "cloudflare", "openai-compatible", "local"]
+DEFAULT_MODEL = {"groq": "whisper-large-v3-turbo", "mistral": "voxtral-mini-latest", "openai": "whisper-1", "cloudflare": CF_MODELS[0], "openai-compatible": "whisper-1", "local": "base.en"}
 MAX_BYTES = 12 * 1024 * 1024
 
 
@@ -55,6 +60,7 @@ class Cfg:
     url: str | None = None
     key: str | None = None
     language: str | None = None
+    account: str | None = None   # Cloudflare Workers AI account id
 
     @property
     def ready(self) -> bool:
@@ -62,6 +68,8 @@ class Cfg:
             return _local_available()
         if self.provider == "openai-compatible":
             return bool(self.url)
+        if self.provider == "cloudflare":
+            return bool(self.key and self.account)
         return bool(self.key)
 
 
@@ -82,17 +90,21 @@ def config(db=None) -> Cfg | None:
             return Cfg("mistral", model or env("KOKO_STT_MODEL") or DEFAULT_MODEL["mistral"], MISTRAL_URL, _secret(db, "stt_key_mistral") or env("MISTRAL_API_KEY"), language)
         if chosen == "openai":
             return Cfg("openai", model or env("KOKO_STT_MODEL") or DEFAULT_MODEL["openai"], OPENAI_URL, _secret(db, "stt_key_openai") or env("OPENAI_API_KEY"), language)
+        if chosen == "cloudflare":
+            return Cfg("cloudflare", model if model.startswith("@cf/") else DEFAULT_MODEL["cloudflare"], None, _secret(db, "stt_key_cloudflare") or env("CLOUDFLARE_API_TOKEN"), language, settings_get(db, "stt_cf_account") or env("CLOUDFLARE_ACCOUNT_ID"))
         if chosen == "openai-compatible":
             return Cfg("openai-compatible", model or env("KOKO_STT_MODEL") or DEFAULT_MODEL["openai-compatible"], settings_get(db, "stt_url") or env("KOKO_STT_URL"), _secret(db, "stt_key_openai-compatible") or env("KOKO_STT_KEY"), language)
         return Cfg("local", model if model and (model in LOCAL_MODELS or sttmodels.is_ready(model)) else env("KOKO_WHISPER_MODEL") or DEFAULT_MODEL["local"], None, None, language)
     forced = env("KOKO_STT_PROVIDER", "").strip().lower()
     if forced and forced not in PROVIDERS:
         return None
-    pick = forced or ("openai-compatible" if env("KOKO_STT_URL") else "mistral" if env("MISTRAL_API_KEY") else "openai" if env("OPENAI_API_KEY") else "groq" if env("GROQ_API_KEY") else "local" if _local_available() else "")
+    pick = forced or ("openai-compatible" if env("KOKO_STT_URL") else "mistral" if env("MISTRAL_API_KEY") else "openai" if env("OPENAI_API_KEY") else "groq" if env("GROQ_API_KEY") else "cloudflare" if env("CLOUDFLARE_API_TOKEN") and env("CLOUDFLARE_ACCOUNT_ID") else "local" if _local_available() else "")
     if not pick:
         return None
     if pick == "openai-compatible":
         return Cfg(pick, env("KOKO_STT_MODEL") or "whisper-1", env("KOKO_STT_URL"), env("KOKO_STT_KEY"), language)
+    if pick == "cloudflare":
+        return Cfg(pick, env("KOKO_STT_MODEL") or DEFAULT_MODEL["cloudflare"], None, env("CLOUDFLARE_API_TOKEN"), language, env("CLOUDFLARE_ACCOUNT_ID"))
     if pick == "local":
         return Cfg(pick, env("KOKO_WHISPER_MODEL") or DEFAULT_MODEL["local"], None, None, language)
     key = {"mistral": env("MISTRAL_API_KEY"), "openai": env("OPENAI_API_KEY"), "groq": env("GROQ_API_KEY")}[pick]
@@ -156,6 +168,45 @@ def status(db=None) -> dict:
     c = config(db)
     ok = bool(c and c.ready)
     return {"available": ok, "provider": c.provider if ok else None, "draft": ok and draft_model(db) is not None}
+
+
+async def _cloudflare(c: "Cfg", audio: bytes, language: str | None) -> str:
+    """Workers AI's REST API (api.cloudflare.com, not AI Gateway). The turbo model takes the audio as base64 inside JSON; the older
+    whisper models take the raw bytes. Either way the text comes back in result.text."""
+    account = (c.account or "").strip()
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", account):
+        raise STTError("The Cloudflare account id is missing or not valid", 503)
+    url = CF_URL.format(account=account, model=c.model)
+    headers = {"Authorization": f"Bearer {c.key}"}
+    kw: dict = {}
+    if c.model.endswith("-turbo"):
+        body: dict = {"audio": base64.b64encode(audio).decode()}
+        if language:
+            body["language"] = language
+        kw["json"] = body
+    else:
+        headers["Content-Type"] = "application/octet-stream"
+        kw["content"] = audio
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(url, headers=headers, **kw)
+    except httpx.HTTPError as e:
+        raise STTError(f"Could not reach Cloudflare ({type(e).__name__})") from e
+    if r.status_code in (401, 403):
+        raise STTError("Cloudflare rejected the API token (it needs the Workers AI permission for this account)", 502)
+    if r.status_code == 429:
+        raise STTError("Cloudflare is rate limiting requests. Try again in a moment.", 429)
+    if r.status_code >= 400:
+        detail = ""
+        try:
+            detail = "; ".join(str(e.get("message", "")) for e in (r.json().get("errors") or []))[:200]
+        except ValueError:
+            pass
+        raise STTError(f"Cloudflare returned an error ({r.status_code}){': ' + detail if detail else ''}")
+    try:
+        return ((r.json().get("result") or {}).get("text") or "").strip()
+    except ValueError as e:
+        raise STTError("Unexpected response from Cloudflare") from e
 
 
 async def _remote(url: str, key: str | None, model: str, audio: bytes, filename: str, content_type: str, language: str | None) -> str:
@@ -347,6 +398,8 @@ async def transcribe(audio: bytes, filename: str = "speech.wav", content_type: s
             raise
         except Exception as e:
             raise STTError(f"Local transcription failed ({type(e).__name__})") from e
+    if c.provider == "cloudflare":
+        return await _cloudflare(c, audio, language)
     url = c.url or ""
     if c.provider == "openai-compatible":
         url = url.rstrip("/")

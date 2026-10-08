@@ -381,3 +381,12 @@ Icons take the colour you give them when they are added, so changing the theme l
 ## Long assistant conversations
 
 Every tool call is two messages, so a long design session can reach hundreds. The browser now sends only the recent part once a conversation passes about 160 messages or 320,000 characters, leaving out the oldest turns (never splitting a tool call from its result) and telling the model that earlier steps were dropped. The saved conversation keeps everything. The server's cap on one request went from 300 to 1,000 messages.
+
+## Cloudflare Workers AI (Koko and voice typing)
+
+Both use the Workers AI REST API at `api.cloudflare.com` (not AI Gateway). You need your Cloudflare **account id** (shown on the Workers AI page of the dashboard) and an **API token** with the Workers AI permission.
+
+- **Koko:** choose the "Cloudflare Workers AI" preset when adding a model (yours, or one for everyone in the admin panel), then fill in the account id, the token and a model such as `@cf/openai/gpt-oss-20b`. Koko calls `.../ai/run/<model>`. Answers arrive all at once instead of word by word, and Koko asks for up to 4,096 tokens (Cloudflare's own default of 256 cuts replies off). Reasoning models spend part of that on thinking; if one runs out before answering, Koko says so. Pick a model that supports tool calls, otherwise Koko can chat but can't edit. The "Test" button lists the text models your account can use.
+- **Voice typing:** admin panel, Voice typing, provider "Cloudflare Workers AI": account id, token and model (`@cf/openai/whisper-large-v3-turbo` by default, or `@cf/openai/whisper`, `@cf/openai/whisper-tiny-en`). Without the admin panel, set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in the server environment.
+
+The older OpenAI-compatible address (`.../ai/v1`) still works if you enter it as a custom base URL; it streams, but the preset uses the REST API above.

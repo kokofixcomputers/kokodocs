@@ -575,3 +575,4 @@ a.brand { color: var(--ink); text-decoration: none; }
 .field .pop-anchor { display: flex; flex: 1; min-width: 0; }
 .combo-menu { min-width: 220px; max-width: min(420px, calc(100vw - 32px)); max-height: min(300px, 50vh); overflow-y: auto; }
 .combo-none { margin: 0; padding: 10px 12px; font-size: 13px; color: var(--muted); }
+.ai-field > .hint { margin: 4px 0 8px; line-height: 1.45; }

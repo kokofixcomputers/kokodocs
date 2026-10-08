@@ -120,8 +120,8 @@ def stt_view(db) -> dict:
     g = lambda k, d="": settings_get(db, k, d)
     now = stt.config(db)
     return {"provider": g("stt_provider") if g("stt_provider") in stt.PROVIDERS else "auto",
-            "models": {p: (g(f"stt_model_{p}") or "") for p in stt.PROVIDERS}, "url": g("stt_url"), "language": g("stt_language"), "draft": g("stt_draft") != "off", "loaded": stt.loaded_models(), "idle_unload": stt.idle_settings(db)[0], "idle_minutes": stt.idle_settings(db)[1], "draft_model": stt.draft_model(db), "draft_choice": g("stt_draft_model"), "draft_options": stt.ready_models(),
-            "key_set": {p: bool(g(f"stt_key_{p}")) for p in stt.PROVIDERS}, "env_key": {"groq": bool(os.environ.get("GROQ_API_KEY")), "mistral": bool(os.environ.get("MISTRAL_API_KEY")), "openai": bool(os.environ.get("OPENAI_API_KEY"))},
+            "models": {p: (g(f"stt_model_{p}") or "") for p in stt.PROVIDERS}, "url": g("stt_url"), "cf_account": g("stt_cf_account"), "cf_models": stt.CF_MODELS, "language": g("stt_language"), "draft": g("stt_draft") != "off", "loaded": stt.loaded_models(), "idle_unload": stt.idle_settings(db)[0], "idle_minutes": stt.idle_settings(db)[1], "draft_model": stt.draft_model(db), "draft_choice": g("stt_draft_model"), "draft_options": stt.ready_models(),
+            "key_set": {p: bool(g(f"stt_key_{p}")) for p in stt.PROVIDERS}, "env_key": {"groq": bool(os.environ.get("GROQ_API_KEY")), "mistral": bool(os.environ.get("MISTRAL_API_KEY")), "openai": bool(os.environ.get("OPENAI_API_KEY")), "cloudflare": bool(os.environ.get("CLOUDFLARE_API_TOKEN") and os.environ.get("CLOUDFLARE_ACCOUNT_ID"))},
             "groq_models": stt.GROQ_MODELS, "local_models": stt.LOCAL_MODELS + [m["repo"] for m in sttmodels.list_models(stt.builtin_repos()) if m["state"] == "ready" and not m["builtin"]], "local_installed": stt._local_available(),
             "active": {"available": bool(now and now.ready), "provider": now.provider if now else None, "model": now.model if now else None}}
 
@@ -136,11 +136,12 @@ class SettingsIn(BaseModel):
     smtp_user: str | None = Field(None, max_length=200)
     smtp_password: str | None = Field(None, max_length=500)
     smtp_from: str | None = Field(None, max_length=200)
-    stt_provider: str | None = Field(None, pattern="^(auto|groq|mistral|openai|openai-compatible|local)$")
+    stt_provider: str | None = Field(None, pattern="^(auto|groq|mistral|openai|cloudflare|openai-compatible|local)$")
     stt_model: dict[str, str] | None = None            # provider -> model
     stt_key: dict[str, str] | None = None              # provider -> new API key (never sent back)
     stt_clear_key: str | None = Field(None, pattern="^(groq|mistral|openai|openai-compatible)$")
     stt_url: str | None = Field(None, max_length=300)
+    stt_cf_account: str | None = Field(None, max_length=64)   # Cloudflare account id for Workers AI
     stt_language: str | None = Field(None, max_length=12)
     stt_idle_unload: bool | None = None                # drop speech models from memory when unused
     stt_idle_minutes: int | None = Field(None, ge=1, le=1440)
@@ -179,6 +180,8 @@ async def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin
             m = model.strip()[:100]
             if prov == "groq" and m not in stt.GROQ_MODELS:
                 raise HTTPException(422, "Choose whisper-large-v3-turbo or whisper-large-v3")
+            if prov == "cloudflare" and m and not re.match(r"^@cf/[\w.\-/]+$", m):
+                raise HTTPException(422, "A Cloudflare model name looks like @cf/openai/whisper-large-v3-turbo")
             if prov == "local" and m and m not in stt.LOCAL_MODELS and not sttmodels.is_ready(m):
                 raise HTTPException(422, "Choose a model that is on this server (add it first)")
             settings_set(db, f"stt_model_{prov}", m)
@@ -187,6 +190,11 @@ async def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin
             settings_set(db, f"stt_key_{prov}", encrypt_secret(key.strip()))
     if b.stt_clear_key:
         settings_set(db, f"stt_key_{b.stt_clear_key}", "")
+    if b.stt_cf_account is not None:
+        a = b.stt_cf_account.strip()
+        if a and not re.fullmatch(r"[0-9a-fA-F]{32}", a):
+            raise HTTPException(422, "A Cloudflare account id is 32 letters and digits (find it on the Workers AI page of the dashboard)")
+        settings_set(db, "stt_cf_account", a)
     if b.stt_url is not None:
         u = b.stt_url.strip()
         if u and not re.match(r"^https?://", u):

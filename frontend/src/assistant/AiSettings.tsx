@@ -5,13 +5,28 @@ import { api, type AiModelEntry, type AiSettings as S } from '../api'
 import { Modal } from '../ui/Modal'
 import { toast } from '../ui/Toast'
 
+const CF_RE = /^https:\/\/api\.cloudflare\.com\/client\/v4\/accounts\/([0-9a-f]{0,32})\/ai(\/v1)?\/?$/i
+export const cfBase = (account: string) => `https://api.cloudflare.com/client/v4/accounts/${account}/ai`
+/** The Cloudflare account id inside a Workers AI address (empty while it is still being typed), or null for any other provider. */
+export const cfAccount = (url: string): string | null => CF_RE.exec(url.trim())?.[1] ?? null
 export const PRESETS = [
   { name: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-large-latest' },
   { name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
   { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4' },
   { name: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+  { name: 'Cloudflare Workers AI', url: cfBase(''), model: '@cf/openai/gpt-oss-20b' },
   { name: 'Ollama', url: 'http://localhost:11434/v1', model: 'llama3.1' },
 ]
+
+/** The address of a provider; for Cloudflare Workers AI it is the account id instead (the address is built from it). */
+export function AddressField({ url, setUrl, placeholder }: { url: string; setUrl: (u: string) => void; placeholder?: string }) {
+  const acct = cfAccount(url)
+  if (acct === null) return <label className="ai-field"><span>Base URL</span><span className="field"><input placeholder={placeholder} value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} /></span></label>
+  return (
+    <label className="ai-field"><span>Cloudflare account id</span>
+      <span className="field"><input placeholder="32 letters and digits, from the Workers AI page of the dashboard" value={acct} maxLength={32} onChange={(e) => setUrl(cfBase(e.target.value.trim()))} spellCheck={false} /></span>
+      <span className="muted hint">Uses the Workers AI REST API (not AI Gateway). The API key below is a token with the Workers AI permission. Answers arrive all at once rather than word by word. Pick a model that supports tools, or Koko can only chat.</span></label>)
+}
 
 /** Add one of your own models, or edit one. Any OpenAI-compatible service works. Only you can see or use it. */
 function ModelForm({ initial, onSaved, onCancel }: { initial?: AiModelEntry; onSaved: (s: S) => void; onCancel?: () => void }) {
@@ -52,7 +67,7 @@ function ModelForm({ initial, onSaved, onCancel }: { initial?: AiModelEntry; onS
         {PRESETS.map((p) => <button key={p.name} type="button" className={`chip ${url === p.url ? 'on' : ''}`} onClick={() => { setUrl(p.url); setModel(p.model); if (!label) setLabel(p.name) }}>{p.name}</button>)}
       </div>
       <label className="ai-field"><span>Name in the model list</span><span className="field"><input placeholder="Mistral Large" value={label} maxLength={60} onChange={(e) => setLabel(e.target.value)} /></span></label>
-      <label className="ai-field"><span>Base URL</span><span className="field"><input placeholder="https://api.mistral.ai/v1" value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} /></span></label>
+      <AddressField url={url} setUrl={setUrl} placeholder="https://api.mistral.ai/v1" />
       <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="off" placeholder={hint ? `Saved (${hint}). Leave blank to keep it` : 'sk-…'} value={key} onChange={(e) => setKey(e.target.value)} /></span></label>
       <label className="ai-field"><span>Model</span>
         <span className="ai-model">
