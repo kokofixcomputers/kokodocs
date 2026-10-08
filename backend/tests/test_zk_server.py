@@ -61,7 +61,7 @@ ok('a public key can be looked up', s == 200 and pk['pub'] == pubB)
 ok('…not for someone without encryption', call('GET', '/api/zk/pubkey?email=nobody@z.io', None, A)[0] == 404)
 
 # an encrypted document
-s, d = call('POST', '/api/zk/docs', {'kind': 'doc', 'title_enc': b64(b'T1'), 'sealed': b64(b'sealed-for-alice')}, A)
+s, d = call('POST', '/api/zk/docs', {'id': uuid.uuid4().hex[:16], 'kind': 'doc', 'title_enc': b64(b'T1'), 'sealed': b64(b'sealed-for-alice')}, A)
 did = d['id']
 ok('create an encrypted doc', s == 200 and d['zk'] and d['title'] == 'Encrypted document' and d['zk_sealed'] == b64(b'sealed-for-alice'), s, d)
 s, lst = call('GET', '/api/docs', None, A)
