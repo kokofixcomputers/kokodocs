@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import httpx
 
 from . import sttmodels
-from .db import settings_get
+from .db import connect, settings_get
 from .security import decrypt_secret
 
 MISTRAL_URL = "https://api.mistral.ai/v1/audio/transcriptions"
@@ -172,9 +172,33 @@ _used: dict[str, float] = {}   # when each loaded model was last used
 _model_lock = threading.Lock()
 # A loaded Whisper model keeps its memory (a few hundred MB each) until the server restarts, even if nobody has dictated for hours.
 # So a model that hasn't been used for this many seconds is dropped, and loads again (a second or two) the next time it is needed.
-# KOKO_STT_IDLE_SECONDS=0 keeps models loaded for good.
+# The admin dashboard sets whether to do this and after how many minutes; until then KOKO_STT_IDLE_SECONDS (default 180, 0 = never) applies.
 IDLE_SECONDS = int(os.environ.get("KOKO_STT_IDLE_SECONDS", "180") or 0)
 _janitor: threading.Thread | None = None
+
+
+def idle_settings(db=None) -> tuple[bool, int]:
+    """(unload when idle?, after how many minutes), from the admin's choice if there is one, otherwise from the environment."""
+    def read(d):
+        on, mins = settings_get(d, "stt_idle"), settings_get(d, "stt_idle_minutes")
+        return on, mins
+    try:
+        if db is not None:
+            on, mins = read(db)
+        else:
+            with connect() as d:
+                on, mins = read(d)
+    except Exception:
+        on, mins = "", ""
+    default_min = max(1, round((IDLE_SECONDS or 180) / 60))
+    minutes = int(mins) if str(mins).isdigit() and 1 <= int(mins) <= 1440 else default_min
+    enabled = (on == "on") if on in ("on", "off") else IDLE_SECONDS > 0
+    return enabled, minutes
+
+
+def idle_seconds(db=None) -> int:
+    enabled, minutes = idle_settings(db)
+    return minutes * 60 if enabled else 0
 
 
 def _give_memory_back() -> None:
@@ -190,7 +214,7 @@ def _give_memory_back() -> None:
 def unload_idle(now: float | None = None, idle: int | None = None) -> list[str]:
     """Drops models not used for `idle` seconds; returns their names."""
     now = now if now is not None else time.time()
-    limit = IDLE_SECONDS if idle is None else idle
+    limit = idle_seconds() if idle is None else idle
     if limit <= 0:
         return []
     with _model_lock:
@@ -218,7 +242,7 @@ def _watch() -> None:
 
 def _start_janitor() -> None:
     global _janitor
-    if IDLE_SECONDS > 0 and _janitor is None:
+    if _janitor is None:   # always running; it checks the setting each time, so the admin can switch unloading on later
         _janitor = threading.Thread(target=_watch, name="stt-idle", daemon=True)
         _janitor.start()
 

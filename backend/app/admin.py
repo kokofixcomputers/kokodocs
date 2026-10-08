@@ -118,7 +118,7 @@ def stt_view(db) -> dict:
     g = lambda k, d="": settings_get(db, k, d)
     now = stt.config(db)
     return {"provider": g("stt_provider") if g("stt_provider") in stt.PROVIDERS else "auto",
-            "models": {p: (g(f"stt_model_{p}") or "") for p in stt.PROVIDERS}, "url": g("stt_url"), "language": g("stt_language"), "draft": g("stt_draft") != "off", "loaded": stt.loaded_models(), "idle_seconds": stt.IDLE_SECONDS, "draft_model": stt.draft_model(db),
+            "models": {p: (g(f"stt_model_{p}") or "") for p in stt.PROVIDERS}, "url": g("stt_url"), "language": g("stt_language"), "draft": g("stt_draft") != "off", "loaded": stt.loaded_models(), "idle_unload": stt.idle_settings(db)[0], "idle_minutes": stt.idle_settings(db)[1], "draft_model": stt.draft_model(db),
             "key_set": {p: bool(g(f"stt_key_{p}")) for p in stt.PROVIDERS}, "env_key": {"groq": bool(os.environ.get("GROQ_API_KEY")), "mistral": bool(os.environ.get("MISTRAL_API_KEY")), "openai": bool(os.environ.get("OPENAI_API_KEY"))},
             "groq_models": stt.GROQ_MODELS, "local_models": stt.LOCAL_MODELS + [m["repo"] for m in sttmodels.list_models(stt.builtin_repos()) if m["state"] == "ready" and not m["builtin"]], "local_installed": stt._local_available(),
             "active": {"available": bool(now and now.ready), "provider": now.provider if now else None, "model": now.model if now else None}}
@@ -142,6 +142,8 @@ class SettingsIn(BaseModel):
     stt_clear_key: str | None = Field(None, pattern="^(groq|mistral|openai|openai-compatible)$")
     stt_url: str | None = Field(None, max_length=300)
     stt_language: str | None = Field(None, max_length=12)
+    stt_idle_unload: bool | None = None                # drop speech models from memory when unused
+    stt_idle_minutes: int | None = Field(None, ge=1, le=1440)
     stt_draft: bool | None = None                     # live preview while speaking, from the small local model
 
 
@@ -195,6 +197,10 @@ def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin), db=
         if u and not re.match(r"^https?://", u):
             raise HTTPException(422, "The speech service address must start with http:// or https://")
         settings_set(db, "stt_url", u)
+    if b.stt_idle_unload is not None:
+        settings_set(db, "stt_idle", "on" if b.stt_idle_unload else "off")
+    if b.stt_idle_minutes is not None:
+        settings_set(db, "stt_idle_minutes", str(b.stt_idle_minutes))
     if b.stt_draft is not None:
         settings_set(db, "stt_draft", "on" if b.stt_draft else "off")
     if b.stt_language is not None:
