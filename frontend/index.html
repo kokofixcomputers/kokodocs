@@ -8,6 +8,20 @@
       // set the theme before anything paints, so there is no flash of the wrong one
       try { var t = localStorage.getItem('koko.theme'); if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; document.documentElement.dataset.theme = t } catch (e) {}
     </script>
+    <script>
+      // If the page itself is out of date (a cache handed out an old index.html whose script files were replaced by an update), the app can't
+      // start and nothing else on the page could say so. Reload once, going round the cache, instead of leaving a blank page.
+      addEventListener('error', function (e) {
+        var t = e.target
+        if (!t || t.tagName !== 'SCRIPT' || t.type !== 'module') return
+        try {
+          var last = Number(sessionStorage.getItem('koko.bootReload') || 0)
+          if (Date.now() - last < 60000) return
+          sessionStorage.setItem('koko.bootReload', String(Date.now()))
+        } catch (x) { return }
+        var u = new URL(location.href); u.searchParams.set('_v', String(Date.now())); location.replace(u.toString())
+      }, true)
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

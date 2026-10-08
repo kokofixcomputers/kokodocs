@@ -487,7 +487,8 @@ a.brand { color: var(--ink); text-decoration: none; }
 
 .doc-name i.k-board, .hit-row > i.k-board, .recent-card i.k-board { background: color-mix(in srgb, #0d9488 14%, var(--surface)); color: #0f766e; } :root[data-theme='dark'] .doc-name i.k-board, :root[data-theme='dark'] .hit-row > i.k-board, :root[data-theme='dark'] .recent-card i.k-board { color: #5eead4; }
 
-.update-notice { position: fixed; z-index: 60000; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 999px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow-2); font-size: 14px; max-width: calc(100vw - 24px); animation: rise .3s var(--ease); }
+.update-notice { position: fixed; z-index: 60000; left: 50%; top: calc(var(--vv-top, 0px) + env(safe-area-inset-top, 0px) + 12px);   /* clear of the notch and the iPhone status bar, and still on screen when the keyboard has scrolled the page
+  */ transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; touch-action: manipulation; pointer-events: auto; border-radius: 999px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow-2); font-size: 14px; max-width: calc(100vw - 24px); animation: rise .3s var(--ease); }
 .update-notice .btn-primary { background: var(--surface); color: var(--ink); }
 .stt-memory { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13.5px; padding: 8px 12px; border-radius: var(--r); background: color-mix(in srgb, var(--ink) 4%, var(--surface)); } .stt-memory > span:first-child { display: inline-flex; align-items: center; gap: 8px; } .stt-memory .btn { margin-left: auto; }
 .stt-memory .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); opacity: .5; } .stt-memory .dot.on { background: #22c55e; opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 25%, transparent); }
