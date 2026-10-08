@@ -46,20 +46,25 @@ export function emojiUrl(ch: string): string {
   let u = uris.get(code); if (!u) { u = 'data:image/svg+xml,' + encodeURIComponent(svg); uris.set(code, u) }
   return u
 }
-/** An emoji picture that failed to load (the server restarting during an update, a dropped connection, a half-copied deploy) used to stay
- *  broken until the page was reloaded. Now it tries again by itself: twice from its own file with a pause between, then from the
- *  embedded pack, and if even that fails it shows the plain emoji character instead of a broken-image icon. */
+/** An emoji picture that fails to load (its file is missing on the server, the server was restarting during an update, the connection dropped)
+ *  used to stay a broken-image icon until the page was reloaded. Now it switches to the embedded pack at once, which needs no
+ *  individual files on the server at all. If the pack can't load either (say a tab left open across an update asks for a chunk
+ *  that no longer exists), it retries its own file twice after a pause, and if everything fails shows the plain emoji character. */
 export function installEmojiRecovery() {
   const fail = (img: HTMLImageElement) => { img.classList.add('emoji-failed'); img.removeAttribute('src') }   // the alt text is the emoji itself
+  const again = (img: HTMLImageElement, code: string, n: number) => window.setTimeout(() => { if (img.isConnected) img.src = `/twemoji/${code}.svg?r=${n}` }, 500 * 3 ** (n - 1))
   document.addEventListener('error', (e) => {
     const img = e.target
     if (!(img instanceof HTMLImageElement) || !img.classList.contains('emoji') || !img.alt) return
     const n = Number(img.dataset.retry ?? 0)
     img.dataset.retry = String(n + 1)
-    const code = emojiCode(img.alt)
     if (img.src.startsWith('data:') || n > 2) { fail(img); return }
-    if (n < 2) { window.setTimeout(() => { if (img.isConnected) img.src = `/twemoji/${code}.svg?r=${n + 1}` }, 500 * 3 ** n); return }
-    void loadEmojiPack().then(() => { const svg = pack?.get(code); if (svg && img.isConnected) img.src = emojiUrl(img.alt); else fail(img) })
+    const code = emojiCode(img.alt)
+    if (n > 0) { again(img, code, n); return }
+    void loadEmojiPack().then(() => {   // first failure: the pack
+      const svg = pack?.get(code)
+      if (svg) { if (img.isConnected) img.src = emojiUrl(img.alt) } else again(img, code, 1)
+    })
   }, true)   // image errors don't bubble, so listen while the event is still travelling down
 }
 export const emojiImgHtml = (ch: string) => `<img class="emoji" draggable="false" alt="${ch}" src="${emojiUrl(ch)}">`
