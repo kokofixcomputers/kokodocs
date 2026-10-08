@@ -118,7 +118,7 @@ def stt_view(db) -> dict:
     g = lambda k, d="": settings_get(db, k, d)
     now = stt.config(db)
     return {"provider": g("stt_provider") if g("stt_provider") in stt.PROVIDERS else "auto",
-            "models": {p: (g(f"stt_model_{p}") or "") for p in stt.PROVIDERS}, "url": g("stt_url"), "language": g("stt_language"), "draft": g("stt_draft") != "off", "draft_model": stt.draft_model(db),
+            "models": {p: (g(f"stt_model_{p}") or "") for p in stt.PROVIDERS}, "url": g("stt_url"), "language": g("stt_language"), "draft": g("stt_draft") != "off", "loaded": stt.loaded_models(), "idle_seconds": stt.IDLE_SECONDS, "draft_model": stt.draft_model(db),
             "key_set": {p: bool(g(f"stt_key_{p}")) for p in stt.PROVIDERS}, "env_key": {"groq": bool(os.environ.get("GROQ_API_KEY")), "mistral": bool(os.environ.get("MISTRAL_API_KEY")), "openai": bool(os.environ.get("OPENAI_API_KEY"))},
             "groq_models": stt.GROQ_MODELS, "local_models": stt.LOCAL_MODELS + [m["repo"] for m in sttmodels.list_models(stt.builtin_repos()) if m["state"] == "ready" and not m["builtin"]], "local_installed": stt._local_available(),
             "active": {"available": bool(now and now.ready), "provider": now.provider if now else None, "model": now.model if now else None}}

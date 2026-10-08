@@ -14,33 +14,72 @@ from spellchecker import SpellChecker
 from . import dialects
 
 LT_URL = os.environ.get("KOKO_LANGUAGETOOL_URL")
-_spell = SpellChecker()
 WORDS = Path(__file__).parent / "words"
 
 
-def _words(name: str) -> list[str]:
+class _Spell(SpellChecker):
+    """The small built-in dictionary, plus a large list of extra words kept only as 64-bit hashes (about 12 MB instead of about 70 MB as
+    ordinary dictionary entries). A word is known if either side knows it. The extra words can't be listed back, so they have no
+    frequency: they are still suggested for a typo, but after the common words."""
+    _extra: frozenset = frozenset()
+
+    def learn(self, words) -> None:
+        self._extra = self._extra | frozenset(hash(w) for w in words)   # (a generator: the words never all exist at once)
+
+    def _extra_has(self, w: str) -> bool:
+        return hash(w.lower()) in self._extra
+
+    def known(self, words):
+        words = list(words)
+        out = super().known(words)
+        if self._extra:
+            out |= {w.lower() for w in words if self._extra_has(w) and self._check_if_should_check(w.lower())}
+        return out
+
+    def unknown(self, words):
+        out = super().unknown(words)
+        return {w for w in out if not self._extra_has(w)} if self._extra else out
+
+    def __contains__(self, key) -> bool:
+        return super().__contains__(key) or (bool(self._extra) and self._extra_has(str(key)))
+
+
+_spell = _Spell()
+
+
+def _words(name: str):
+    """The words of a list, one at a time (not all at once: the lists are only turned into hashes, so nothing big stays in memory)."""
     try:
         opener = gzip.open if name.endswith(".gz") else open
         with opener(WORDS / name, "rt", encoding="utf-8") as f:
-            return f.read().split()
+            for line in f:
+                w = line.strip()
+                if w:
+                    yield w
     except OSError:
-        return []
+        return
 
 
 # The built-in dictionary is small (everyday speech), so it also learns a full English word list (SCOWL, the one behind LibreOffice and
 # Firefox) and the vocabulary of software (cspell-dicts), plus a few words of our own and, if the admin has one, KOKO_EXTRA_WORDS (a text
 # file, one word per line). They come from tools/build_words.py and are shipped with the app, so no internet is needed. Words that are only
 # British are kept apart: they are accepted when proofreading in a British-family English, not in American.
-_BASE = set(_spell.word_frequency.dictionary)
-_spell.word_frequency.load_words(_words("en_us.txt.gz") + _words("tech.txt.gz") + _words("extra.txt"))
-if os.environ.get("KOKO_EXTRA_WORDS"):
-    try:
-        _spell.word_frequency.load_words(Path(os.environ["KOKO_EXTRA_WORDS"]).read_text(encoding="utf-8").lower().split())
-    except OSError:
-        pass
 GB_WORDS = frozenset(_words("en_gb.txt.gz"))
-for _w in GB_WORDS - _BASE:   # whatever list a British spelling sneaked in from, American English must not accept it
-    _spell.word_frequency.dictionary.pop(_w, None)
+
+
+def _every_extra_word():
+    yield from _words("en_us.txt.gz")
+    yield from _words("tech.txt.gz")
+    yield from _words("extra.txt")
+    if os.environ.get("KOKO_EXTRA_WORDS"):
+        try:
+            for line in Path(os.environ["KOKO_EXTRA_WORDS"]).read_text(encoding="utf-8").lower().split():
+                yield line
+        except OSError:
+            pass
+
+
+_spell.learn(w for w in _every_extra_word() if w not in GB_WORDS and w not in _spell.word_frequency.dictionary)
 WORD = re.compile(r"[A-Za-z][A-Za-z'’]*")
 OBJ = "￼"
 

@@ -9,9 +9,11 @@ falls back to the environment, where the first one configured wins (or force one
   * local              pip install faster-whisper; model from KOKO_WHISPER_MODEL (default base.en, ~150 MB, CPU only)
 """
 import asyncio
+import gc
 import io
 import os
 import threading
+import time
 import wave
 from dataclasses import dataclass
 
@@ -166,7 +168,59 @@ async def _remote(url: str, key: str | None, model: str, audio: bytes, filename:
 
 
 _models: dict[str, object] = {}
+_used: dict[str, float] = {}   # when each loaded model was last used
 _model_lock = threading.Lock()
+# A loaded Whisper model keeps its memory (a few hundred MB each) until the server restarts, even if nobody has dictated for hours.
+# So a model that hasn't been used for this many seconds is dropped, and loads again (a second or two) the next time it is needed.
+# KOKO_STT_IDLE_SECONDS=0 keeps models loaded for good.
+IDLE_SECONDS = int(os.environ.get("KOKO_STT_IDLE_SECONDS", "180") or 0)
+_janitor: threading.Thread | None = None
+
+
+def _give_memory_back() -> None:
+    gc.collect()
+    try:   # glibc keeps freed memory for itself unless asked to return it
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
+
+
+def unload_idle(now: float | None = None, idle: int | None = None) -> list[str]:
+    """Drops models not used for `idle` seconds; returns their names."""
+    now = now if now is not None else time.time()
+    limit = IDLE_SECONDS if idle is None else idle
+    if limit <= 0:
+        return []
+    with _model_lock:
+        gone = [n for n in list(_models) if now - _used.get(n, now) > limit]
+        for n in gone:
+            _models.pop(n, None)
+            _used.pop(n, None)
+    if gone:
+        _give_memory_back()
+    return gone
+
+
+def loaded_models() -> list[str]:
+    return sorted(_models)
+
+
+def _watch() -> None:
+    while True:
+        time.sleep(30)
+        try:
+            unload_idle()
+        except Exception:
+            pass
+
+
+def _start_janitor() -> None:
+    global _janitor
+    if IDLE_SECONDS > 0 and _janitor is None:
+        _janitor = threading.Thread(target=_watch, name="stt-idle", daemon=True)
+        _janitor.start()
 
 
 def _wav_to_array(audio: bytes):
@@ -192,10 +246,14 @@ def _local_transcribe(audio: bytes, language: str | None, name: str) -> str:
             from faster_whisper import WhisperModel
 
             _models[name] = WhisperModel(name, device="cpu", compute_type="int8", download_root=str(sttmodels.MODELS_DIR))
+            _start_janitor()
+        _used[name] = time.time()
         model = _models[name]
     source = _wav_to_array(audio) if audio[:4] == b"RIFF" else io.BytesIO(audio)
     segments, _ = model.transcribe(source, language=language or None, beam_size=1, vad_filter=True, condition_on_previous_text=False)
-    return " ".join(s.text.strip() for s in segments).strip()
+    text = " ".join(s.text.strip() for s in segments).strip()
+    _used[name] = time.time()   # a long recording must not look idle while it is still being worked on
+    return text
 
 
 async def transcribe(audio: bytes, filename: str = "speech.wav", content_type: str = "audio/wav", language: str | None = None, db=None) -> str:
@@ -229,3 +287,4 @@ def forget(repo: str) -> None:
     short = builtin_repos().get(repo)
     for k in (repo, short):
         _models.pop(k, None) if k else None
+        _used.pop(k, None) if k else None
