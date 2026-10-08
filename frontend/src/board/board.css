@@ -126,3 +126,11 @@
 .bd-comments { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
 .bd-comments .bd-flabel { display: flex; align-items: center; gap: 6px; }
 .bd-muted { color: var(--muted); font-size: 13px; margin: 0; }
+
+/* the card dialog: details on the left, comments in a column on the right (stacked on a phone) */
+.bd-dialog.two { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0; padding: 4px 0 0; }
+.bd-dialog.two .bd-main { padding: 0 24px 22px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.bd-side { border-left: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 2.5%, var(--surface)); padding: 4px 18px 18px; display: flex; flex-direction: column; min-height: 0; max-height: calc(100vh - 150px); overflow-y: auto; border-radius: 0 0 24px 0; }
+.bd-side .bd-comments { border-top: 0; padding-top: 6px; flex: 1; }
+@media (max-width: 860px) { .bd-dialog.two { grid-template-columns: 1fr; } .bd-side { border-left: 0; border-top: 1px solid var(--line); max-height: none; border-radius: 0 0 24px 24px; } }
+.bd-dialog:not(.two) .bd-main { display: contents; }

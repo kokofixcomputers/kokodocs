@@ -313,8 +313,9 @@ function CardDialog({ model, fields, cols, target, readOnly, onClose, docId, use
   }
 
   return (
-    <Modal title={existing ? 'Card' : 'New card'} onClose={onClose} width={620}>
-      <div className="bd-dialog">
+    <Modal title={existing ? 'Card' : 'New card'} onClose={onClose} width={existing ? 1040 : 620}>
+      <div className={`bd-dialog ${existing ? 'two' : ''}`}>
+        <div className="bd-main">
         <input className="bd-title-in" autoFocus={!existing} placeholder="Card title" maxLength={300} readOnly={readOnly} value={existing ? existing.title : draft.title}
           onChange={(e) => existing ? model.updateCard(existing.id, { title: e.target.value }) : setDraft({ ...draft, title: e.target.value })} aria-label="Card title" />
         {tried && titleBad && <small className="bd-err" role="alert">Give the card a title</small>}
@@ -327,13 +328,14 @@ function CardDialog({ model, fields, cols, target, readOnly, onClose, docId, use
         <label className="bd-field"><span className="bd-flabel">Description</span>
           <textarea rows={5} maxLength={20000} readOnly={readOnly} placeholder="Add more detail…" value={existing ? existing.desc ?? '' : draft.desc}
             onChange={(e) => existing ? model.updateCard(existing.id, { desc: e.target.value || undefined }) : setDraft({ ...draft, desc: e.target.value })} /></label>
-        {existing && <CardComments docId={docId} cardId={existing.id} user={user} list={comments} refresh={refreshComments} />}
         <div className="modal-actions">
           {existing && !readOnly ? <button className="btn btn-pill btn-ghost danger" onClick={() => void remove()}><Trash2 size={16} />Delete</button> : <span />}
           {existing ? <button className="btn btn-pill btn-primary" onClick={onClose}>Done</button>
             : <button className="btn btn-pill btn-primary" onClick={create}>Add card</button>}
         </div>
         {tried && (titleBad || bad.length > 0) && <p className="bd-err" role="alert">Fill in {[titleBad && 'the title', ...bad.map((f) => f.name)].filter(Boolean).join(', ')} first.</p>}
+        </div>
+        {existing && <aside className="bd-side"><CardComments docId={docId} cardId={existing.id} user={user} list={comments} refresh={refreshComments} /></aside>}
       </div>
     </Modal>
   )
@@ -373,9 +375,9 @@ function FieldSettings({ model, f, onRemove }: { model: BoardModel; f: F; onRemo
   return (
     <div className="bd-fbody">
       <label className="fm-switch-row"><div><b>Required</b><span>A card can't be added without it.{f.type === 'checkbox' ? ' For a checkbox this means it must be ticked.' : ''}</span></div>
-        <input type="checkbox" className="bd-toggle" checked={!!f.required} onChange={(e) => model.updateField(f.id, { required: e.target.checked })} /></label>
+        <button type="button" role="switch" aria-checked={!!f.required} aria-label="Required" className={`toggle ${f.required ? 'on' : ''}`} onClick={() => model.updateField(f.id, { required: !f.required })} /></label>
       <label className="fm-switch-row"><div><b>Show on the card</b><span>Display the value on the card in the column, not only inside it.</span></div>
-        <input type="checkbox" className="bd-toggle" checked={!f.hidden} onChange={(e) => model.updateField(f.id, { hidden: !e.target.checked })} /></label>
+        <button type="button" role="switch" aria-checked={!f.hidden} aria-label="Show on the card" className={`toggle ${!f.hidden ? 'on' : ''}`} onClick={() => model.updateField(f.id, { hidden: !f.hidden })} /></label>
       {f.type === 'number' && (
         <div className="bd-range"><label>Minimum<input type="number" value={f.min ?? ''} onChange={(e) => model.updateField(f.id, { min: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
           <label>Maximum<input type="number" value={f.max ?? ''} onChange={(e) => model.updateField(f.id, { max: e.target.value === '' ? undefined : Number(e.target.value) })} /></label></div>)}

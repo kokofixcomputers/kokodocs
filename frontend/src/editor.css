@@ -448,3 +448,5 @@ img.emoji { display: inline-block; height: 1.2em; width: 1.2em; vertical-align: 
 
 .vc-live { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; cursor: pointer; margin: 2px 0 8px; } .vc-live input { margin-top: 3px; accent-color: var(--accent); }
 .vc-live b { display: block; font-weight: 600; } .vc-live em { display: block; font-style: normal; color: var(--muted); font-size: 12px; margin-top: 1px; }
+
+.vc-live { justify-content: space-between; align-items: center; } .vc-live .toggle { flex: none; }

@@ -276,10 +276,10 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
       {prov === 'local' && <p className="muted hint" style={{ margin: 0 }}>{v.local_installed ? 'faster-whisper is installed. Audio never leaves this server.' : 'faster-whisper is not installed on this server: run pip install -r requirements-local.txt and restart.'}</p>}
       {prov === 'local' && v.local_installed && <LocalModels reload={() => { void api.adminSettings().then(apply) }} onUse={(m) => setModel(m)} />}
       <label className="ai-field" style={{ maxWidth: 260 }}><span>Language (optional, like en; empty detects it)</span><span className="field"><input value={lang} onChange={(e) => setLang(e.target.value)} maxLength={12} spellCheck={false} placeholder="auto" /></span></label>
-      <label className="ai-field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-        <input type="checkbox" checked={draftOn} disabled={!v.local_installed} onChange={(e) => setDraftOn(e.target.checked)} style={{ marginTop: 4 }} />
+      <div className="ai-field" style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <span><b>Live preview while speaking</b><br /><span className="muted hint">{v.local_installed ? `Shows the words as people talk, written by a small model on this server (${v.draft_model ?? 'tiny'}, free and private). What gets inserted is still the better transcript from the provider above.` : 'Needs faster-whisper on this server (pip install -r requirements-local.txt), then restart. Until then the pill only shows a waveform.'}</span></span>
-      </label>
+        <button type="button" role="switch" aria-checked={draftOn} aria-label="Live preview while speaking" disabled={!v.local_installed} className={`toggle ${draftOn ? 'on' : ''}`} onClick={() => setDraftOn(!draftOn)} />
+      </div>
       {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'}>{msg.text}</p>}
       <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
         <button className="btn btn-pill btn-primary" disabled={busy || !changed} onClick={save}>Save</button>
