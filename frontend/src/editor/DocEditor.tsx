@@ -1,4 +1,5 @@
 import { yXmlFragmentToProsemirrorJSON } from 'y-prosemirror'
+import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { openSettings } from '../ui/settingsStore'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -336,6 +337,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           <input className="title-input" value={title} readOnly={readOnly} onChange={(e) => onTitle(e.target.value)}
             placeholder="Untitled document" aria-label="Document title" maxLength={200} />
           <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+          <EncryptionBadge info={info} />
         </div>
         <div className="ed-right">
           <div className="presence">

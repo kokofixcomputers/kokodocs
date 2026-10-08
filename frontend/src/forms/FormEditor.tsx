@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { openSettings } from '../ui/settingsStore'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
@@ -148,6 +149,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
           <input className="title-input" value={title} onChange={(e) => onTitle(e.target.value)} placeholder="Untitled form" aria-label="Form title" maxLength={200} />
           <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+          <EncryptionBadge info={info} />
           {!form.accepting && <span className="fm-closed-chip">Closed</span>}
         </div>
         <div className="ed-right">

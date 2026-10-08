@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { Select } from '../ui/Select'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
@@ -284,6 +285,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
             <input className="title-input" value={title} readOnly={readOnly} onChange={(e) => onTitle(e.target.value)} placeholder="Untitled wiki" aria-label="Wiki title" maxLength={200} />
             <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+          <EncryptionBadge info={info} />
           </div>
           <div className="ed-right">
             <div className="presence">

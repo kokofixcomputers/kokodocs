@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
 import { AlertCircle, ArrowLeft, ArrowRight, Calendar, CheckSquare, ChevronDown, ChevronUp, Cloud, CloudOff, Copy, GripVertical, Hash, Kanban, MessageSquare, Sparkles, CalendarDays, GanttChart, Table2, Link2, LogIn, Moon, MoreHorizontal, Plus, Redo2, Settings2, Share2, Sun, Tags, Trash2, Type, Undo2, X } from 'lucide-react'
@@ -134,6 +135,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
           <input className="title-input" value={title} onChange={(e) => onTitle(e.target.value)} placeholder="Untitled board" aria-label="Board title" maxLength={200} readOnly={readOnly} />
           <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+          <EncryptionBadge info={info} />
         </div>
         <div className="ed-right">
           <div className="presence">{people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} size={32} ring />)}{people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}</div>

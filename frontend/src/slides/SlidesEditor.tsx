@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { openSettings } from '../ui/settingsStore'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
@@ -238,6 +239,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
           <input className="title-input" value={title} readOnly={readOnly} onChange={(e) => onTitle(e.target.value)} placeholder="Untitled presentation" aria-label="Presentation title" maxLength={200} />
           <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+          <EncryptionBadge info={info} />
         </div>
         <div className="ed-right">
           <div className="presence">{people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} size={32} ring />)}{people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}</div>
