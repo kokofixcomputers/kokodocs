@@ -20,8 +20,11 @@ import { SearchPalette } from './ui/Search'
 import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
 import { KeyboardFit } from './ui/KeyboardFit'
+import { installEmojiRecovery } from './emoji'
 import './app.css'
 import './editor.css'
+
+installEmojiRecovery()
 
 /** Signed-in people land on their documents; everyone else sees the home page. */
 function Root() {

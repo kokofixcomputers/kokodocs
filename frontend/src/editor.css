@@ -450,3 +450,5 @@ img.emoji { display: inline-block; height: 1.2em; width: 1.2em; vertical-align: 
 .vc-live b { display: block; font-weight: 600; } .vc-live em { display: block; font-style: normal; color: var(--muted); font-size: 12px; margin-top: 1px; }
 
 .vc-live { justify-content: space-between; align-items: center; } .vc-live .toggle { flex: none; }
+
+img.emoji.emoji-failed { width: auto; height: auto; font-size: 1em; color: inherit; vertical-align: baseline; user-select: text; }
