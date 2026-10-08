@@ -494,3 +494,12 @@ a.brand { color: var(--ink); text-decoration: none; }
 .stt-memory { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13.5px; padding: 8px 12px; border-radius: var(--r); background: color-mix(in srgb, var(--ink) 4%, var(--surface)); } .stt-memory > span:first-child { display: inline-flex; align-items: center; gap: 8px; } .stt-memory .btn { margin-left: auto; }
 .stt-memory .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); opacity: .5; } .stt-memory .dot.on { background: #22c55e; opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 25%, transparent); }
 .tag.live { background: color-mix(in srgb, #22c55e 18%, var(--surface)); color: #15803d; } :root[data-theme='dark'] .tag.live { color: #4ade80; }
+
+/* phones: the search box gets a row of its own. Squeezed between the logo and the icons it used to shrink to a few pixels, so nothing you typed could be seen */
+@media (max-width: 720px) {
+  .dash-top { flex-wrap: wrap; gap: 10px 12px; }
+  .dash-top .brand { order: 1; }
+  .dash-top .top-actions { order: 2; margin-left: auto; }
+  .dash-top .field.search { order: 3; flex: 1 1 100%; max-width: none; min-width: 0; width: 100%; }
+  .dash-top .field.search input { min-width: 0; width: 100%; text-overflow: ellipsis; }
+}
