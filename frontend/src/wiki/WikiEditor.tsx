@@ -5,7 +5,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import { BookOpen, Braces, History, Loader2, RotateCcw, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudOff, FilePlus2, FileText, FileUp, FolderClosed, FolderOpen, FolderPlus, LogIn, Moon, MoreHorizontal, PanelLeft, Search, Share2, Sun, Trash2, X } from 'lucide-react'
+import { BookOpen, Braces, History, Loader2, RotateCcw, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudOff, FilePlus2, FileText, FileUp, SpellCheck, FolderClosed, FolderOpen, FolderPlus, LogIn, Moon, MoreHorizontal, PanelLeft, Search, Share2, Sun, Trash2, X } from 'lucide-react'
 import { api, type ApiError, type DocInfo, type Version } from '../api'
 import { useAuth } from '../auth'
 import { KokoProvider } from '../collab'
@@ -38,6 +38,7 @@ import { ApiRequest, KVEditor, MethodBadge, WikiBadge, WikiContext, WikiToolbarE
 import { WikiTab, WikiTabs } from './WikiTabs'
 import { METHODS, type KV, type Vars } from './request'
 import { ancestors, children, descendants, nextPos, place, reading, uid, type Entry, type Tree } from './tree'
+import { ProofMenu, ProofreadMarks, ProofreadPanel, useProofread } from '../editor/Proofread'
 import { NotionImport } from './NotionImport'
 import './wiki.css'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -81,9 +82,10 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const [renaming, setRenaming] = useState<string | null>(null)
   const [ed, setEd] = useState<Editor | null>(null)
   const edRef = useRef<Editor | null>(null); edRef.current = ed
-  const [panel, setPanel] = useState<'none' | 'history' | 'assistant'>('none')
+  const [panel, setPanel] = useState<'none' | 'history' | 'assistant' | 'proof'>('none')
   const [preview, setPreview] = useState<Version | null>(null)
   const [verKey, setVerKey] = useState(0)
+  const proof = useProofread(ed)
   const voice = useVoiceTyping({ editor: ed, docId: info.id, enabled: !readOnly && !preview })
   const { status, synced } = useProviderStatus(provider)
   const people = usePresence(provider)
@@ -286,6 +288,9 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             </div>
             {!readOnly && <button className={`icon-btn ${panel === 'history' ? 'active' : ''}`} title="Version history" aria-label="Version history" onClick={() => { setPreview(null); setPanel((p) => (p === 'history' ? 'none' : 'history')) }}><History size={19} /></button>}
             {user && !preview && <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'assistant' ? 'none' : 'assistant'))}><Sparkles size={17} /><span className="lbl">Assistant</span></button>}
+            {!preview && <button className={`btn btn-pill btn-soft proof-btn ${panel === 'proof' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'proof' ? 'none' : 'proof'))}>
+              <SpellCheck size={17} /><span className="lbl">Proofread</span>{proof.issues.length > 0 && <b className="badge">{proof.issues.length}</b>}
+            </button>}
             <button className="btn btn-pill btn-soft" onClick={() => setVarsOpen(true)} title="Values the request blocks can use, like the server address"><Braces size={17} /><span className="lbl">Variables</span></button>
             <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
@@ -329,7 +334,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             {preview ? <WikiPreview live={ydoc} docId={info.id} version={preview} onRestore={restoreVersion} onClose={() => setPreview(null)} /> : cur && tree[cur] ? (
               <PageView key={cur} id={cur} entry={tree[cur]} crumbs={ancestors(tree, cur).map((a) => tree[a].title)} prev={order[order.indexOf(cur) - 1]} next={order[order.indexOf(cur) + 1]}
                 tree={tree} go={go} ydoc={ydoc} ymeta={ymeta} provider={provider} identity={identity} readOnly={readOnly} synced={synced} info={info}
-                onEditor={setEd} onPatch={(p) => patch(cur, p)} autoFocusTitle={renaming === cur} onFocused={() => setRenaming(null)} />
+                proof={proof} onEditor={setEd} onPatch={(p) => patch(cur, p)} autoFocusTitle={renaming === cur} onFocused={() => setRenaming(null)} />
             ) : synced ? (
               <div className="wiki-empty"><BookOpen size={34} /><h2>{readOnly ? 'Nothing here yet' : 'Start your wiki'}</h2><p>{readOnly ? 'The owner hasn’t added any pages.' : 'Add a page to begin. Pages can hold text, tables, code and request blocks people can try.'}</p>
                 {!readOnly && <button className="btn btn-pill btn-primary" onClick={() => add('page', null)}><FilePlus2 size={17} />New page</button>}</div>
@@ -340,6 +345,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             <div className="side-inner">
               {panel === 'assistant' && user
                 ? <Suspense fallback={null}><AssistantHost docId={info.id} user={user} onClose={() => setPanel('none')} source={{ kind: 'wiki', deps: assistantDeps }} /></Suspense>
+                  : panel === 'proof' && ed ? <ProofreadPanel editor={ed} state={proof} />
                 : panel === 'history' ? <VersionHistory docId={info.id} open selected={preview} refreshKey={verKey} unit="pages" onSelect={(v) => { setPreview(v); if (window.innerWidth <= 900) setPanel('none') }} /> : null}
             </div>
           </aside>
@@ -348,6 +354,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         {cm.node}
         <VoicePill voice={voice} />
         <VoiceFab voice={voice} editable={!readOnly && !preview} />
+        {ed && !preview && <ProofMenu editor={ed} state={proof} />}
         <SlashMenu />
         {notion && <NotionImport ydoc={ydoc} tree={tree} upload={(f) => api.uploadImage(info.id, f)} onClose={() => setNotion(false)} onOpen={go} />}
         {share && <ShareDialog info={info} onClose={() => setShare(false)} />}
@@ -370,9 +377,9 @@ const STARTER = (baseNote: string) => ({
   ],
 })
 
-function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provider, identity, readOnly, synced, info, onPatch, onEditor, autoFocusTitle, onFocused }: {
+function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provider, identity, readOnly, synced, info, proof, onPatch, onEditor, autoFocusTitle, onFocused }: {
   id: string; entry: Entry; crumbs: string[]; prev?: string; next?: string; tree: Tree; go: (id: string) => void; ydoc: Y.Doc; ymeta: Y.Map<unknown>; provider: KokoProvider
-  identity: { name: string; color: string }; readOnly: boolean; synced: boolean; info: DocInfo
+  identity: { name: string; color: string }; readOnly: boolean; synced: boolean; info: DocInfo; proof: ReturnType<typeof useProofread>
   onPatch: (p: Partial<Entry>) => void; onEditor: (e: Editor | null) => void; autoFocusTitle: boolean; onFocused: () => void
 }) {
   const upload = useCallback((f: File) => api.uploadImage(info.id, f), [info.id])
@@ -391,7 +398,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
       },
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
-    ApiRequest, WikiBadge, WikiTabs, WikiTab,
+    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions }, [])
@@ -443,7 +450,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
         <footer className="wiki-pn">{sibling(prev)}{sibling(next)}</footer>
       </article>
       <aside className="wiki-toc"><div className="wiki-toc-in"><Outline editor={editor} heading="On this page" /></div></aside>
-      {!readOnly && <DocContextMenu editor={editor} issues={[]} recheck={() => {}} ignore={() => {}} onComment={undefined} onFind={() => {}} />}
+      {!readOnly && <DocContextMenu editor={editor} issues={proof.issues} recheck={proof.recheck} ignore={proof.ignore} onComment={undefined} onFind={() => {}} />}
       <LinkHover editor={editor} />
       <TableMenu editor={editor} /><CalloutMenu editor={editor} /><ImageMenu editor={editor} /><ShapeMenu editor={editor} />
     </div>

@@ -1,6 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import { TextSelection } from '@tiptap/pm/state'
-import { askText } from '../ui/Dialogs'
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> { wikiTabs: { insertTabs: (titles?: string[]) => ReturnType } }
@@ -61,18 +60,34 @@ export const WikiTabs = Node.create({
         dom.dataset.active = String(active)
         bar.replaceChildren()
         current.forEach((child, _off, i) => {
+          const rename = (done?: () => void) => {
+            const p = tabPos(i); if (p === null || !editor.isEditable) return
+            const input = document.createElement('input')
+            input.className = 'wk-tab-input'; input.value = String(child.attrs.title); input.maxLength = 40; input.setAttribute('aria-label', 'Tab name')
+            input.style.width = `${Math.max(6, input.value.length + 2)}ch`
+            let finished = false
+            const finish = (save: boolean) => {
+              if (finished) return; finished = true
+              const v = input.value.trim().slice(0, 40)
+              if (save && v && v !== child.attrs.title) { const pp = tabPos(i); if (pp !== null) editor.view.dispatch(editor.state.tr.setNodeMarkup(pp, undefined, { ...child.attrs, title: v })) } else render()
+              done?.()
+            }
+            input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); finish(true) } else if (e.key === 'Escape') { e.preventDefault(); finish(false) } })
+            input.addEventListener('input', () => { input.style.width = `${Math.max(6, input.value.length + 2)}ch` })
+            input.addEventListener('blur', () => finish(true))
+            b.replaceChildren(input); input.focus(); input.select()
+          }
           const b = document.createElement('button')
           b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(i === active)); b.className = `wk-tab-btn ${i === active ? 'on' : ''}`
           b.textContent = String(child.attrs.title || `Tab ${i + 1}`)
-          b.addEventListener('mousedown', (e) => e.preventDefault())
-          b.addEventListener('click', () => { active = i; render() })
-          b.addEventListener('dblclick', () => {
-            if (!editor.isEditable) return
-            void askText({ title: 'Tab name', value: String(child.attrs.title), label: 'Save' }).then((v) => {
-              const p = tabPos(i); if (!v || p === null) return
-              editor.view.dispatch(editor.state.tr.setNodeMarkup(p, undefined, { ...child.attrs, title: v.slice(0, 40) }))
-            })
+          if (editor.isEditable && i === active) b.title = 'Click again to rename this tab'
+          b.addEventListener('mousedown', (e) => { if ((e.target as HTMLElement).tagName !== 'INPUT') e.preventDefault() })
+          b.addEventListener('click', (e) => {
+            if ((e.target as HTMLElement).tagName === 'INPUT') return
+            if (i === active && editor.isEditable) { rename(); return }   // clicking the open tab again edits its name in place
+            active = i; render()
           })
+          b.addEventListener('dblclick', () => { if (editor.isEditable && i !== active) { active = i; render() } })
           bar.appendChild(b)
         })
         if (editor.isEditable) {
@@ -86,7 +101,10 @@ export const WikiTabs = Node.create({
             editor.view.dispatch(editor.state.tr.insert(end, type.create({ title: `Tab ${current.childCount + 1}` }, editor.schema.nodes.paragraph.create())))
             active = current.childCount; render()
           })
-          tools.appendChild(add)
+          const pen = document.createElement('button'); pen.type = 'button'; pen.className = 'wk-tab-pen'; pen.title = 'Rename this tab'; pen.setAttribute('aria-label', 'Rename this tab'); pen.textContent = '✎'
+          pen.addEventListener('mousedown', (e) => e.preventDefault())
+          pen.addEventListener('click', () => bar.querySelector<HTMLButtonElement>('.wk-tab-btn.on')?.click())
+          tools.append(pen, add)
           if (current.childCount > 1) {
             const del = document.createElement('button'); del.type = 'button'; del.className = 'wk-tab-del'; del.title = 'Remove this tab'; del.setAttribute('aria-label', 'Remove this tab'); del.textContent = '×'
             del.addEventListener('mousedown', (e) => e.preventDefault())
