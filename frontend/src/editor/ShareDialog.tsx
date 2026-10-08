@@ -6,6 +6,7 @@ import { Avatar } from '../ui/Avatar'
 import { Select } from '../ui/Select'
 import { Modal } from '../ui/Modal'
 import { toast } from '../ui/Toast'
+import { ZkShareDialog } from '../zk/ZkShareDialog'
 
 type R = 'viewer' | 'editor' | 'manager'
 const ACCESS: { id: LinkAccess; title: string; sub: string; icon: React.ReactNode }[] = [
@@ -17,7 +18,12 @@ const RoleSelect = ({ value, onChange, form }: { value: R; onChange: (r: R) => v
   <Select label="Permission" value={value} onChange={onChange} options={[{ value: 'viewer', label: form ? 'Can fill out' : 'Can view' }, { value: 'editor', label: 'Can edit' }, { value: 'manager', label: 'Can manage' }]} />
 )
 
-export function ShareDialog({ info, onClose }: { info: DocInfo; onClose: () => void }) {
+/** Encrypted documents have their own dialog: sharing means handing out keys, and there are no links. */
+export function ShareDialog(p: { info: DocInfo; onClose: () => void }) {
+  return p.info.zk ? <ZkShareDialog {...p} /> : <PlainShareDialog {...p} />
+}
+
+function PlainShareDialog({ info, onClose }: { info: DocInfo; onClose: () => void }) {
   const { user } = useAuth()
   const owner = info.role === 'owner' || info.role === 'manager'   // both can change who has access; only the owner can delete
   const isOwner = info.role === 'owner'

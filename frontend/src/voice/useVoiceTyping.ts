@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { api } from '../api'
 import { toast } from '../ui/Toast'
+import { docKeyOf } from '../zk/session'
 import { Recorder } from './recorder'
 
 export interface Shortcut { code: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
@@ -50,7 +51,9 @@ function stillHeld(e: KeyboardEvent, s: Shortcut) {
 }
 
 /** `fieldsOnly`: for pages with no text editor (boards): dictation starts only while the cursor is in a text box, and goes into it. */
-export function useVoiceTyping({ editor, docId, enabled, fieldsOnly = false }: { editor: Editor | null; docId: string; enabled: boolean; fieldsOnly?: boolean }) {
+export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = false }: { editor: Editor | null; docId: string; enabled: boolean; fieldsOnly?: boolean }) {
+  const encrypted = !!docKeyOf(docId)   // the recording would have to go to the server to be turned into text
+  const enabled = wanted && !encrypted
   const [phase, setPhase] = useState<Phase>('idle')
   const [shortcut, setShortcutState] = useState<Shortcut>(loadShortcut)
   const [available, setAvailable] = useState<boolean | null>(null)
@@ -87,7 +90,7 @@ export function useVoiceTyping({ editor, docId, enabled, fieldsOnly = false }: {
     return () => { stopped = true; ac.abort(); window.clearInterval(id) }
   }, [phase, canDraft, docId])
 
-  useEffect(() => { api.sttStatus().then((s) => { setAvailable(s.available); setServerDraft(!!s.draft) }).catch(() => setAvailable(false)) }, [])
+  useEffect(() => { api.sttStatus().then((s) => { setAvailable(s.available && !encrypted); setServerDraft(!!s.draft && !encrypted) }).catch(() => setAvailable(false)) }, [encrypted])
 
   const target = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
   /** Type into a plain text field (like the assistant's message box) when that is where the user was focused. */

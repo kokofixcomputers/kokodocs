@@ -70,7 +70,7 @@ def list_files(q: str = "", exclude: str = "", limit: int = 15, user=Depends(mus
     rows = db.execute("SELECT * FROM documents WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 400").fetchall()
     out = []
     for d in rows:
-        if d["id"] != exclude and can_open(db, user, d):
+        if d["id"] != exclude and not d["zk"] and can_open(db, user, d):
             out.append(entry(db, d, user))
             if len(out) >= limit:
                 break
@@ -83,6 +83,8 @@ def read_file(doc_id: str, user=Depends(must_user), db=Depends(get_db)):
     doc = db.execute("SELECT * FROM documents WHERE id = ? AND deleted_at IS NULL", (doc_id,)).fetchone()
     if not doc or not can_open(db, user, doc):
         raise HTTPException(404, "No such file, or it isn't shared with you")
+    if doc["zk"]:
+        raise HTTPException(409, "That file is encrypted, so the assistant can't read it")
     text, cut = readdoc.render(doc["ydoc"], doc["kind"])
     return {**entry(db, doc, user), "text": text, "truncated": cut, "empty": not text.strip()}
 

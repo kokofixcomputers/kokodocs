@@ -5,6 +5,9 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import { Logo } from '../ui/Logo'
 import { ProviderMark } from '../ui/ProviderMark'
+import { hideBusy, showBusy } from '../zk/busy'
+import { destroyAndReset, resetWithRecovery, zkApi } from '../zk/flows'
+import { RecoveryKey } from '../zk/ZkSettings'
 
 
 /** Six-digit email code entry with a resend countdown. */
@@ -122,9 +125,13 @@ export function AuthEmbedded({ mode, onDone, next = '/' }: { mode: 'login' | 'si
 
 export function ForgotPage() {
   const nav = useNavigate()
-  const [step, setStep] = useState<'email' | 'code' | 'done'>('email')
+  const [step, setStep] = useState<'email' | 'code' | 'recovery' | 'destroy' | 'newkey' | 'done'>('email')
   const [email, setEmail] = useState('')
   const [pw, setPw] = useState('')
+  const [zkReset, setZkReset] = useState<{ token: string; keys: import('../zk/flows').ServerKeys } | null>(null)
+  const [rkey, setRkey] = useState('')
+  const [newKey, setNewKey] = useState('')
+  const [isZk, setIsZk] = useState(false)
   const [cooldown, setCooldown] = useState(30)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
@@ -132,7 +139,7 @@ export function ForgotPage() {
   useEffect(() => { api.authConfig().then((c) => setOff(!c.email)).catch(() => {}) }, [])
   const send = async (e: FormEvent) => {
     e.preventDefault(); setErr(''); setBusy(true)
-    try { const r = await api.passwordForgot(email); setCooldown(r.cooldown); setStep('code') } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+    try { const r = await api.passwordForgot(email); setCooldown(r.cooldown); setIsZk(await zkApi.prelogin(email.trim().toLowerCase()).then((x) => x.zk).catch(() => false)); setStep('code') } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
   return (
     <div className="auth-wrap"><div className="auth-card">
@@ -150,8 +157,39 @@ export function ForgotPage() {
           <div className="auth-form">
             <label className="field"><Lock size={18} /><input type="password" placeholder="New password (8+ characters)" value={pw} onChange={(e) => setPw(e.target.value)} minLength={8} autoComplete="new-password" /></label>
             <CodeStep email={email.trim().toLowerCase()} cooldown={cooldown} hint="If that account exists, we sent a 6-digit code to"
-              onVerify={async (c) => { if (pw.length < 8) throw new Error('Choose a new password with at least 8 characters'); await api.passwordReset({ email, code: c, password: pw }); setStep('done') }}
+              onVerify={async (c) => {
+                if (pw.length < 8) throw new Error('Choose a new password with at least 8 characters')
+                const r = await api.passwordReset({ email, code: c, password: isZk ? '' : pw })   // an encrypted account's new password never leaves this browser
+                if (r.zk && r.token && r.keys) { setZkReset({ token: r.token, keys: r.keys }); setStep('recovery') } else setStep('done')
+              }}
               onResend={async () => (await api.passwordForgot(email)).cooldown} onBack={() => setStep('email')} />
+          </div>
+        ) : step === 'recovery' && zkReset ? (
+          <form className="auth-form" onSubmit={async (e) => {
+            e.preventDefault(); setErr(''); setBusy(true)
+            try { showBusy('Decrypting…', 'Opening your encryption keys with the recovery key'); setNewKey(await resetWithRecovery(zkReset.token, zkReset.keys, rkey, pw)); setStep('newkey') } catch (x) { setErr((x as Error).message) } finally { hideBusy(); setBusy(false) }
+          }}>
+            <p style={{ margin: 0 }}>Your account's documents are encrypted, so a new password needs your <b>recovery key</b> (the 52 characters you saved when you turned encryption on).</p>
+            <label className="field"><KeyRound size={18} /><input autoFocus spellCheck={false} autoComplete="off" placeholder="XXXX-XXXX-XXXX-…" value={rkey} onChange={(e) => setRkey(e.target.value)} required /></label>
+            {err && <p className="form-error" role="alert">{err}</p>}
+            <button className="btn btn-primary btn-pill btn-lg" disabled={busy || !rkey.trim()}>{busy ? <span className="spinner sm" /> : 'Set the new password'}</button>
+            <button type="button" className="link-btn" onClick={() => setStep('destroy')}>I don't have my recovery key</button>
+          </form>
+        ) : step === 'destroy' && zkReset ? (
+          <form className="auth-form" onSubmit={async (e) => {
+            e.preventDefault(); setErr(''); setBusy(true)
+            try { await destroyAndReset(zkReset.token, pw); setStep('done') } catch (x) { setErr((x as Error).message) } finally { setBusy(false) }
+          }}>
+            <p style={{ margin: 0 }}><b>Without the recovery key your encrypted documents can never be opened again, by anyone.</b> You can still get into your account, but its encrypted documents will be deleted, and so will your copy of anything encrypted that was shared with you. Documents that were never encrypted are kept.</p>
+            <label className="field"><input autoComplete="off" placeholder="Type DELETE to confirm" value={rkey} onChange={(e) => setRkey(e.target.value)} /></label>
+            {err && <p className="form-error" role="alert">{err}</p>}
+            <button className="btn btn-danger btn-pill btn-lg" disabled={busy || rkey.trim() !== 'DELETE'}>{busy ? <span className="spinner sm" /> : 'Delete encrypted documents and reset'}</button>
+            <button type="button" className="link-btn" onClick={() => { setRkey(''); setStep('recovery') }}>Back: I found my recovery key</button>
+          </form>
+        ) : step === 'newkey' ? (
+          <div className="auth-form">
+            <p style={{ margin: 0 }}>Your password was changed and your documents are safe. For safety this made a <b>new recovery key</b> (the old one no longer works). Save it now.</p>
+            <RecoveryKey text={newKey} onClose={() => setStep('done')} />
           </div>
         ) : (
           <div className="auth-form"><p style={{ margin: 0 }}>Your password was changed. You can sign in with it now.</p>

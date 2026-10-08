@@ -14,13 +14,15 @@ from .collab import notify_comments
 from .routes import ctx, must_user
 
 router = APIRouter(prefix="/api")
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MENTION = re.compile(r"@([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})")
 
 
 class NewComment(BaseModel):
     id: str | None = Field(None, max_length=40)
-    body: str = Field(min_length=1, max_length=4000)
-    quote: str = Field("", max_length=400)
+    body: str = Field(min_length=1, max_length=12000)   # an encrypted document's comment is longer than what was typed
+    quote: str = Field("", max_length=1600)
+    mentions: list[str] = Field(default_factory=list, max_length=30)   # only used for encrypted documents: the server can't find them in the text
     parent_id: str | None = None
     anchor: dict | None = None   # where a spreadsheet or slide comment points: {"sheet","r","c"} or {"slide","el"}
 
@@ -82,17 +84,20 @@ def add_comment(doc_id: str, b: NewComment, request: Request, tasks: BackgroundT
             raise HTTPException(404, "That thread no longer exists")
     cid = b.id if (b.id and re.fullmatch(r"[A-Za-z0-9_-]{6,40}", b.id)) else uuid.uuid4().hex[:16]
     body = b.body.strip()
-    mentions = sorted({m.lower() for m in MENTION.findall(body)})
+    if doc["zk"]:
+        mentions = sorted({m.strip().lower() for m in b.mentions if EMAIL.match(m.strip())})
+    else:
+        mentions = sorted({m.lower() for m in MENTION.findall(body)})
     now = time.time()
     anchor = json.dumps(b.anchor)[:500] if b.anchor else None
     db.execute("INSERT INTO comments (id, doc_id, parent_id, user_id, body, quote, mentions, anchor, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                (cid, doc_id, b.parent_id, user["id"], body, b.quote, json.dumps(mentions), anchor, now, now))
-    emails, skipped = notifications.on_comment(db, doc, user, body, mentions, cid, parent)
+    emails, skipped = notifications.on_comment(db, doc, user, "" if doc["zk"] else body, mentions, cid, parent)   # an encrypted comment's words never go into notifications or email
     db.commit()
     from .authx import base_url
     base = base_url(request, db)
     for to, actor, text, link in emails:
-        tasks.add_task(notifications.send_mail_background, to, *notifications.mention_mail(actor, doc["title"], text, base + link))
+        tasks.add_task(notifications.send_mail_background, to, *notifications.mention_mail(actor, doc["title"], text or "The comment is encrypted: open the document to read it.", base + link))
     r = db.execute("SELECT * FROM comments WHERE id = ?", (cid,)).fetchone()
     notify_comments(doc_id)
     return {**view(r, {user["id"]: user["name"]}), "skipped": skipped}

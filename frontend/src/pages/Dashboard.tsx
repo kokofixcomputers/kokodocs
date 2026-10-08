@@ -76,7 +76,7 @@ function MoveDialog({ title, folders, current, blocked, onPick, onClose }: {
 const FOLDER_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280']
 
 export function Dashboard() {
-  const { user, logout } = useAuth()
+  const { user, logout, zkLocked } = useAuth()
   const { theme, toggle } = useTheme()
   const nav = useNavigate()
   const [params, setParams] = useSearchParams()
@@ -109,7 +109,7 @@ export function Dashboard() {
     } catch (e) { toast((e as Error).message) }
   }, [folderId, setParams])
   const loadTrash = useCallback(() => api.listTrash().then(setTrash).catch((e) => toast(e.message)), [])
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, zkLocked])   // once the encryption keys are open, titles can be read
   useEffect(() => { if (tab === 'bin') loadTrash() }, [tab, loadTrash])
   useEffect(() => { if (sf) setTab('shared') }, [sf])
   useEffect(() => {
@@ -213,14 +213,22 @@ export function Dashboard() {
     if (!kind) { toast('That file type isn’t supported. Try Word, Excel, PowerPoint, CSV, Markdown, HTML or text files.'); return }
     setImporting(f.name)
     let id: string | null = null
-    try {
-      id = (await api.createDoc(undefined, tab === 'mine' ? folderId : null, kind)).id
+    const attempt = async (plain: boolean) => {
+      id = (await api.createDoc(undefined, tab === 'mine' ? folderId : null, kind, { plain })).id
       const docId = id
       const plan = await parseImport(f, (img) => api.uploadImage(docId, img))
       setPending(id, plan)
       await api.renameDoc(id, plan.title.slice(0, 200)).catch(() => {})
       if (plan.note) toast(plan.note)
       nav(`/d/${id}`)
+    }
+    try {
+      try { await attempt(false) } catch (e) {
+        if (!/Pictures can.t be added to encrypted/.test((e as Error).message)) throw e
+        if (id) await api.deleteDoc(id).catch(() => {})   // pictures can't be stored encrypted yet: this one is imported without encryption
+        toast('That file has pictures, so it was imported without encryption.')
+        await attempt(true)
+      }
     } catch (e) {
       if (id) await api.deleteDoc(id).catch(() => {})
       toast((e as Error).message || 'Could not import that file')
@@ -392,7 +400,7 @@ export function Dashboard() {
     return (
               <div key={k + d.id} className="doc-row" role="link" tabIndex={0} onClick={() => nav(`/d/${d.id}`)}
                   onKeyDown={(e) => e.key === 'Enter' && nav(`/d/${d.id}`)} {...(mine && tab === 'mine' ? dragProps('doc', d.id) : {})} {...ctx.bind(() => docItems(d))}>
-                  <span className="doc-name"><i className={`k-${d.kind}`}><KindIcon kind={d.kind} /></i><b>{d.title}</b><RowTags tags={d.tags} onPick={pickTag} />
+                  <span className="doc-name"><i className={`k-${d.kind}`}><KindIcon kind={d.kind} /></i><b>{d.title}</b>{d.zk && <Lock size={13} className="zk-lock" aria-label="Encrypted" />}<RowTags tags={d.tags} onPick={pickTag} />
                     <button className={`star-btn ${d.starred ? 'on' : ''}`} aria-label={d.starred ? 'Remove star' : 'Star'} title={d.starred ? 'Remove star' : 'Star'} onClick={(e) => { e.stopPropagation(); void toggleStar(d) }}><Star size={15} fill={d.starred ? 'currentColor' : 'none'} /></button>
                     {searching && d.folder_id && byId.get(d.folder_id) && <em className="in-folder"><FolderIcon size={12} />{byId.get(d.folder_id)!.name}</em>}
                   </span>
@@ -500,7 +508,7 @@ export function Dashboard() {
                 <div className="start-row">
                   {recent.slice(0, 6).map((d) => (
                     <button key={d.id} className="recent-card" onClick={() => nav(`/d/${d.id}`)} {...ctx.bind(() => docItems(d))}>
-                      <i className={`k-${d.kind}`}><KindIcon kind={d.kind} /></i><b>{d.title || 'Untitled'}</b><span>Opened {ago(d.opened_at ?? d.updated_at)}</span>
+                      <i className={`k-${d.kind}`}><KindIcon kind={d.kind} /></i><b>{d.title || 'Untitled'}</b>{d.zk && <Lock size={13} className="zk-lock" aria-label="Encrypted" />}<span>Opened {ago(d.opened_at ?? d.updated_at)}</span>
                     </button>))}
                 </div>
               </section>)}
@@ -560,7 +568,7 @@ export function Dashboard() {
             <div className="doc-row bin head"><span>Name</span><span>Deleted</span><span>Time left</span><span /></div>
             {trash!.docs.map((d) => (
               <div key={d.id} className="doc-row bin" {...ctx.bind(() => binItems(d))}>
-                <span className="doc-name"><i className={`k-${d.kind}`}><KindIcon kind={d.kind} /></i><b>{d.title}</b></span>
+                <span className="doc-name"><i className={`k-${d.kind}`}><KindIcon kind={d.kind} /></i><b>{d.title}</b>{d.zk && <Lock size={13} className="zk-lock" aria-label="Encrypted" />}</span>
                 <span className="muted">{ago(d.deleted_at!)}</span>
                 <span className="muted">{daysLeft(d)} days</span>
                 <span className="doc-menu bin-actions">

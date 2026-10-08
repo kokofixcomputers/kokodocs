@@ -1,11 +1,32 @@
 import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import { getDocToken, getToken } from './api'
+import { awarenessAad, decryptBlob, docKeyOf, encryptBlob, decryptUpdate, encryptUpdate } from './zk/session'
 
 const MSG_UPDATE = 0
 const MSG_AWARENESS = 1
 const MSG_PING = 2
 const MSG_COMMENTS = 3   // server to client: the comments changed, fetch them again (this is what replaces polling)
+// encrypted documents (see backend/app/collab.py): the server can only store and relay, so history arrives as a snapshot plus updates, then "ready"
+const MSG_ZK_READY = 5
+const MSG_ZK_CHECKPOINT = 6
+const CHECKPOINT_EVERY = 60   // updates since the last snapshot before one of us writes a new one, so the stored log stays short
+
+function readVar(b: Uint8Array, i: number): [number, number] {
+  let n = 0, shift = 0
+  for (;;) {
+    const x = b[i++]
+    n += (x & 0x7f) * 2 ** shift
+    if (x < 0x80) return [n, i]
+    shift += 7
+  }
+}
+function writeVar(n: number): Uint8Array {
+  const out: number[] = []
+  while (n > 0x7f) { out.push(0x80 | (n % 128)); n = Math.floor(n / 128) }
+  out.push(n)
+  return Uint8Array.from(out)
+}
 
 export type ConnStatus = 'connecting' | 'connected' | 'disconnected' | 'offline' | 'denied'
 
@@ -42,9 +63,16 @@ export class KokoProvider {
   private catchingUp = false
   private localAtOpen = false
   private vecAtOpen: Uint8Array | null = null
+  // encrypted documents
+  private zkKey: Uint8Array | null
+  private server: Y.Doc | null = null   // what the server is known to hold (decrypted here), so only what it lacks is sent
+  private lastSeq = 0
+  private sinceCheckpoint = 0
+  private chain: Promise<void> = Promise.resolve()   // decrypting is asynchronous, but updates must be applied in the order they arrived
 
   constructor(public docId: string, public doc: Y.Doc, private readOnly: boolean) {
     this.awareness = new Awareness(doc)
+    this.zkKey = docKeyOf(docId)
     doc.on('update', this.onDocUpdate)
     this.awareness.on('update', this.onAwarenessUpdate)
     window.addEventListener('beforeunload', this.onUnload)
@@ -80,6 +108,16 @@ export class KokoProvider {
       this.vecAtOpen = Y.encodeStateVector(this.doc)
       this.localAtOpen = this.pending > 0
       this.catchingUp = this.everConnected && this.lostAt > 0
+      if (this.zkKey) {
+        // nothing to send yet: the server first tells us what it has; what it lacks is worked out when it says "ready"
+        this.server?.destroy(); this.server = new Y.Doc(); this.lastSeq = 0; this.sinceCheckpoint = 0
+        this.chain = Promise.resolve()
+        if (this.awareness.getLocalState()) void this.sendAwareness([this.doc.clientID])
+        this.everConnected = true
+        this.setStatus('connected')
+        this.startHeartbeat()
+        return
+      }
       if (!this.readOnly) this.send(MSG_UPDATE, Y.encodeStateAsUpdate(this.doc))
       if (this.awareness.getLocalState()) this.send(MSG_AWARENESS, encodeAwarenessUpdate(this.awareness, [this.doc.clientID]))
       this.everConnected = true
@@ -92,6 +130,7 @@ export class KokoProvider {
       window.clearTimeout(this.pong)
       const data = new Uint8Array(e.data as ArrayBuffer)
       const body = data.subarray(1)
+      if (this.zkKey) { this.zkMessage(ws, data); return }
       if (data[0] === MSG_UPDATE) {
         Y.applyUpdate(this.doc, body, this)
         if (!this.synced) { this.synced = true; this.emit() }
@@ -111,6 +150,90 @@ export class KokoProvider {
       }
     }
     ws.onclose = (e) => this.lost(ws, e.code)
+  }
+
+  /** One frame from the server for an encrypted document. Handled in order, one after the other. */
+  private zkMessage(ws: WebSocket, data: Uint8Array) {
+    const key = this.zkKey!, kind = data[0], body = data.subarray(1)
+    if (kind === MSG_COMMENTS) { this.commentsChanged(); return }
+    if (kind === MSG_PING) return
+    this.chain = this.chain.then(async () => {
+      if (this.ws !== ws || this.closed) return
+      try {
+        if (kind === MSG_ZK_CHECKPOINT) {
+          const [upto, i] = readVar(body, 0)
+          const state = await decryptUpdate(key, this.docId, body.subarray(i))
+          this.applyRemote(state); this.lastSeq = Math.max(this.lastSeq, upto)
+        } else if (kind === MSG_UPDATE) {
+          const [seq, i] = readVar(body, 0)
+          const update = await decryptUpdate(key, this.docId, body.subarray(i))
+          this.applyRemote(update); this.lastSeq = Math.max(this.lastSeq, seq); this.sinceCheckpoint++
+        } else if (kind === MSG_AWARENESS) {
+          applyAwarenessUpdate(this.awareness, await decryptBlob(key, awarenessAad(this.docId), body), this)
+        } else if (kind === MSG_ZK_READY) {
+          const [count] = readVar(body, 0)
+          this.sinceCheckpoint = count
+          this.zkReady()
+        }
+      } catch (err) {
+        console.warn('Dropped something that could not be decrypted', err)   // wrong key, or tampered with: never applied
+      }
+    })
+  }
+
+  private applyRemote(update: Uint8Array) {
+    Y.applyUpdate(this.server!, update)
+    Y.applyUpdate(this.doc, update, this)
+  }
+
+  /** The stored history has been applied. Send what the server lacks (edits made while away), and tidy the log if it grew long. */
+  private zkReady() {
+    if (!this.synced) { this.synced = true; this.emit() }
+    if (this.catchingUp) {
+      this.catchingUp = false
+      const remote = !!this.vecAtOpen && !sameBytes(this.vecAtOpen, Y.encodeStateVector(this.doc))
+      const away = Date.now() - this.lostAt
+      if (!this.readOnly && (remote || this.localAtOpen) && away > 1500) {
+        window.dispatchEvent(new CustomEvent<MergeDetail>('koko:merged', { detail: { docId: this.docId, local: this.localAtOpen, remote, away } }))
+      }
+      this.lostAt = 0
+    }
+    if (!this.readOnly) {
+      const lacking = Y.encodeStateAsUpdate(this.doc, Y.encodeStateVector(this.server!))
+      if (lacking.length > 2) void this.zkSend(lacking)
+      this.zkMaybeCheckpoint()
+    }
+    this.pending = 0
+    this.announce()
+    this.commentsChanged()
+  }
+
+  private async zkSend(update: Uint8Array) {
+    const key = this.zkKey, ws = this.ws
+    if (!key || !ws || ws.readyState !== WebSocket.OPEN) return
+    const blob = await encryptUpdate(key, this.docId, update)
+    if (this.ws !== ws || ws.readyState !== WebSocket.OPEN) { this.pending++; this.announce(); return }
+    this.send(MSG_UPDATE, blob)
+    Y.applyUpdate(this.server!, update)   // the server has it now
+    this.sinceCheckpoint++
+    this.zkMaybeCheckpoint()
+  }
+
+  private checkpointing = false
+  private zkMaybeCheckpoint() {
+    if (this.readOnly || this.checkpointing || this.sinceCheckpoint < CHECKPOINT_EVERY || !this.server || !this.lastSeq) return
+    this.checkpointing = true
+    const key = this.zkKey!, upto = this.lastSeq, state = Y.encodeStateAsUpdate(this.server)
+    void encryptUpdate(key, this.docId, state).then((blob) => {
+      const out = new Uint8Array([...writeVar(upto), ...blob])
+      this.send(MSG_ZK_CHECKPOINT, out)
+      this.sinceCheckpoint = 0
+    }).finally(() => { this.checkpointing = false })
+  }
+
+  private async sendAwareness(ids: number[]) {
+    const key = this.zkKey; if (!key) return
+    this.send(MSG_AWARENESS, await encryptBlob(key, awarenessAad(this.docId), encodeAwarenessUpdate(this.awareness, ids)))
   }
 
   private commentsChanged() { window.dispatchEvent(new CustomEvent('koko:comments', { detail: { docId: this.docId } })) }
@@ -177,6 +300,11 @@ export class KokoProvider {
 
   private onDocUpdate = (update: Uint8Array, origin: unknown) => {
     if (origin === this || this.readOnly) return
+    if (this.zkKey) {
+      if (this.ws?.readyState !== WebSocket.OPEN || !this.synced) { this.pending++; this.announce(); return }   // kept in the doc; what the server lacks is sent when it is ready
+      void this.zkSend(update)
+      return
+    }
     if (this.ws?.readyState !== WebSocket.OPEN) { this.pending++; this.announce() }   // kept in the doc; sent in full when we reconnect
     this.send(MSG_UPDATE, update)
   }
@@ -187,7 +315,9 @@ export class KokoProvider {
   ) => {
     if (origin === this) return
     const mine = [...added, ...updated, ...removed].filter((id) => id === this.doc.clientID)
-    if (mine.length) this.send(MSG_AWARENESS, encodeAwarenessUpdate(this.awareness, mine))
+    if (!mine.length) return
+    if (this.zkKey) void this.sendAwareness(mine)
+    else this.send(MSG_AWARENESS, encodeAwarenessUpdate(this.awareness, mine))
   }
 
   private onUnload = () => removeAwarenessStates(this.awareness, [this.doc.clientID], 'unload')
@@ -201,6 +331,7 @@ export class KokoProvider {
     window.removeEventListener('online', this.onOnline)
     document.removeEventListener('visibilitychange', this.onVisible)
     this.doc.off('update', this.onDocUpdate)
+    this.server?.destroy(); this.server = null
     removeAwarenessStates(this.awareness, [this.doc.clientID], 'destroy')
     this.awareness.destroy()
     const ws = this.ws; this.ws = null

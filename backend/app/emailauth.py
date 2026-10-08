@@ -199,7 +199,7 @@ async def password_forgot(b: Resend, request: Request, db=Depends(get_db)):
 class Reset(BaseModel):
     email: str
     code: str = Field(max_length=20)
-    password: str = Field(min_length=8, max_length=200)
+    password: str = Field("", max_length=200)   # not sent for accounts that use encryption: the browser handles their new password itself
 
 
 @router.post("/auth/password/reset")
@@ -210,6 +210,11 @@ def password_reset(b: Reset, request: Request, db=Depends(get_db)):
     user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     if not user or user["disabled"]:
         raise HTTPException(400, "That code isn't right")
+    if user["zk_enabled"]:   # the code proved the email; a new password can only come with the recovery key (or by giving up the encrypted data)
+        from .zk import keys_view, make_reset_token
+        return {"ok": True, "zk": True, "token": make_reset_token(user["id"]), "keys": keys_view(user)}
+    if len(b.password) < 8:
+        raise HTTPException(422, "Use at least 8 characters")
     db.execute("UPDATE users SET password_hash = ?, pw_set = 1 WHERE id = ?", (hash_password(b.password), user["id"]))
     db.commit()
     return {"ok": True}

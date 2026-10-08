@@ -66,7 +66,7 @@ def must_user(user=Depends(current_user)):
 
 
 def public_user(u) -> dict:
-    return {"id": u["id"], "email": u["email"], "name": u["name"], "color": u["color"], "is_admin": access.is_admin(u), "has_password": bool(u["pw_set"]), "notify_email": bool(u["notify_email"]), "totp": bool(u["totp_enabled"]), "google": u["google_email"]}
+    return {"id": u["id"], "email": u["email"], "name": u["name"], "color": u["color"], "is_admin": access.is_admin(u), "has_password": bool(u["pw_set"]), "notify_email": bool(u["notify_email"]), "totp": bool(u["totp_enabled"]), "google": u["google_email"], "zk": bool(u["zk_enabled"]), "zk_pub": u["zk_pub"]}
 
 
 # ───────────────────────── auth ─────────────────────────
@@ -135,8 +135,17 @@ def me(user=Depends(must_user)):
 
 
 # ───────────────────────── documents ─────────────────────────
-def doc_summary(d, role: str, owner_name: str | None = None, starred: bool = False, tags: list[str] | None = None) -> dict:
+def sealed_for(db, user, d) -> str | None:
+    """The key to an encrypted document, sealed to this person (None for a plain document, or if they were never given one)."""
+    if not user or not d["zk"]:
+        return None
+    r = db.execute("SELECT sealed FROM zk_grants WHERE doc_id = ? AND email = ?", (d["id"], user["email"])).fetchone()
+    return r["sealed"] if r else None
+
+
+def doc_summary(d, role: str, owner_name: str | None = None, starred: bool = False, tags: list[str] | None = None, sealed: str | None = None) -> dict:
     return {
+        "zk": bool(d["zk"]), "zk_title": d["zk_title"], "zk_sealed": sealed,
         "starred": starred,
         "tags": tags or [],
         "id": d["id"],
@@ -164,9 +173,10 @@ def list_docs(user=Depends(must_user), db=Depends(get_db)):
     ).fetchall()
     starred = {r["doc_id"] for r in db.execute("SELECT doc_id FROM stars WHERE user_id = ?", (user["id"],))}
     tags = tagdb.tag_map(db, "doc", user["id"])
+    keys = {r["doc_id"]: r["sealed"] for r in db.execute("SELECT doc_id, sealed FROM zk_grants WHERE email = ?", (user["email"],))}   # the keys sealed to this person
     return {
-        "mine": [doc_summary(d, "owner", user["name"], d["id"] in starred, tags.get(d["id"])) for d in mine],
-        "shared": [doc_summary(d, d["srole"], d["owner_name"], d["id"] in starred, tags.get(d["id"])) for d in shared],
+        "mine": [doc_summary(d, "owner", user["name"], d["id"] in starred, tags.get(d["id"]), keys.get(d["id"])) for d in mine],
+        "shared": [doc_summary(d, d["srole"], d["owner_name"], d["id"] in starred, tags.get(d["id"]), keys.get(d["id"])) for d in shared if not d["zk"] or user["zk_enabled"]],
     }
 
 
@@ -220,7 +230,7 @@ def recent_docs(limit: int = 8, user=Depends(must_user), db=Depends(get_db)):
         acc = access.resolve(db, d, user, None)
         if not acc.role:
             continue
-        out.append({**doc_summary(d, acc.role, d["owner_name"], d["id"] in starred), "opened_at": d["opened_at"]})
+        out.append({**doc_summary(d, acc.role, d["owner_name"], d["id"] in starred, sealed=sealed_for(db, user, d)), "opened_at": d["opened_at"]})
         if len(out) >= min(max(limit, 1), 24):
             break
     return out
@@ -236,19 +246,25 @@ def get_doc(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
         starred = bool(db.execute("SELECT 1 FROM stars WHERE user_id = ? AND doc_id = ?", (acc.user["id"], doc_id)).fetchone())
         db.commit()
     return {
-        **doc_summary(doc, acc.role, owner["name"], starred),
+        **doc_summary(doc, acc.role, owner["name"], starred, sealed=(db.execute("SELECT sealed FROM zk_grants WHERE doc_id = ? AND email = ?", (doc_id, acc.user["email"])).fetchone() or {"sealed": None})["sealed"] if acc.user and doc["zk"] else None),
         "owner_email": owner["email"],
         "link": {"access": doc["link_access"], "role": "viewer" if doc["kind"] == "form" else doc["link_role"]},
     }
 
 
 class PatchDoc(BaseModel):
-    title: str = Field(max_length=200)
+    title: str = Field("", max_length=200)
+    zk_title: str | None = Field(None, max_length=4000)   # encrypted documents: the title, encrypted by the browser
 
 
 @router.patch("/docs/{doc_id}")
 def patch_doc(doc_id: str, body: PatchDoc, c=Depends(ctx), db=Depends(get_db)):
-    access.require(db, doc_id, *c, minimum="editor")
+    doc, _ = access.require(db, doc_id, *c, minimum="editor")
+    if doc["zk"]:
+        if not body.zk_title:
+            raise HTTPException(422, "An encrypted document's title has to be encrypted first")
+        db.execute("UPDATE documents SET zk_title = ?, updated_at = ? WHERE id = ?", (body.zk_title, time.time(), doc_id))
+        return {"ok": True}
     db.execute(
         "UPDATE documents SET title = ?, updated_at = ? WHERE id = ?",
         (body.title.strip() or "Untitled document", time.time(), doc_id),
@@ -308,6 +324,8 @@ def get_sharing(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
 @router.put("/docs/{doc_id}/sharing")
 async def put_sharing(doc_id: str, body: SharingIn, c=Depends(ctx), db=Depends(get_db)):
     doc, acc = access.require(db, doc_id, *c, minimum="manager")
+    if doc["zk"]:
+        raise HTTPException(409, {"code": "zk_unsupported", "message": "An encrypted document is shared with its own sharing dialog (people who have encryption on). Links aren't possible."})
     owner_email = db.execute("SELECT email FROM users WHERE id = ?", (doc["owner_id"],)).fetchone()["email"]
     if doc["kind"] == "form":
         body.link_role = "viewer"   # links on a form only ever let people fill it out
@@ -409,6 +427,7 @@ async def upload_image(doc_id: str, file: UploadFile = File(...), c=Depends(ctx)
     if not ext:
         raise HTTPException(415, "Only PNG, JPEG, GIF and WebP images are supported")
     doc, _acc = access.require(db, doc_id, *c, minimum="editor")
+    access.zk_unsupported(doc, "Pictures")
     name = store_image(db, doc, doc_id, data, ext, "The document's owner" if _acc.role != "owner" else "Your account")
     return {"url": f"/api/images/{name}"}
 
@@ -442,6 +461,7 @@ async def import_image(doc_id: str, body: ImportImage, request: Request, c=Depen
     """Pasting from Google Docs, a web page or Word brings pictures as links to someone else's server. Fetch the picture and keep a copy
     with the document, so it still shows when the original link expires or needs a login."""
     doc, acc = access.require(db, doc_id, *c, minimum="editor")
+    access.zk_unsupported(doc, "Pictures")
     who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
     if not import_limiter.allow(f"imgimport:{who}"):
         raise HTTPException(429, "Too many pictures at once. Try again in a minute.")
@@ -499,7 +519,8 @@ class ProofIn(BaseModel):
 async def proofread(doc_id: str, body: ProofIn, request: Request, c=Depends(ctx), db=Depends(get_db)):
     """Needs access to the document, the same way everything else does: a signed-in person with access, or someone with the link (or its
     password token). So people editing through a link, with no account, can proofread, and strangers can't use this server's proofreader."""
-    _, acc = access.require(db, doc_id, *c)
+    doc, acc = access.require(db, doc_id, *c)
+    access.zk_unsupported(doc, "Proofreading")
     who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
     if not proofread_limiter.allow(f"proof:{who}"):
         raise HTTPException(429, "Slow down: too many proofreading requests. Try again in a minute.")
@@ -515,7 +536,8 @@ def stt_status(db=Depends(get_db)):
 @router.post("/docs/{doc_id}/transcribe/draft")
 async def transcribe_draft(doc_id: str, request: Request, file: UploadFile = File(...), language: str | None = None, c=Depends(ctx), db=Depends(get_db)):
     """A rough live preview of a recording still in progress, from the small local model. The real text comes from /transcribe."""
-    _, acc = access.require(db, doc_id, *c, minimum="editor")
+    doc, acc = access.require(db, doc_id, *c, minimum="editor")
+    access.zk_unsupported(doc, "Voice typing")
     who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
     if not draft_limiter.allow(f"draft:{who}"):
         raise HTTPException(429, "Too many previews")
@@ -531,7 +553,8 @@ async def transcribe_draft(doc_id: str, request: Request, file: UploadFile = Fil
 @router.post("/docs/{doc_id}/transcribe")
 async def transcribe(doc_id: str, request: Request, file: UploadFile = File(...), language: str | None = None, c=Depends(ctx), db=Depends(get_db)):
     """Turn a short recording into text. Requires edit access to the document (so strangers can't spend your API credits)."""
-    _, acc = access.require(db, doc_id, *c, minimum="editor")
+    doc, acc = access.require(db, doc_id, *c, minimum="editor")
+    access.zk_unsupported(doc, "Voice typing")
     who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
     if not stt_limiter.allow(f"stt:{who}"):
         raise HTTPException(429, "Slow down: too many voice requests. Try again in a minute.")

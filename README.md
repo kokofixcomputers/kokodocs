@@ -394,3 +394,34 @@ The older OpenAI-compatible address (`.../ai/v1`) still works if you enter it as
 ## Voice typing in boards
 
 Hold the voice typing key (Right Ctrl by default, changeable in Settings) while the cursor is in a text box on a board: a card's title, description or text and link fields, the board title, the filter, or Koko's message box. The words are typed into that box when you let go. With no text box selected, nothing starts, so the key never does something unexpected. While a text box is selected a floating microphone also appears (useful on a phone); it keeps the cursor where it is, and clicking it starts and stops dictation. A viewer who can't edit gets neither.
+
+## Zero-knowledge encryption (off by default)
+
+Anyone can turn this on for their own account in Settings, Security. Documents they encrypt can't be read by the server, its database, or its administrator. Everyone keeps full access to documents that aren't encrypted, and each account chooses which of its documents are.
+
+**How it works.** Your browser stretches your password (Argon2id) into two things: a login secret, which is all the server ever receives, and a wrapping key, which never leaves the browser. A random master key is stored on the server only wrapped by that key, and wrapped again by your **recovery key**. The master key wraps the private half of a sharing keypair (X25519). Every encrypted document has its own random key, and each person who may open it has a copy sealed to their public key. Edits, titles and comments are encrypted with the document key (AES-256-GCM) before they leave the browser. Live editing keeps working: the server stores and relays encrypted updates, and clients merge them. Because the keys are random and only wrapped by the password, changing your password re-wraps one small key and nothing else changes.
+
+**Signing in.** Same email and password, on any device: the keys come down wrapped and open with the password. After a password sign-in a "Decrypting…" page covers the app while the keys open. If you were already signed in when encryption was turned on elsewhere, or you signed in without typing the password (single sign-on), an unlock page asks for the password once.
+
+**Turning it on** with documents that already exist: you get a recovery key (you must type it back to prove you saved it), then, if you choose, every document you own (trash included) is encrypted in your browser, with a progress page. Forms and documents open to anyone with a link can't be encrypted and are left as they were, with a list of why. Anyone a document was shared with loses access to it until you share it again (they need encryption on too). Comments, version history and search text the server held for it are deleted, and the old plain text is overwritten in the database rather than just unlinked.
+
+**Turning it off** decrypts all of your encrypted documents in your browser (progress page again), stores them readable, and gives the account an ordinary password. Encrypted documents other people shared with you stop opening, because they belong to them.
+
+**Passwords and resets.**
+- Changing your password (you know the old one) is instant and loses nothing.
+- Forgot it: the emailed code proves the address, then your recovery key opens the master key and the new password wraps it again. A new recovery key is issued.
+- Forgot it and no recovery key: the encrypted documents can never be opened again, by anyone. You can still reset the account, but its encrypted documents are deleted (you must type DELETE). An administrator can't set the password of an encrypted account for the same reason.
+
+**Sharing** an encrypted document is done with people who have encryption on, by giving them the document's key sealed to their public key. There are no public links. Each person shows a key fingerprint to compare. Removing someone changes the document's key and re-encrypts it for those who remain; they keep whatever they had already seen.
+
+**What the server still knows:** that you have an account, which documents exist, their kind, size, timestamps, folders and folder names, and who they are shared with. It can't read titles, content, comments or keys.
+
+**What doesn't work in encrypted documents** (the server would have to read them): Koko, voice typing, spelling and grammar checks, version history, pictures (still stored unencrypted if a document already had some), forms, public links and server-side text search (titles are searched in the browser). Mention emails say who and where, never what. Folder sharing doesn't carry keys, so people in a shared folder see an encrypted document but can't open it until it is shared with them directly.
+
+**Limits, plainly:**
+- This is the usual browser limit: the page that does the decrypting is served by the same server. It protects against a database leak, a hosting provider and an administrator browsing the data. It does not protect against a server that deliberately serves altered JavaScript.
+- Someone with a signed-in browser (or who gets script into the page) can read what that browser can.
+- The cryptography uses standard libraries (WebCrypto, `@noble/curves`, `hash-wasm`), but the design hasn't been independently reviewed.
+- Sharing trusts the public key the server returns for an email. Compare fingerprints for anything sensitive.
+
+Server tests: `backend/tests/test_zk_server.py` (server on :8000, fresh data). Crypto check: `node --experimental-transform-types frontend/tests/zk-crypto.mts`.

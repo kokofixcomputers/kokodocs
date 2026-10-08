@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/admin")
 def row(u, docs, sheets, used=0, default=500):
     mb = u["quota_mb"] if u["quota_mb"] is not None else default
     return {"used": used, "quota_mb": u["quota_mb"], "limit_mb": mb, "id": u["id"], "email": u["email"], "name": u["name"], "color": u["color"], "created_at": u["created_at"],
-            "is_admin": access.is_admin(u), "builtin_admin": u["email"].lower() in access.admin_emails(), "disabled": bool(u["disabled"]), "totp": bool(u["totp_enabled"]),
+            "is_admin": access.is_admin(u), "builtin_admin": u["email"].lower() in access.admin_emails(), "disabled": bool(u["disabled"]), "totp": bool(u["totp_enabled"]), "zk": bool(u["zk_enabled"]),
             "docs": docs, "sheets": sheets}
 
 
@@ -83,6 +83,8 @@ def patch_user(uid: str, b: Patch, admin=Depends(must_admin), db=Depends(get_db)
     if b.reset_2fa:
         db.execute("UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_recovery = '[]' WHERE id = ?", (uid,))
     if b.password:
+        if target(db, uid)["zk_enabled"]:
+            raise HTTPException(409, "This account uses zero-knowledge encryption. Its password protects the encryption keys, so an admin can't set one: the person resets it themselves with their recovery key.")
         db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(b.password), uid))
     db.commit()
     n = db.execute("SELECT kind, COUNT(*) AS n FROM documents WHERE owner_id = ? AND deleted_at IS NULL GROUP BY kind", (uid,)).fetchall()

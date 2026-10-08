@@ -11,7 +11,7 @@ from . import access
 from .collab import refresh_access, refresh_all
 from . import quota, tagdb
 from .db import get_db
-from .routes import ctx, current_user, doc_summary, must_user
+from .routes import ctx, current_user, doc_summary, must_user, sealed_for
 
 router = APIRouter(prefix="/api")
 PURGE_DAYS = 30
@@ -134,7 +134,7 @@ def purge_old(db) -> None:
 def list_trash(user=Depends(must_user), db=Depends(get_db)):
     purge_old(db)
     rows = db.execute("SELECT * FROM documents WHERE owner_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC", (user["id"],)).fetchall()
-    return {"purge_days": PURGE_DAYS, "docs": [{**doc_summary(d, "owner", user["name"]), "deleted_at": d["deleted_at"]} for d in rows]}
+    return {"purge_days": PURGE_DAYS, "docs": [{**doc_summary(d, "owner", user["name"], sealed=sealed_for(db, user, d)), "deleted_at": d["deleted_at"]} for d in rows]}
 
 
 def trashed_doc(db, user, doc_id: str):
@@ -267,5 +267,5 @@ def open_shared_folder(fid: str, user=Depends(current_user), db=Depends(get_db))
     return {
         "id": fid, "name": f["name"], "role": role, "owner": f["owner_name"], "trail": trail,
         "folders": [{"id": s["id"], "name": s["name"], "created_at": s["created_at"]} for s in subs],
-        "docs": [doc_summary(d, role, f["owner_name"], tags=(tagmap.get(d["id"]) if user else None)) for d in docs],
+        "docs": [doc_summary(d, role, f["owner_name"], tags=(tagmap.get(d["id"]) if user else None), sealed=sealed_for(db, user, d)) for d in docs],
     }

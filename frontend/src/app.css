@@ -576,3 +576,25 @@ a.brand { color: var(--ink); text-decoration: none; }
 .combo-menu { min-width: 220px; max-width: min(420px, calc(100vw - 32px)); max-height: min(300px, 50vh); overflow-y: auto; }
 .combo-none { margin: 0; padding: 10px 12px; font-size: 13px; color: var(--muted); }
 .ai-field > .hint { margin: 4px 0 8px; line-height: 1.45; }
+
+/* zero-knowledge encryption */
+.zk-busy { position: fixed; inset: 0; z-index: 3000; display: grid; place-items: center; background: color-mix(in srgb, var(--bg, #fff) 94%, transparent); backdrop-filter: blur(6px); padding: 16px; }
+.zk-busy-card { width: min(420px, 100%); text-align: center; display: grid; gap: 12px; justify-items: center; padding: 28px 24px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-2, 0 20px 60px rgba(0,0,0,.18)); }
+.zk-busy-card h2 { margin: 0; font-size: 22px; } .zk-busy-card p { margin: 0; }
+.zk-busy-icon { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
+.zk-bar { width: 100%; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 10%, transparent); overflow: hidden; } .zk-bar i { display: block; height: 100%; background: var(--accent); transition: width .25s; }
+.zk-count { font-size: 13px; } .zk-hint { font-size: 12.5px; }
+
+.zk-unlock { position: fixed; inset: 0; z-index: 2900; display: grid; place-items: center; background: var(--bg, #fff); padding: 16px; }
+.link-btn { all: unset; cursor: pointer; text-decoration: underline; color: var(--accent); }
+
+.zk-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; letter-spacing: .04em; line-height: 1.7; word-break: break-word; padding: 14px 16px; border-radius: 14px; border: 1px dashed var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); user-select: all; }
+.zk-fp { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .03em; }
+.zk-points { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; line-height: 1.5; color: var(--muted); } .zk-points b { color: var(--ink); }
+.zk-check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; line-height: 1.45; } .zk-check input { margin-top: 3px; }
+.zk-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; } .zk-list span { display: block; color: var(--muted); }
+
+.zk-lock { margin-left: 6px; color: var(--muted); flex: none; vertical-align: -1px; }
+.modal > .st-stack { padding: 8px 24px 24px; display: grid; gap: 16px; } .modal > .st-stack > * { min-width: 0; }
+.modal > .form-error { padding: 0 24px 16px; margin: 0; }
+@media (max-width: 720px) { .modal > .st-stack { padding: 6px 16px 18px; gap: 14px; } }

@@ -1,6 +1,7 @@
 import { toast } from './ui/Toast'
+import { decorate, decorateAll, decryptComment, docKeyOf, encryptComment, encryptTitle, newDocKey, sealDocKeyForMe, setDocKey, zkNewEncrypted, zkUnlocked, type ZkFields } from './zk/session'
 import type { Answers, FormItem, PublicForm } from './forms/model'
-export interface User { id: string; email: string; name: string; color: string; is_admin?: boolean; has_password?: boolean; notify_email?: boolean; totp?: boolean; google?: string | null }
+export interface User { id: string; email: string; name: string; color: string; is_admin?: boolean; has_password?: boolean; notify_email?: boolean; totp?: boolean; google?: string | null; zk?: boolean; zk_pub?: string | null }
 export interface AdminUser { id: string; email: string; name: string; color: string; created_at: number; is_admin: boolean; builtin_admin: boolean; disabled: boolean; used: number; quota_mb: number | null; limit_mb: number; totp: boolean; docs: number; sheets: number }
 export interface AdminFile { id: string; title: string; kind: DocKind; created_at: number; updated_at: number; deleted_at: number | null; link_access: LinkAccess; link_role: string; owner_id: string; owner_name: string; owner_email: string }
 export type SttProvider = 'groq' | 'mistral' | 'openai' | 'cloudflare' | 'openai-compatible' | 'local'
@@ -24,7 +25,7 @@ export type DocKind = 'doc' | 'sheet' | 'slides' | 'form' | 'wiki' | 'board'
 export type Role = 'owner' | 'manager' | 'editor' | 'viewer'
 export type LinkAccess = 'restricted' | 'anyone' | 'password'
 
-export interface DocSummary {
+export interface DocSummary extends ZkFields {
   id: string; title: string; role: Role; owner: string | null
   updated_at: number; created_at: number; link_access: LinkAccess; folder_id: string | null; kind: DocKind
   deleted_at?: number; starred?: boolean; opened_at?: number; tags?: string[]
@@ -66,6 +67,9 @@ export interface FormFileRef { id: string; name: string; size: number }
 export interface FormResponse { id: string; created_at: number; name: string | null; email: string | null; answers: Record<string, string | string[] | FormFileRef> }
 export interface AiConversationInfo { id: string; title: string; created_at: number; updated_at: number }
 
+/** Pictures are stored on the server as they are, so they can't go into an encrypted document. */
+function noPictures(id: string) { if (docKeyOf(id)) throw new Error('Pictures can\'t be added to encrypted documents yet: they are stored on the server as they are.') }
+
 export class ApiError extends Error {
   constructor(public status: number, public code: string | null, message: string, public detail?: any) { super(message) }
 }
@@ -77,7 +81,7 @@ const docTokenKey = (id: string) => `koko.doctoken.${id}`
 export const getDocToken = (id: string) => sessionStorage.getItem(docTokenKey(id))
 export const setDocToken = (id: string, t: string) => sessionStorage.setItem(docTokenKey(id), t)
 
-async function request<T>(path: string, init: RequestInit = {}, docId?: string): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}, docId?: string): Promise<T> {
   const headers = new Headers(init.headers)
   const t = getToken()
   if (t) headers.set('Authorization', `Bearer ${t}`)
@@ -112,7 +116,7 @@ export const api = {
   signupResend: (email: string) => request<{ cooldown: number }>('/api/auth/signup/resend', { method: 'POST', ...json({ email }) }),
   signupVerify: (b: { email: string; code: string }) => request<{ token: string; user: User }>('/api/auth/signup/verify', { method: 'POST', ...json(b) }),
   passwordForgot: (email: string) => request<{ cooldown: number }>('/api/auth/password/forgot', { method: 'POST', ...json({ email }) }),
-  passwordReset: (b: { email: string; code: string; password: string }) => request('/api/auth/password/reset', { method: 'POST', ...json(b) }),
+  passwordReset: (b: { email: string; code: string; password: string }) => request<{ ok: true; zk?: boolean; token?: string; keys?: import('./zk/flows').ServerKeys }>('/api/auth/password/reset', { method: 'POST', ...json(b) }),
   adminEmailTest: () => request<{ sent_to: string }>('/api/admin/email/test', { method: 'POST' }),
   adminEmailRemove: () => request('/api/admin/email', { method: 'DELETE' }),
   authConfig: () => request<{ signup_enabled: boolean; providers: SsoPublic[]; email: boolean }>('/api/auth/config'),
@@ -133,9 +137,18 @@ export const api = {
   login: (b: { email: string; password: string }) =>
     request<LoginResult>('/api/auth/login', { method: 'POST', ...json(b) }),
   me: () => request<User>('/api/auth/me'),
-  listDocs: () => request<{ mine: DocSummary[]; shared: DocSummary[] }>('/api/docs'),
-  createDoc: (title?: string, folder_id?: string | null, kind: DocKind = 'doc') =>
-    request<DocSummary>('/api/docs', { method: 'POST', ...json({ title: title ?? null, folder_id: folder_id ?? null, kind }) }),
+  listDocs: async () => { const r = await request<{ mine: DocSummary[]; shared: DocSummary[] }>('/api/docs'); await Promise.all([decorateAll(r.mine), decorateAll(r.shared)]); return r },
+  /** With encryption on, new documents are encrypted (forms can't be, and a person can ask for plain ones in Settings). */
+  createDoc: async (title?: string, folder_id?: string | null, kind: DocKind = 'doc', opts: { plain?: boolean } = {}): Promise<DocSummary> => {
+    if (zkUnlocked() && kind !== 'form' && zkNewEncrypted() && !opts.plain) {
+      const id = Array.from(crypto.getRandomValues(new Uint8Array(8)), (x) => x.toString(16).padStart(2, '0')).join(''), key = newDocKey()
+      const name = title?.trim() || { doc: 'Untitled document', sheet: 'Untitled spreadsheet', slides: 'Untitled presentation', wiki: 'Untitled wiki', board: 'Untitled board' }[kind]
+      const r = await request<DocSummary>('/api/zk/docs', { method: 'POST', ...json({ id, kind, folder_id: folder_id ?? null, title_enc: await encryptTitle(key, id, name), sealed: await sealDocKeyForMe(key) }) })
+      setDocKey(id, key)
+      return decorate(r)
+    }
+    return request<DocSummary>('/api/docs', { method: 'POST', ...json({ title: title ?? null, folder_id: folder_id ?? null, kind }) })
+  },
   moveDoc: (id: string, folder_id: string | null) => request(`/api/docs/${id}/move`, { method: 'POST', ...json({ folder_id }) }, id),
   listFolders: () => request<Folder[]>('/api/folders'),
   createFolder: (name: string, parent_id: string | null) => request<Folder>('/api/folders', { method: 'POST', ...json({ name, parent_id }) }),
@@ -147,25 +160,31 @@ export const api = {
   putFolderSharing: (id: string, b: { shares: { email: string; role: string }[]; link_access: string; link_role: string }) =>
     request<FolderSharing>(`/api/folders/${id}/sharing`, { method: 'PUT', ...json(b) }),
   listSharedFolders: () => request<SharedFolder[]>('/api/shared/folders'),
-  openSharedFolder: (id: string) => request<SharedFolderView>(`/api/shared/folders/${id}`),
-  listTrash: () => request<{ purge_days: number; docs: DocSummary[] }>('/api/trash'),
+  openSharedFolder: async (id: string) => { const r = await request<SharedFolderView>(`/api/shared/folders/${id}`); await decorateAll(r.docs); return r },
+  listTrash: async () => { const r = await request<{ purge_days: number; docs: DocSummary[] }>('/api/trash'); await decorateAll(r.docs); return r },
   restoreDoc: (id: string) => request(`/api/docs/${id}/restore`, { method: 'POST' }),
   deleteForever: (id: string) => request(`/api/docs/${id}/permanent`, { method: 'DELETE' }),
   emptyTrash: () => request('/api/trash/empty', { method: 'POST' }),
-  listVersions: (id: string) => request<Version[]>(`/api/docs/${id}/versions`, {}, id),
-  createVersion: (id: string, label?: string) => request<{ id: string }>(`/api/docs/${id}/versions`, { method: 'POST', ...json({ label: label ?? null }) }, id),
+  listVersions: (id: string) => docKeyOf(id) ? Promise.resolve([] as Version[]) : request<Version[]>(`/api/docs/${id}/versions`, {}, id),
+  createVersion: (id: string, label?: string) => docKeyOf(id) ? Promise.reject(new Error('Version history isn\'t available in encrypted documents, because the server can\'t read them.')) : request<{ id: string }>(`/api/docs/${id}/versions`, { method: 'POST', ...json({ label: label ?? null }) }, id),
   renameVersion: (id: string, vid: string, label: string) => request(`/api/docs/${id}/versions/${vid}`, { method: 'PATCH', ...json({ label }) }, id),
   versionData: (id: string, vid: string) => requestBlob(`/api/docs/${id}/versions/${vid}/data`, id),
-  getDoc: (id: string) => request<DocInfo>(`/api/docs/${id}`, {}, id),
-  renameDoc: (id: string, title: string) => request(`/api/docs/${id}`, { method: 'PATCH', ...json({ title }) }, id),
+  getDoc: async (id: string) => { const d = await request<DocInfo>(`/api/docs/${id}`, {}, id); return decorate(d) },
+  /** Encrypted documents keep their title encrypted too. */
+  renameDoc: async (id: string, title: string) => {
+    const key = docKeyOf(id)
+    if (key) return request(`/api/docs/${id}`, { method: 'PATCH', ...json({ zk_title: await encryptTitle(key, id, title || 'Untitled') }) }, id)
+    return request(`/api/docs/${id}`, { method: 'PATCH', ...json({ title }) }, id)
+  },
   deleteDoc: (id: string) => request(`/api/docs/${id}`, { method: 'DELETE' }, id),
   getSharing: (id: string) => request<Sharing>(`/api/docs/${id}/sharing`, {}, id),
   putSharing: (id: string, b: { link_access: LinkAccess; link_role: string; password?: string; shares: { email: string; role: string }[] }) =>
     request<Sharing>(`/api/docs/${id}/sharing`, { method: 'PUT', ...json(b) }, id),
   unlock: (id: string, password: string) =>
     request<{ token: string }>(`/api/docs/${id}/unlock`, { method: 'POST', ...json({ password }) }, id),
-  importImage: (id: string, url: string) => request<{ url: string }>(`/api/docs/${id}/images/import`, { method: 'POST', ...json({ url }) }, id).then((r) => r.url),
+  importImage: async (id: string, url: string) => { noPictures(id); return (await request<{ url: string }>(`/api/docs/${id}/images/import`, { method: 'POST', ...json({ url }) }, id)).url },
   uploadImage: async (id: string, file: File) => {
+    noPictures(id)
     const fd = new FormData()
     fd.append('file', file)
     return (await request<{ url: string }>(`/api/docs/${id}/images`, { method: 'POST', body: fd }, id)).url
@@ -210,17 +229,35 @@ export const api = {
   deleteTag: (name: string) => request('/api/tags/delete', { method: 'POST', ...json({ name }) }),
   star: (id: string) => request(`/api/docs/${id}/star`, { method: 'PUT' }, id),
   unstar: (id: string) => request(`/api/docs/${id}/star`, { method: 'DELETE' }, id),
-  recent: () => request<DocSummary[]>('/api/recent?limit=8'),
-  search: (q: string, signal?: AbortSignal) => request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`, { signal }),
+  recent: async () => { const r = await request<DocSummary[]>('/api/recent?limit=8'); await decorateAll(r); return r },
+  /** The server searches what it can read. Titles of encrypted documents are only readable here, so those are matched in the browser. */
+  search: async (q: string, signal?: AbortSignal) => {
+    const hits = await request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`, { signal })
+    if (!zkUnlocked()) return hits
+    const needle = q.trim().toLowerCase(), seen = new Set(hits.map((h) => h.id))
+    const { mine, shared } = await api.listDocs()
+    const own = [...mine, ...shared].filter((d) => d.zk && !d.zk_locked && !seen.has(d.id) && d.title.toLowerCase().includes(needle))
+    return [...hits, ...own.map((d) => ({ id: d.id, title: d.title, kind: d.kind, owner: d.owner ?? '', updated_at: d.updated_at, title_match: true, snippet: '' }))]
+  },
   notifications: () => request<{ unread: number; items: Notice[] }>('/api/notifications'),
   notificationCount: () => request<{ unread: number }>('/api/notifications/count'),
   markRead: (b: { ids?: string[]; all?: boolean }) => request('/api/notifications/read', { method: 'POST', ...json(b) }),
   wikiProxy: (b: { method: string; url: string; headers: Record<string, string>; body?: string }) => request<{ status: number; status_text: string; ms: number; size: number; binary: boolean; body: string; headers: Record<string, string> }>('/api/wiki/proxy', { method: 'POST', ...json(b) }),
   setProfile: (name: string) => request<{ name: string }>('/api/me/profile', { method: 'PUT', ...json({ name }) }),
   setPrefs: (b: { notify_email: boolean }) => request('/api/me/prefs', { method: 'PUT', ...json(b) }),
-  comments: (id: string) => request<Comment[]>(`/api/docs/${id}/comments`, {}, id),
+  comments: async (id: string) => {
+    const list = await request<Comment[]>(`/api/docs/${id}/comments`, {}, id), key = docKeyOf(id)
+    if (!key) return list
+    return Promise.all(list.map(async (c) => { try { return { ...c, body: await decryptComment(key, id, c.body), quote: c.quote ? await decryptComment(key, id, c.quote) : '' } } catch { return { ...c, body: '(couldn’t be decrypted)', quote: '' } } }))
+  },
   people: (id: string) => request<{ email: string; name: string | null }[]>(`/api/docs/${id}/people`, {}, id),
-  addComment: (id: string, b: { id?: string; body: string; quote?: string; parent_id?: string; anchor?: Record<string, unknown> }) => request<Comment & { skipped?: MentionSkip[] }>(`/api/docs/${id}/comments`, { method: 'POST', ...json(b) }, id).then((c) => { if (c.skipped?.length) toast(`${c.skipped.map((s) => s.email).join(', ')} ${c.skipped.length === 1 ? 'was' : 'were'} not notified: this file isn't shared with ${c.skipped.length === 1 ? 'them' : 'them'}. Share it first, then mention them again.`); return c }),
+  addComment: async (id: string, b: { id?: string; body: string; quote?: string; parent_id?: string; anchor?: Record<string, unknown> }) => {
+    const key = docKeyOf(id)
+    const sent = key ? { ...b, mentions: [...new Set([...b.body.matchAll(/@([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g)].map((m) => m[1].toLowerCase()))], body: await encryptComment(key, id, b.body), quote: b.quote ? await encryptComment(key, id, b.quote) : '' } : b
+    const c = await request<Comment & { skipped?: MentionSkip[] }>(`/api/docs/${id}/comments`, { method: 'POST', ...json(sent) }, id)
+    if (c.skipped?.length) toast(`${c.skipped.map((s) => s.email).join(', ')} ${c.skipped.length === 1 ? 'was' : 'were'} not notified: this file isn't shared with them. Share it first, then mention them again.`)
+    return key ? { ...c, body: b.body, quote: b.quote ?? '' } : c
+  },
   resolveComment: (id: string, cid: string, resolved: boolean) => request(`/api/docs/${id}/comments/${cid}/resolved`, { method: 'PUT', ...json({ resolved }) }, id),
   deleteComment: (id: string, cid: string) => request(`/api/docs/${id}/comments/${cid}`, { method: 'DELETE' }, id),
   adminUsers: () => request<AdminUser[]>('/api/admin/users'),
@@ -252,7 +289,7 @@ export const api = {
     return (await request<{ text: string }>(`/api/docs/${id}/transcribe/draft`, { method: 'POST', body: fd, signal }, id)).text
   },
   proofread: (docId: string, blocks: { id: number; text: string }[], language?: string) =>
-    request<{ issues: ProofIssue[] }>(`/api/docs/${docId}/proofread`, { method: 'POST', ...json({ blocks, ...(language ? { language } : {}) }) }, docId),
+    docKeyOf(docId) ? Promise.resolve({ issues: [] as ProofIssue[] }) : request<{ issues: ProofIssue[] }>(`/api/docs/${docId}/proofread`, { method: 'POST', ...json({ blocks, ...(language ? { language } : {}) }) }, docId),   // an encrypted document's text never goes to the server
 }
 
 /** Raw streaming call to the assistant proxy (the caller reads the event stream). */

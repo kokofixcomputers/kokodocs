@@ -159,6 +159,8 @@ class PasswordChange(BaseModel):
 
 @router.post("/auth/password")
 def change_password(b: PasswordChange, user=Depends(must_user), db=Depends(get_db)):
+    if user["zk_enabled"]:
+        raise HTTPException(409, "This account uses encryption: its password is changed from the encryption settings, because the keys are protected by it")
     if len(b.new) < 8 or len(b.new) > 200:
         raise HTTPException(422, "Use at least 8 characters")
     if not mfa_limiter.allow("pw:" + user["id"]):

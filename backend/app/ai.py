@@ -418,7 +418,8 @@ def get_conversation(doc_id: str, cid: str, c=Depends(ctx), user=Depends(must_us
 
 @router.put("/docs/{doc_id}/ai/conversations/{cid}")
 def save_conversation(doc_id: str, cid: str, body: ConvIn, c=Depends(ctx), user=Depends(must_user), db=Depends(get_db)):
-    access.require(db, doc_id, *c)
+    doc, _acc = access.require(db, doc_id, *c)
+    access.zk_unsupported(doc, "Koko")
     if not (4 <= len(cid) <= 40 and cid.replace("-", "").isalnum()):
         raise HTTPException(422, "Bad conversation id")
     data = json.dumps(body.data)

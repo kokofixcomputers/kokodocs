@@ -21,7 +21,8 @@ def view(r) -> dict:
 
 @router.get("/docs/{doc_id}/versions")
 def list_versions(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
-    access.require(db, doc_id, *c, minimum="editor")
+    doc, _ = access.require(db, doc_id, *c, minimum="editor")
+    access.zk_unsupported(doc, "Version history")
     rows = db.execute(
         "SELECT id, created_at, kind, label, authors, words, preview FROM versions WHERE doc_id = ? ORDER BY created_at DESC LIMIT 300",
         (doc_id,),
@@ -36,6 +37,7 @@ class NewVersion(BaseModel):
 @router.post("/docs/{doc_id}/versions")
 def create_version(doc_id: str, body: NewVersion, c=Depends(ctx), db=Depends(get_db)):
     doc, acc = access.require(db, doc_id, *c, minimum="editor")
+    access.zk_unsupported(doc, "Version history")
     room = rooms.get(doc_id)
     blob = room.doc.get_update() if room else (bytes(doc["ydoc"]) if doc["ydoc"] else None)
     if not blob:
@@ -51,7 +53,8 @@ def create_version(doc_id: str, body: NewVersion, c=Depends(ctx), db=Depends(get
 
 @router.get("/docs/{doc_id}/versions/{vid}/data")
 def version_data(doc_id: str, vid: str, c=Depends(ctx), db=Depends(get_db)):
-    access.require(db, doc_id, *c, minimum="editor")
+    doc, _ = access.require(db, doc_id, *c, minimum="editor")
+    access.zk_unsupported(doc, "Version history")
     if not db.execute("SELECT 1 FROM versions WHERE id = ? AND doc_id = ?", (vid, doc_id)).fetchone():
         raise HTTPException(404, "Version not found")
     try:

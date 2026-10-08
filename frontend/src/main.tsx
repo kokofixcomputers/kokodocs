@@ -21,6 +21,8 @@ import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
 import { KeyboardFit } from './ui/KeyboardFit'
 import { UpdateNotice } from './ui/UpdateNotice'
+import { DecryptingPage } from './zk/Decrypting'
+import { UnlockPage } from './zk/UnlockPage'
 import { installEmojiRecovery } from './emoji'
 import './app.css'
 import './editor.css'
@@ -32,6 +34,12 @@ function Root() {
   const { user, loading } = useAuth()
   if (loading) return <div className="splash"><span className="spinner" /></div>
   return user ? <Dashboard /> : <Home />
+}
+
+/** Over everything: while an encrypted account's keys aren't on this device, nothing else can be used. */
+function ZkLock() {
+  const { zkLocked, loading } = useAuth()
+  return !loading && zkLocked ? <UnlockPage /> : null
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -69,6 +77,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <KeyboardFit />
         <SettingsHost />
         <DialogHost />
+        <ZkLock />
+        <DecryptingPage />
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

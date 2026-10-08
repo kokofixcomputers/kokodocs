@@ -14,6 +14,7 @@ import { Capture } from '../voice/VoiceControl'
 import { DEFAULT_SHORTCUT, loadLive, loadShortcut, shortcutLabel, type Shortcut } from '../voice/useVoiceTyping'
 import { closeSettings, subscribeSettings, type SettingsSection } from '../ui/settingsStore'
 import { DeleteForm, LinkedAccounts, NotifyRow, PasswordForm, StorageRow } from './SecurityDialog'
+import { ZkCard } from '../zk/ZkSettings'
 
 const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string }[] = [
   { id: 'account', label: 'My account', icon: <UserIcon size={17} />, group: 'User settings' },
@@ -97,6 +98,7 @@ function Security() {
             <button className="btn btn-pill btn-soft btn-sm" onClick={() => setPwOpen(true)}><Lock size={15} />{user?.has_password === false ? 'Set a password' : 'Change password'}</button></div>}
       </Card>
       <Card><LinkedAccounts /></Card>
+      <Card><ZkCard /></Card>
       <Card>
         {!status ? <span className="spinner" /> : codes ? (
           <div className="st-stack">

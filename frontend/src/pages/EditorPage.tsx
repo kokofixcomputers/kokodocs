@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { FileQuestion, KeyRound, LogIn, RotateCcw, ShieldX, Trash2 } from 'lucide-react'
+import { FileQuestion, KeyRound, Lock, LogIn, RotateCcw, ShieldX, Trash2 } from 'lucide-react'
+import { openSettings } from '../ui/settingsStore'
 import { api, ApiError, setDocToken, type DocInfo } from '../api'
 import { useAuth } from '../auth'
 import { DocEditor } from '../editor/DocEditor'
@@ -56,7 +57,7 @@ function PasswordGate({ id, onUnlocked }: { id: string; onUnlocked: () => void }
 
 export function EditorPage() {
   const { id = '' } = useParams()
-  const { user, loading, logout } = useAuth()
+  const { user, loading, logout, zkLocked } = useAuth()
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [mode, setMode] = useState<'login' | 'signup'>('login')
 
@@ -65,12 +66,17 @@ export function EditorPage() {
       .catch((e: ApiError) => setState({ kind: 'gate', code: e.code ?? 'error', message: e.message }))
   }, [id])
 
-  useEffect(() => { if (!loading) { setState({ kind: 'loading' }); load() } }, [id, loading, user?.id, load])
+  useEffect(() => { if (!loading) { setState({ kind: 'loading' }); load() } }, [id, loading, user?.id, load, zkLocked])
 
   const readyKind = state.kind === 'ready' ? state.info.kind : null
   useEffect(() => { setShortcutArea(readyKind === 'wiki' ? 'doc' : readyKind === 'board' ? 'general' : readyKind ?? 'general'); return () => setShortcutArea('general') }, [readyKind])
 
   if (state.kind === 'loading') return <div className="splash"><span className="spinner" /></div>
+  if (state.kind === 'ready' && state.info.zk && state.info.zk_locked) {   // an encrypted document I have no key for
+    return user?.zk
+      ? <Gate icon={<Lock size={26} />} title="You don't have the key to this document" text="It is encrypted. Ask the owner to share it with you again from the Share dialog, so a key is made for you."><div className="gate-actions"><Link className="btn btn-pill btn-primary" to="/">My documents</Link></div></Gate>
+      : <Gate icon={<Lock size={26} />} title="This document is encrypted" text="Documents like this one can only be opened by people who have turned on encryption. Turn it on in Settings, then ask the owner to share it with you again."><div className="gate-actions"><Link className="btn btn-pill btn-ghost" to="/">My documents</Link><button className="btn btn-pill btn-primary" onClick={() => openSettings('security')}>Open settings</button></div></Gate>
+  }
   if (state.kind === 'ready') {
     const k = `${state.info.id}:${user?.id ?? 'anon'}:${state.info.role}`
     if (state.info.kind === 'form') return <Suspense fallback={<div className="splash"><span className="spinner" /></div>}>{state.info.role === 'viewer' ? <FormPage key={k} info={state.info} /> : <FormEditor key={k} info={state.info} />}</Suspense>

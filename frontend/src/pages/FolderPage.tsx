@@ -22,7 +22,7 @@ const ago = (t: number) => {
 export function FolderPage() {
   const { id = '' } = useParams()
   const nav = useNavigate()
-  const { user, loading } = useAuth()
+  const { user, loading, zkLocked } = useAuth()
   const { theme, toggle } = useTheme()
   const [view, setView] = useState<SharedFolderView | null>(null)
   const [error, setError] = useState<{ code: string; message: string } | null>(null)
@@ -32,7 +32,7 @@ export function FolderPage() {
     if (loading) return
     setView(null); setError(null)
     api.openSharedFolder(id).then(setView).catch((e: ApiError) => setError({ code: e.code ?? 'error', message: e.message }))
-  }, [id, loading, user?.id])
+  }, [id, loading, user?.id, zkLocked])
 
   if (error?.code === 'login_required') {
     return (

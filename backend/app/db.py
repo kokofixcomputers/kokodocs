@@ -304,6 +304,21 @@ def migrate(db: sqlite3.Connection) -> None:
     if "kind" not in cols:
         db.execute("ALTER TABLE documents ADD COLUMN kind TEXT NOT NULL DEFAULT 'doc'")
     db.execute("CREATE INDEX IF NOT EXISTS idx_docs_folder ON documents(folder_id)")
+    # zero-knowledge encryption (zk.py): keys are made and kept in the browser; the server stores only wrapped keys and ciphertext
+    for col, ddl in (("zk_enabled", "INTEGER NOT NULL DEFAULT 0"), ("zk_salt", "TEXT"), ("zk_params", "TEXT"), ("zk_master_wrapped", "TEXT"), ("zk_priv_wrapped", "TEXT"),
+                     ("zk_pub", "TEXT"), ("zk_recovery_wrapped", "TEXT"), ("zk_at", "REAL")):
+        if col not in {r["name"] for r in db.execute("PRAGMA table_info(users)")}:
+            db.execute(f"ALTER TABLE users ADD COLUMN {col} {ddl}")
+    for col, ddl in (("zk", "INTEGER NOT NULL DEFAULT 0"), ("zk_title", "TEXT")):
+        if col not in {r["name"] for r in db.execute("PRAGMA table_info(documents)")}:
+            db.execute(f"ALTER TABLE documents ADD COLUMN {col} {ddl}")
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS zk_updates (id INTEGER PRIMARY KEY AUTOINCREMENT, doc_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE, blob BLOB NOT NULL, created_at REAL NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_zk_updates_doc ON zk_updates(doc_id, id);
+    CREATE TABLE IF NOT EXISTS zk_checkpoints (doc_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE, upto INTEGER NOT NULL, blob BLOB NOT NULL, created_at REAL NOT NULL);
+    CREATE TABLE IF NOT EXISTS zk_grants (doc_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE, email TEXT NOT NULL, sealed TEXT NOT NULL, by_email TEXT NOT NULL DEFAULT '', created_at REAL NOT NULL, PRIMARY KEY (doc_id, email));
+    CREATE INDEX IF NOT EXISTS idx_zk_grants_email ON zk_grants(email);
+    """)
     fcols = {r["name"] for r in db.execute("PRAGMA table_info(folders)")}
     if "link_access" not in fcols:
         db.execute("ALTER TABLE folders ADD COLUMN link_access TEXT NOT NULL DEFAULT 'restricted'")

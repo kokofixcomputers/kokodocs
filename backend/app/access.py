@@ -122,3 +122,9 @@ def require(db, doc_id: str, token: str | None, doc_token: str | None, minimum: 
     if RANK[acc.role] < RANK[minimum]:
         raise HTTPException(403, {"code": "forbidden", "message": f"{minimum} access required"})
     return doc, acc
+
+
+def zk_unsupported(doc, what: str) -> None:
+    """Server-side features that would have to read a document can't run on an encrypted one (see zk.py)."""
+    if doc is not None and doc["zk"]:
+        raise HTTPException(409, {"code": "zk_unsupported", "message": f"{what} isn't available in encrypted documents, because the server can't read them."})

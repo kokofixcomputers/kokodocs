@@ -5,6 +5,8 @@ import { useAuth } from '../auth'
 import { Modal } from '../ui/Modal'
 import { toast } from '../ui/Toast'
 import { ProviderMark } from '../ui/ProviderMark'
+import { changeEncryptedPassword, loginSecret } from '../zk/flows'
+import { hideBusy, showBusy } from '../zk/busy'
 
 import { fmtBytes, tier } from '../ui/StorageMeter'
 export { fmtBytes }
@@ -76,7 +78,7 @@ export function DeleteForm({ hasPassword, totp, onCancel }: { hasPassword: boole
   useEffect(() => { api.myStorage().then(setSt).catch(() => {}) }, [])
   const go = async () => {
     setErr(''); setBusy(true)
-    try { await api.deleteAccount({ email, password: pw, code }); logout(); toast('Your account was deleted'); location.href = '/signup' } catch (e) { setErr((e as Error).message); setBusy(false) }
+    try { const { secret } = hasPassword ? await loginSecret(user!.email, pw) : { secret: pw }; await api.deleteAccount({ email, password: secret, code }); logout(); toast('Your account was deleted'); location.href = '/signup' } catch (e) { setErr((e as Error).message); setBusy(false) }
   }
   return (
     <>
@@ -98,13 +100,16 @@ export function PasswordForm({ hasPassword, totp, onDone }: { hasPassword: boole
   const [code, setCode] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-  const { acceptToken } = useAuth()
+  const { acceptToken, user } = useAuth()
   const submit = async () => {
     setErr('')
     if (pw.length < 8) { setErr('Use at least 8 characters'); return }
     if (pw !== pw2) { setErr("The new passwords don't match"); return }
     setBusy(true)
-    try { await api.changePassword({ current: cur, new: pw, code }); toast('Password changed'); await acceptToken(getToken()!); onDone() } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
+    try {
+      if (user?.zk) { showBusy('Decrypting…', 'Re-protecting your encryption keys with the new password'); try { await changeEncryptedPassword(user, cur, pw, code) } finally { hideBusy() } }
+      else await api.changePassword({ current: cur, new: pw, code })
+      toast('Password changed'); await acceptToken(getToken()!); onDone() } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
   return (
     <>
