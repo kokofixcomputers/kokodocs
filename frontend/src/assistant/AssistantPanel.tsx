@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, ChevronDown, CircleAlert, Cpu, FolderSearch, History, Loader2, MessageSquarePlus, Settings2, ShieldCheck, Sparkles, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronDown, CircleAlert, Cpu, FolderSearch, History, Loader2, MessageSquarePlus, Mic, Settings2, ShieldCheck, Sparkles, Square, Trash2, X } from 'lucide-react'
 import { api, type AiFilesMode, type AiSettings, type User } from '../api'
 import { Popover } from '../ui/Popover'
 import { toast } from '../ui/Toast'
 import type { Adapter } from './adapter'
 import { AiSettingsDialog } from './AiSettings'
 import { Markdown } from './Markdown'
+import { useComposerMic } from '../voice/useComposerMic'
 import { type Item, type PCall, useAssistant } from './useAssistant'
 
 function Proposal({ item, decide, canEdit }: { item: Extract<Item, { k: 'proposal' }>; decide: (id: string, d: 'approve' | 'session' | 'skip') => void; canEdit: boolean }) {
@@ -83,6 +84,7 @@ export default function AssistantPanel({ adapter, docId, user, settings, onSetti
 }) {
   const a = useAssistant(adapter, docId, user, settings)
   const [text, setText] = useState('')
+  const mic = useComposerMic(docId, (t) => { setText((v) => (v && !/\s$/.test(v) ? v + ' ' : v) + t); box.current?.focus() })
   const sentFirst = useRef(false)
   // a request typed in the template gallery runs as soon as the new file opens
   useEffect(() => { if (initialPrompt && a.configured && !sentFirst.current) { sentFirst.current = true; a.send(initialPrompt) } }, [initialPrompt, a.configured])
@@ -171,6 +173,11 @@ export default function AssistantPanel({ adapter, docId, user, settings, onSetti
           <div className="ai-composer">
             <textarea ref={box} rows={1} value={text} placeholder={`Ask Koko about this ${adapter.noun}`} onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() } }} />
+            {mic.available && (
+              <button className={`ai-mic ${mic.phase}`} aria-label={mic.phase === 'listening' ? 'Stop and type what you said' : 'Talk to Koko'} title={mic.phase === 'listening' ? 'Click to finish' : 'Talk instead of typing'}
+                disabled={mic.phase === 'transcribing'} onClick={mic.toggle} onKeyDown={(e) => { if (e.key === 'Escape' && mic.phase === 'listening') { e.stopPropagation(); mic.cancel() } }}>
+                {mic.phase === 'transcribing' ? <Loader2 size={16} className="spin" /> : <Mic size={16} />}
+              </button>)}
             {a.busy
               ? <button className="ai-send stop" aria-label="Stop" onClick={a.stop}><Square size={13} fill="currentColor" /></button>
               : <button className="ai-send" aria-label="Send" disabled={!text.trim()} onClick={submit}><ArrowUp size={17} /></button>}

@@ -461,3 +461,8 @@ img.emoji.emoji-failed { width: auto; height: auto; font-size: 1em; color: inher
 .hp-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .hp-empty { margin: 6px 4px; font-size: 13px; color: var(--muted); max-width: 260px; }
 .lp-heads { flex-basis: 100%; } .link-pill.editing { flex-wrap: wrap; }
 .koko-prose a[href^="#h-"] { text-decoration-style: dotted; }
+
+.ai-mic { width: 32px; height: 32px; border-radius: 50%; border: 0; background: none; color: var(--muted); display: grid; place-items: center; cursor: pointer; flex: none; } .ai-mic:hover { background: rgba(127,127,127,.15); color: var(--ink); }
+.ai-mic.listening { background: #dc2626; color: #fff; animation: ai-mic-pulse 1.2s ease-in-out infinite; }
+@keyframes ai-mic-pulse { 50% { box-shadow: 0 0 0 6px rgba(220,38,38,.18); } }
+@media (prefers-reduced-motion: reduce) { .ai-mic.listening { animation: none; } }

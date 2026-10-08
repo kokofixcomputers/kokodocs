@@ -348,3 +348,11 @@ Ask Koko for a look ("dark navy, orange accent, big Space Grotesk headings") and
 - The template route (`add_slide` with a layout) still works; Koko picks whichever fits the request.
 
 Limits: untested with a real model so far (scripted with a mock). PowerPoint export keeps only the first colour of a gradient background. Pictures come only from URLs you supply.
+
+## Folding columns in the board table
+
+In a board's Table view, cards are grouped under a header row for each board column (name, colour, card count). Click a header, or press Enter or Space on it, to fold that column's cards away. Sorting and the filter still work inside each group; folding is per visit and isn't saved.
+
+## Talking to Koko
+
+When voice typing is set up on the server, the assistant's message box has a microphone button. Click it to start, click again to finish; what you said is transcribed with the provider the admin chose and added to your message, ready to edit or send. Esc cancels. It works in every file type, since it doesn't need a text editor on the page.

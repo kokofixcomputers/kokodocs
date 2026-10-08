@@ -136,3 +136,8 @@
 .bd-dialog:not(.two) .bd-main { display: contents; }
 
 .bd-bar { z-index: 1; } .bd-road-today { z-index: 0; }   /* the today line runs behind the bars, not through their titles */
+
+.bd-table tbody tr.bd-group { background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
+.bd-table .bd-group td { padding: 7px 14px; }
+.bd-table .bd-group td > * { vertical-align: middle; } .bd-table .bd-group svg { margin-right: 6px; color: var(--muted); }
+.bd-table .bd-group em { margin-left: 8px; font-style: normal; font-size: 12px; color: var(--muted); }
