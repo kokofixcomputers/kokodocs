@@ -377,3 +377,7 @@ Every dropdown is the app's own now: the text format in board fields, the method
 Koko can put vector icons on slides. `search_icons` finds one in the Lucide set (about 1,700 outline icons) and `add_icon` places it at any size and colour (a theme colour or a hex, with an adjustable line thickness). When nothing fits, Koko can draw its own SVG instead: logo marks, simple illustrations, decorative shapes. Hand-drawn SVG is cleaned before it is used: only drawing shapes, paths and gradients are kept, and scripts, event handlers, images, text and external references are removed. Icons are stored in the slide as vectors, so they stay sharp at any size; PowerPoint export turns them into high-resolution PNGs. The Lucide set loads only the first time Koko asks for an icon (about 180 KB compressed), so it doesn't slow down opening a deck.
 
 Icons take the colour you give them when they are added, so changing the theme later does not recolour them.
+
+## Long assistant conversations
+
+Every tool call is two messages, so a long design session can reach hundreds. The browser now sends only the recent part once a conversation passes about 160 messages or 320,000 characters, leaving out the oldest turns (never splitting a tool call from its result) and telling the model that earlier steps were dropped. The saved conversation keeps everything. The server's cap on one request went from 300 to 1,000 messages.

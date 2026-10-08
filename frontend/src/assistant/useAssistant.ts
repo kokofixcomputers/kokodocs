@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, type AiConversationInfo, type AiFilesMode, type AiSettings, type User } from '../api'
 import { crossTools } from './crossTools'
 import { type Adapter, type ProposalItem } from './adapter'
-import { type ChatMessage, streamChat } from './llm'
+import { type ChatMessage, fitHistory, streamChat } from './llm'
 
 export interface PCall { id: string; name: string; args: any; item: ProposalItem; state?: 'done' | 'error'; note?: string }
 export type Item =
@@ -113,7 +113,7 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
         const sys: ChatMessage = { role: 'system', content: systemPrompt(a, user, modeRef.current) + `\n\nCurrent state: ${a.context()}` }
         const aid = uid()
         let started = false
-        const { content, toolCalls } = await streamChat([sys, ...msgs.current], a.canEdit() ? toolsNow().map((t) => t.spec) : toolsNow().filter((t) => !t.edit).map((t) => t.spec), ac.signal, (txt) => {
+        const { content, toolCalls } = await streamChat([sys, ...fitHistory(msgs.current)], a.canEdit() ? toolsNow().map((t) => t.spec) : toolsNow().filter((t) => !t.edit).map((t) => t.spec), ac.signal, (txt) => {
           if (!started) { started = true; add({ k: 'assistant', id: aid, text: txt }) } else patch(aid, (i) => ({ ...i, text: txt }) as Item)
         }, modelRef.current)
         msgs.current.push({ role: 'assistant', content: content || null, ...(toolCalls.length && { tool_calls: toolCalls.map((c) => ({ id: c.id, type: 'function' as const, function: { name: c.name, arguments: c.arguments } })) }) })

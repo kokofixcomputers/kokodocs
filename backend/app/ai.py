@@ -234,7 +234,7 @@ async def list_models(id: str | None = None, user=Depends(must_user), db=Depends
 
 class ChatIn(BaseModel):
     model_id: str | None = None   # which of the person's available models to use (else the one they picked)
-    messages: list[dict] = Field(max_length=300)
+    messages: list[dict] = Field(max_length=1000)   # the browser trims long conversations itself; this only stops absurd requests
     tools: list[dict] | None = None
     temperature: float | None = Field(None, ge=0, le=2)
 

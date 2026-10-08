@@ -9,6 +9,33 @@ export interface ChatMessage {
 }
 export interface ToolSpec { type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }
 
+const MAX_MESSAGES = 160, MAX_CHARS = 320000
+const size = (m: ChatMessage) => (m.content?.length ?? 0) + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0)
+
+/** What to send: the whole conversation while it is small, and once it grows (every tool call is two messages, so a long design session
+ *  passes the server's limit quickly) the oldest turns are left out. Cuts only fall on a person's message, so a tool call is never
+ *  separated from its result, and a note tells the model that earlier steps were dropped. The saved conversation keeps everything. */
+export function fitHistory(msgs: ChatMessage[]): ChatMessage[] {
+  let total = msgs.reduce((n, m) => n + size(m), 0)
+  if (msgs.length <= MAX_MESSAGES && total <= MAX_CHARS) return msgs
+  let start = 0
+  while (start < msgs.length - 1 && (msgs.length - start > MAX_MESSAGES || total > MAX_CHARS)) {
+    let next = start + 1
+    while (next < msgs.length && msgs[next].role !== 'user') next++
+    if (next >= msgs.length) {   // the newest turn alone is too long: cut at an assistant step instead, with its results going too
+      next = start + 1
+      while (next < msgs.length - 1 && msgs[next].role !== 'assistant') next++
+      if (next >= msgs.length - 1) break
+    }
+    for (let i = start; i < next; i++) total -= size(msgs[i])
+    start = next
+  }
+  if (start === 0) return msgs
+  const kept = msgs.slice(start)
+  while (kept.length > 1 && kept[0].role === 'tool') kept.shift()
+  return [{ role: 'user', content: '[The earlier part of this conversation was left out to keep it short. What is on the page may have changed since: read it again with your tools before relying on earlier results.]' }, ...kept]
+}
+
 /** Stream one completion from the proxy, calling onText with the growing reply. Handles providers that don't stream. */
 export async function streamChat(messages: ChatMessage[], tools: ToolSpec[], signal: AbortSignal, onText: (t: string) => void, modelId?: string | null): Promise<{ content: string; toolCalls: ToolCall[] }> {
   const res = await aiChatRequest({ messages, tools: tools.length ? tools : undefined, ...(modelId ? { model_id: modelId } : {}) }, signal)
