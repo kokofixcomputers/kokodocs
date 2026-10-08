@@ -378,7 +378,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         </div>
       </header>
 
-      <div className="ed-toolbar-wrap"><Toolbar voice={voice} editor={editor} onImage={(f) => upload(f).then((src) => editor.chain().focus().setImage({ src, width: 360 } as any).run()).catch((e) => toast(e.message))} onHeaderFooter={() => setHf(true)} onPageSetup={() => setSetup(true)} onFind={() => setFindOpen((o) => ({ replace: o?.replace ?? false, n: (o?.n ?? 0) + 1 }))} /></div>
+      <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} editor={editor} onImage={(f) => upload(f).then((src) => editor.chain().focus().setImage({ src, width: 360 } as any).run()).catch((e) => toast(e.message))} onHeaderFooter={() => setHf(true)} onPageSetup={() => setSetup(true)} onFind={() => setFindOpen((o) => ({ replace: o?.replace ?? false, n: (o?.n ?? 0) + 1 }))} /></div>
 
       <div className="ed-body">
         {find && editor && !preview && <FindBar key={find.n} editor={editor} withReplace={find.replace} onClose={() => setFindOpen(null)} />}

@@ -432,3 +432,14 @@ Anyone can turn this on for their own account in Settings, Security. Documents t
 - Sharing trusts the public key the server returns for an email. Compare fingerprints for anything sensitive.
 
 Server tests: `backend/tests/test_zk_server.py` (server on :8000, fresh data). Crypto check: `node --experimental-transform-types frontend/tests/zk-crypto.mts`.
+
+## Scan a page (reading text from a photo)
+
+In a document or wiki, the toolbar's **Scan a page** button lets you choose a photo or scan (or drop one in) and adds the text on it where your cursor is. Undo works like any other edit. Two ways to read it, remembered per browser:
+
+- **On this device** (default): the reader (Tesseract) runs in your browser, so the picture never leaves it and it works offline. English is bundled with the app; other languages (15 are listed) download their data from a CDN the first time. Best for clear printed pages. A phone photo is straightened (EXIF rotation), shrunk to a sensible size and given more contrast before it is read.
+- **AI provider**: sends the picture through the server to one of your Koko models and returns the text, keeping headings, lists and tables as Markdown. Better for handwriting and messy photos. It has to be a model that can see pictures (for example gpt-4o, pixtral or a Llama vision model); if the connection's model is Mistral's OCR model (`mistral-ocr-latest` on api.mistral.ai) its dedicated OCR endpoint is used instead. Nothing is stored on the server. Cloudflare connections can't be used for this.
+
+In an encrypted document the on-device choice just works. The AI provider choice asks first (once per session), since it sends the picture through the server.
+
+The reader's files live in `frontend/public/ocr` (copied from `node_modules` by `npm run build`, git-ignored, about 15 MB on disk). Server test: `backend/tests/test_ocr.py`.

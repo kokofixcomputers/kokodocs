@@ -313,7 +313,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           </div>
         </header>
 
-        {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar voice={voice} extras={<WikiToolbarExtras editor={ed} />} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
+        {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} extras={<WikiToolbarExtras editor={ed} />} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
 
         <div className="wiki-body">
           {navOpen && !preview && <button className="wk-scrim" aria-label="Close contents" onClick={() => setNavOpen(false)} />}

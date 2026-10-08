@@ -20,6 +20,7 @@ from .ai import router as ai_router
 from .aifiles import router as aifiles_router
 from .sso import router as sso_router
 from .zk import router as zk_router
+from .ocr import router as ocr_router
 from .collab import router as collab_router
 from .library import router as library_router
 from .versions import router as versions_router
@@ -79,6 +80,7 @@ app.include_router(ai_router)
 app.include_router(aifiles_router)
 app.include_router(sso_router)
 app.include_router(zk_router)
+app.include_router(ocr_router)
 app.include_router(collab_router)
 
 # Serve the built React app from this same process (run `npm run build` in ../frontend).

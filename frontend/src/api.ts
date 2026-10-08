@@ -307,6 +307,11 @@ export const api = {
     fd.append('file', wav, 'speech.wav')
     return (await request<{ text: string }>(`/api/docs/${id}/transcribe/draft`, { method: 'POST', body: fd, signal }, id)).text
   },
+  /** Read the text in a photo with the chosen AI model (it has to be one that can see pictures). */
+  ocr: async (file: Blob, modelId?: string) => {
+    const fd = new FormData(); fd.append('file', file, 'page.jpg'); if (modelId) fd.append('model_id', modelId)
+    return (await request<{ text: string }>('/api/ocr', { method: 'POST', body: fd })).text
+  },
   proofread: (docId: string, blocks: { id: number; text: string }[], language?: string) =>
     docKeyOf(docId) ? Promise.resolve({ issues: [] as ProofIssue[] }) : request<{ issues: ProofIssue[] }>(`/api/docs/${docId}/proofread`, { method: 'POST', ...json({ blocks, ...(language ? { language } : {}) }) }, docId),   // an encrypted document's text never goes to the server
 }

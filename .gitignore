@@ -6,6 +6,7 @@ __pycache__/
 
 # generated or local
 frontend/public/twemoji/
+frontend/public/ocr/
 frontend/src/generated/
 *.tar.gz
 .DS_Store
