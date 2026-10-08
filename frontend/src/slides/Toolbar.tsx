@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
+import { elFont } from './SlideView'
 import {
   AlignCenter, AlignLeft, AlignRight, ArrowRight, Bold, BringToFront, ChevronDown, Circle, Copy, Image as ImageIcon, Italic, List, Minus, PaintBucket,
   Palette, Redo2, SendToBack, Square, SquareRoundCorner, Trash2, Triangle, Type, Underline, Undo2, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
@@ -36,6 +37,8 @@ export function SlidesToolbar({ model, slides, slide, theme, sel, setSel, setEdi
   const first: El | undefined = picked[0]
   const has = picked.length > 0
   const texty = picked.filter((e) => e.type === 'text' || e.type === 'shape')
+  const shownFont = first ? elFont(first, theme) : theme.body   // the font actually in use, whether picked or inherited from the theme
+  useEffect(() => { loadFont(shownFont) }, [shownFont])
   const apply = (patch: Partial<El>, only?: El[]) => { const t = only ?? picked; if (t.length) model.updateMany(slide.id, Object.fromEntries(t.map((e) => [e.id, patch]))) }
   const size = first?.size ?? 28
 
@@ -84,8 +87,8 @@ export function SlidesToolbar({ model, slides, slide, theme, sel, setSel, setEdi
         </div>
 
         <div className={`tb-group ${texty.length ? '' : 'dim'}`}>
-          <Popover className="pop-font" trigger={({ toggle }) => <button className="tb-select" style={{ width: 138 }} onMouseDown={(e) => e.preventDefault()} onClick={toggle} disabled={!texty.length} aria-label="Font"><span className="trunc" style={{ fontFamily: first?.font && first.font !== 'auto' ? fontStack(first.font) : undefined }}>{first?.font && first.font !== 'auto' ? first.font : 'Theme font'}</span><ChevronDown size={15} /></button>}>
-            {(close) => <FontPicker value={first?.font && first.font !== 'auto' ? first.font : ''} resetLabel="Use the theme's font" onReset={() => { close(); apply({ font: undefined }, texty) }} onPick={(f) => { close(); loadFont(f); apply({ font: f }, texty) }} />}
+          <Popover className="pop-font" trigger={({ toggle }) => <button className="tb-select" style={{ width: 138 }} onMouseDown={(e) => e.preventDefault()} onClick={toggle} disabled={!texty.length} aria-label="Font"><span className="trunc" style={{ fontFamily: fontStack(shownFont) }}>{shownFont}</span><ChevronDown size={15} /></button>}>
+            {(close) => <FontPicker value={shownFont} resetLabel="Use the theme's font" onReset={() => { close(); apply({ font: undefined }, texty) }} onPick={(f) => { close(); loadFont(f); apply({ font: f }, texty) }} />}
           </Popover>
           <div className="size-box">
             <button disabled={!texty.length} onMouseDown={(e) => e.preventDefault()} onClick={() => apply({ size: Math.max(8, size - 2) }, texty)} aria-label="Smaller">−</button>
