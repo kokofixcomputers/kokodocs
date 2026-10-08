@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Copy, HardDrive, ExternalLink, FileText, Download, KeyRound, Search, ShieldCheck, ShieldOff, Table2, Trash2, UserX, UserCheck } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
 import { api, ApiError, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
@@ -16,25 +16,17 @@ const bytes = (n: number) => (n > 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n > 1e6 ?
 function UsersTab({ onFiles }: { onFiles: (u: AdminUser) => void }) {
   const { user } = useAuth()
   const [users, setUsers] = useState<AdminUser[] | null>(null)
-  const [stats, setStats] = useState<AdminStats | null>(null)
   const [q, setQ] = useState('')
   const [err, setErr] = useState('')
 
-  const load = () => { api.adminUsers().then(setUsers).catch((e) => setErr(e.message)); api.adminStats().then(setStats).catch(() => {}) }
+  const load = () => { api.adminUsers().then(setUsers).catch((e) => setErr(e.message)) }
   useEffect(load, [])
   const shown = useMemo(() => (users ?? []).filter((u) => (u.name + ' ' + u.email).toLowerCase().includes(q.toLowerCase())), [users, q])
   const act = async (f: () => Promise<unknown>, ok: string) => { try { await f(); toast(ok); load() } catch (e) { toast((e as Error).message) } }
 
   return (
     <>
-        {stats && (
-          <div className="admin-stats">
-            {([['Users', stats.users], ['Documents', stats.documents], ['Spreadsheets', stats.spreadsheets], ['In recycle bin', stats.trashed], ['Comments', stats.comments], ['Versions', stats.versions], ['Uploads', bytes(stats.upload_bytes)]] as const).map(([l, v]) => (
-              <div key={l} className="stat"><b>{v}</b><span>{l}</span></div>
-            ))}
-          </div>
-        )}
-        <div className="dash-bar"><h2>Users</h2><label className="field admin-search"><Search size={16} /><input placeholder="Search by name or email" value={q} onChange={(e) => setQ(e.target.value)} /></label></div>
+        <div className="dash-bar"><label className="field admin-search"><Search size={16} /><input placeholder="Search by name or email" value={q} onChange={(e) => setQ(e.target.value)} /></label></div>
         {err && <p className="form-error">{err}</p>}
         {!users ? <span className="spinner" /> : (
           <div className="admin-table">
@@ -319,35 +311,49 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   )
 }
 
-function SettingsTab() {
+function useAdminSettings() {
   const [s, setS] = useState<AdminSettings | null>(null)
-  const [cid, setCid] = useState('')
-  const [secret, setSecret] = useState('')
-  const [url, setUrl] = useState('')
-  const [quotaText, setQuotaText] = useState('')
+  useEffect(() => { api.adminSettings().then(setS).catch((e) => toast(e.message)) }, [])
+  return [s, setS] as const
+}
+
+function AccessSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
+  const [quotaText, setQuotaText] = useState(String(s.default_quota_mb))
   const [busy, setBusy] = useState(false)
-  useEffect(() => { api.adminSettings().then((x) => { setS(x); setCid(x.google_client_id); setUrl(x.public_url); setQuotaText(String(x.default_quota_mb)) }).catch((e) => toast(e.message)) }, [])
-  if (!s) return <span className="spinner" />
   const save = async (b: Parameters<typeof api.adminSaveSettings>[0], msg = 'Saved') => {
     setBusy(true)
-    try { const x = await api.adminSaveSettings(b); setS(x); setSecret(''); toast(msg) } catch (e) { toast((e as Error).message) } finally { setBusy(false) }
+    try { apply(await api.adminSaveSettings(b)); toast(msg) } catch (e) { toast((e as Error).message) } finally { setBusy(false) }
   }
   return (
-    <div className="admin-settings">
-      <div className="switch-row">
-        <div><b>Allow new sign-ups</b><span>When off, nobody can create an account (including through Google). Existing users can still sign in.</span></div>
-        <button role="switch" aria-checked={s.signup_enabled} aria-label="Allow sign-ups" className={`toggle ${s.signup_enabled ? 'on' : ''}`} onClick={() => save({ signup_enabled: !s.signup_enabled }, s.signup_enabled ? 'Sign-ups closed' : 'Sign-ups open')} />
+    <div className="ad-stack">
+      <div className="ad-card">
+        <div className="switch-row">
+          <div><b>Allow new sign-ups</b><span>When off, nobody can create an account (including through Google). Existing users can still sign in.</span></div>
+          <button role="switch" aria-checked={s.signup_enabled} aria-label="Allow sign-ups" className={`toggle ${s.signup_enabled ? 'on' : ''}`} onClick={() => save({ signup_enabled: !s.signup_enabled }, s.signup_enabled ? 'Sign-ups closed' : 'Sign-ups open')} />
+        </div>
       </div>
-      <label className="ai-field"><span>Default storage per user (MB, 0 = unlimited)</span>
-        <span className="ps-row" style={{ alignItems: 'center' }}><span className="field" style={{ width: 140 }}><input inputMode="numeric" value={quotaText} onChange={(e) => setQuotaText(e.target.value)} /></span>
-          <button className="btn btn-pill btn-soft btn-sm" disabled={busy || !/^\d+$/.test(quotaText.trim()) || Number(quotaText) === s.default_quota_mb} onClick={() => save({ default_quota_mb: Number(quotaText) }, 'Default storage limit saved')}>Save</button></span>
-        <span className="muted hint">Counts documents, spreadsheets, version history, uploaded images and files people attach to forms. Individual users can be given their own limit in the Users tab.</span></label>
-      <EmailSettings s={s} apply={setS} />
-      <VoiceSettings s={s} apply={setS} />
-      <div>
-        <h3 style={{ margin: '8px 0 4px' }}>Sign in with Google</h3>
-        <p className="muted hint" style={{ marginTop: 0 }}>Create an OAuth client (type: Web application) in Google Cloud Console, add the redirect URI below, then paste the client ID and secret here.</p>
+      <div className="ad-card">
+        <label className="ai-field"><span>Default storage per user (MB, 0 = unlimited)</span>
+          <span className="ps-row" style={{ alignItems: 'center' }}><span className="field" style={{ width: 140 }}><input inputMode="numeric" value={quotaText} onChange={(e) => setQuotaText(e.target.value)} /></span>
+            <button className="btn btn-pill btn-soft btn-sm" disabled={busy || !/^\d+$/.test(quotaText.trim()) || Number(quotaText) === s.default_quota_mb} onClick={() => save({ default_quota_mb: Number(quotaText) }, 'Default storage limit saved')}>Save</button></span>
+          <span className="muted hint">Counts documents, spreadsheets, version history, uploaded images and files people attach to forms. Individual users can be given their own limit under Users.</span></label>
       </div>
+    </div>
+  )
+}
+
+function GoogleSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
+  const [cid, setCid] = useState(s.google_client_id)
+  const [secret, setSecret] = useState('')
+  const [url, setUrl] = useState(s.public_url)
+  const [busy, setBusy] = useState(false)
+  const save = async (b: Parameters<typeof api.adminSaveSettings>[0], msg = 'Saved') => {
+    setBusy(true)
+    try { apply(await api.adminSaveSettings(b)); setSecret(''); toast(msg) } catch (e) { toast((e as Error).message) } finally { setBusy(false) }
+  }
+  return (
+    <div className="ad-card ad-form">
+      <p className="muted hint" style={{ marginTop: 0 }}>Create an OAuth client (type: Web application) in Google Cloud Console, add the redirect URI below, then paste the client ID and secret here.</p>
       <label className="ai-field"><span>Authorized redirect URI</span>
         <span className="sec-secret"><span style={{ flex: 1 }}>{s.redirect_uri}</span><button className="icon-btn sm" aria-label="Copy" onClick={() => { void navigator.clipboard.writeText(s.redirect_uri); toast('Copied') }}><Copy size={15} /></button></span></label>
       <label className="ai-field"><span>Public URL (only if the address above is wrong behind your proxy)</span>
@@ -362,23 +368,84 @@ function SettingsTab() {
   )
 }
 
+function Overview({ s, go }: { s: AdminSettings | null; go: (id: AdminSection) => void }) {
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  useEffect(() => { api.adminStats().then(setStats).catch(() => {}) }, [])
+  const stt = s?.stt
+  const rows: { id: AdminSection; label: string; value: string; ok: boolean }[] = s ? [
+    { id: 'access', label: 'Sign-ups', value: s.signup_enabled ? 'Open' : 'Closed', ok: s.signup_enabled },
+    { id: 'access', label: 'Default storage', value: s.default_quota_mb ? `${s.default_quota_mb} MB per user` : 'Unlimited', ok: true },
+    { id: 'email', label: 'Email', value: s.email_active ? 'Active' : 'Off', ok: s.email_active },
+    { id: 'google', label: 'Google sign-in', value: s.google_client_id ? 'Configured' : 'Not set up', ok: !!s.google_client_id },
+    { id: 'voice', label: 'Voice typing', value: stt?.active.available ? `${stt.active.provider}, ${stt.active.model}` : 'Off', ok: !!stt?.active.available },
+    { id: 'voice', label: 'Live preview', value: stt?.draft && stt.draft_model ? `On (${stt.draft_model})` : 'Off', ok: !!(stt?.draft && stt.draft_model) },
+  ] : []
+  return (
+    <div className="ad-stack">
+      {stats ? (
+        <div className="ad-stats">
+          {([['Users', stats.users], ['Documents', stats.documents], ['Spreadsheets', stats.spreadsheets], ['In recycle bin', stats.trashed], ['Comments', stats.comments], ['Versions', stats.versions], ['Uploads', bytes(stats.upload_bytes)]] as const).map(([l, v]) => (
+            <div key={l} className="ad-stat"><b>{v}</b><span>{l}</span></div>))}
+        </div>) : <span className="spinner" />}
+      <div className="ad-card ad-status">
+        <h3>Server status</h3>
+        {rows.map((r, i) => (
+          <button key={i} className="ad-status-row" onClick={() => go(r.id)}><span>{r.label}</span><b><i className={r.ok ? 'on' : ''} />{r.value}</b><ChevronRight size={16} /></button>))}
+        {!s && <span className="spinner" />}
+      </div>
+    </div>
+  )
+}
+
+type AdminSection = 'overview' | 'users' | 'files' | 'access' | 'email' | 'google' | 'voice'
+const SECTIONS: { id: AdminSection; label: string; icon: React.ReactNode; group: string; blurb: string }[] = [
+  { id: 'overview', label: 'Overview', icon: <LayoutDashboard size={17} />, group: 'Manage', blurb: 'How much is on this server, and how it is set up.' },
+  { id: 'users', label: 'Users', icon: <Users size={17} />, group: 'Manage', blurb: 'Accounts, storage limits, admins and two-factor resets.' },
+  { id: 'files', label: 'Files', icon: <Files size={17} />, group: 'Manage', blurb: 'Every document on the server. Open, download or delete.' },
+  { id: 'access', label: 'Access & storage', icon: <SlidersHorizontal size={17} />, group: 'Configure', blurb: 'Who can sign up, and how much room each person gets.' },
+  { id: 'email', label: 'Email', icon: <Mail size={17} />, group: 'Configure', blurb: 'Confirmation codes, password resets and mention emails.' },
+  { id: 'google', label: 'Google sign-in', icon: <KeyRound size={17} />, group: 'Configure', blurb: 'Let people sign in with their Google account.' },
+  { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'Configure', blurb: 'The speech provider, live preview, and models kept on this server.' },
+]
+const fromHash = (): AdminSection => { const h = location.hash.slice(1) as AdminSection; return SECTIONS.some((x) => x.id === h) ? h : 'overview' }
+
 export function AdminPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<'users' | 'files' | 'settings'>('users')
+  const [sec, setSec] = useState<AdminSection>(fromHash)
+  const [mobileList, setMobileList] = useState(() => !location.hash)
   const [owner, setOwner] = useState<AdminUser | null>(null)
+  const [s, setS] = useAdminSettings()
+  useEffect(() => { const f = () => { setSec(fromHash()); setMobileList(!location.hash) }; window.addEventListener('hashchange', f); return () => window.removeEventListener('hashchange', f) }, [])
   if (!user?.is_admin) return <div className="splash"><p>Admins only.</p><Link to="/" className="btn btn-pill btn-ghost">Back to documents</Link></div>
+  const open = (id: AdminSection) => { history.replaceState(null, '', `#${id}`); setSec(id); setMobileList(false); if (id !== 'files') setOwner(null) }
+  const cur = SECTIONS.find((x) => x.id === sec)!
+  const groups = [...new Set(SECTIONS.map((x) => x.group))]
+  const settingsBody = (render: (s: AdminSettings) => React.ReactNode) => (s ? render(s) : <span className="spinner" />)
 
   return (
-    <div className="dash admin">
-      <header className="dash-top">
-        <div className="brand"><Logo size={30} /><span>KokoDocs admin</span></div>
-        <div className="dash-actions"><Link to="/" className="btn btn-pill btn-ghost"><ArrowLeft size={16} />Documents</Link></div>
-      </header>
-      <main className="dash-main">
-        <div className="tabs-pill">{(['users', 'files', 'settings'] as const).map((t) => <button key={t} className={tab === t ? 'on' : ''} onClick={() => { setTab(t); if (t !== 'files') setOwner(null) }}>{t === 'users' ? 'Users' : t === 'files' ? 'Files' : 'Settings'}</button>)}</div>
-        {tab === 'users' && <UsersTab onFiles={(u) => { setOwner(u); setTab('files') }} />}
-        {tab === 'files' && <FilesTab owner={owner} clearOwner={() => setOwner(null)} />}
-        {tab === 'settings' && <SettingsTab />}
+    <div className={`ad-shell ${mobileList ? 'list' : 'detail'}`}>
+      <nav className="ad-side" aria-label="Admin sections">
+        <div className="ad-brand"><Logo size={30} /><div><b>KokoDocs</b><span className="ad-badge">Admin</span></div></div>
+        <Link to="/" className="ad-back"><ArrowLeft size={16} />Back to documents</Link>
+        {groups.map((g) => (
+          <div key={g} className="ad-group"><h3>{g}</h3>
+            {SECTIONS.filter((x) => x.group === g).map((x) => (
+              <button key={x.id} className={`ad-nav ${sec === x.id ? 'on' : ''}`} aria-current={sec === x.id ? 'page' : undefined} onClick={() => open(x.id)}>{x.icon}<span>{x.label}</span></button>))}
+          </div>))}
+        <div className="ad-me"><Avatar name={user.name} color={user.color} size={30} /><div><b>{user.name}</b><span>{user.email}</span></div></div>
+      </nav>
+      <main className="ad-main">
+        <div className="ad-main-inner">
+          <button className="ad-mback" onClick={() => setMobileList(true)}><ChevronLeft size={18} />Admin</button>
+          <header className="ad-head"><h1>{cur.label}</h1><p>{cur.blurb}</p></header>
+          {sec === 'overview' && <Overview s={s} go={open} />}
+          {sec === 'users' && <UsersTab onFiles={(u) => { setOwner(u); history.replaceState(null, '', '#files'); setSec('files') }} />}
+          {sec === 'files' && <FilesTab owner={owner} clearOwner={() => setOwner(null)} />}
+          {sec === 'access' && settingsBody((x) => <AccessSection s={x} apply={setS} />)}
+          {sec === 'email' && settingsBody((x) => <div className="ad-card ad-form"><EmailSettings s={x} apply={setS} /></div>)}
+          {sec === 'google' && settingsBody((x) => <GoogleSection s={x} apply={setS} />)}
+          {sec === 'voice' && settingsBody((x) => <div className="ad-card ad-form"><VoiceSettings s={x} apply={setS} /></div>)}
+        </div>
       </main>
     </div>
   )

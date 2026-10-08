@@ -503,3 +503,33 @@ a.brand { color: var(--ink); text-decoration: none; }
   .dash-top .field.search { order: 3; flex: 1 1 100%; max-width: none; min-width: 0; width: 100%; }
   .dash-top .field.search input { min-width: 0; width: 100%; text-overflow: ellipsis; }
 }
+
+/* ---- admin: a page of its own with a sidebar, like Settings in spirit but easy to tell apart: a dark rail, squarer items, an accent bar on the current one ---- */
+.ad-shell { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; background: var(--bg); }
+.ad-side { position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; box-sizing: border-box; padding: 20px 14px 16px; display: flex; flex-direction: column; gap: 4px; background: #121216; color: #c9c9d1; }
+:root[data-theme='dark'] .ad-side { background: #0f0f0f; border-right: 1px solid var(--line); }
+.ad-brand { display: flex; align-items: center; gap: 12px; padding: 2px 8px 10px; } .ad-brand b { display: block; font: 500 17px 'Lexend', sans-serif; color: #fff; line-height: 1.15; }
+.ad-badge { display: inline-block; margin-top: 3px; padding: 1px 7px; border-radius: 4px; background: #6366f1; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.ad-back { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 9px 10px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .12); color: #d4d4dc; font-size: 13.5px; text-decoration: none; } .ad-back:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.ad-group { display: flex; flex-direction: column; gap: 2px; padding: 8px 0 4px; } .ad-group h3 { margin: 4px 12px 6px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: #70707c; }
+.ad-nav { position: relative; display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px; background: none; color: #b4b4bf; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.ad-nav:hover { background: rgba(255, 255, 255, .07); color: #fff; } .ad-nav.on { background: rgba(255, 255, 255, .12); color: #fff; font-weight: 600; }
+.ad-nav.on::before { content: ''; position: absolute; left: -14px; top: 9px; bottom: 9px; width: 4px; border-radius: 0 4px 4px 0; background: #818cf8; }
+.ad-me { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 14px 8px 2px; border-top: 1px solid rgba(255, 255, 255, .1); min-width: 0; } .ad-me > div { display: flex; flex-direction: column; min-width: 0; } .ad-me b, .ad-me span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: #e4e4ea; } .ad-me span { font-size: 11.5px; color: #80808c; }
+.ad-main { min-width: 0; } .ad-main-inner { max-width: 980px; margin: 0 auto; padding: 44px 48px 90px; box-sizing: border-box; }
+.ad-head { margin-bottom: 26px; } .ad-head h1 { margin: 0; font-size: 28px; } .ad-head p { margin: 6px 0 0; color: var(--muted); font-size: 14.5px; }
+.ad-mback { display: none; align-items: center; gap: 4px; border: 0; background: none; color: var(--ink); font: inherit; font-weight: 600; padding: 0 0 12px; cursor: pointer; }
+.ad-stack { display: grid; gap: 18px; } .ad-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px 22px; box-shadow: var(--shadow-1); min-width: 0; } .ad-form { display: grid; gap: 14px; } .ad-form .field input { width: 100%; }
+.ad-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.ad-stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; box-shadow: var(--shadow-1); } .ad-stat b { font: 600 26px 'Lexend', sans-serif; letter-spacing: -.01em; } .ad-stat span { color: var(--muted); font-size: 13px; }
+.ad-status h3 { margin: 0 0 8px; font-size: 15px; }
+.ad-status-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 4px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; border-radius: 0; } .ad-status-row:hover { background: var(--hover); }
+.ad-status-row > span { flex: 1; color: var(--muted); font-size: 14px; } .ad-status-row b { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; } .ad-status-row b i { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); } .ad-status-row b i.on { background: #22c55e; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 22%, transparent); } .ad-status-row svg { color: var(--faint); }
+@media (max-width: 800px) {
+  .ad-shell { display: block; }
+  .ad-side { position: static; height: auto; min-height: 100dvh; padding: 18px 16px 24px; } .ad-nav { padding: 13px 12px; font-size: 15px; } .ad-nav.on::before { display: none; }
+  .ad-shell.detail .ad-side { display: none; } .ad-shell.list .ad-main { display: none; }
+  .ad-main-inner { padding: 16px 16px 70px; } .ad-mback { display: flex; } .ad-head h1 { font-size: 24px; }
+}
+.ad-card .switch-row { border: 0; padding: 0; }
+.ad-brand > :first-child { flex: none; border-radius: 9px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .22); }
