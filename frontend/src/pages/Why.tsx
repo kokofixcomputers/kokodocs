@@ -12,16 +12,17 @@ const REASONS = [
   { icon: KeyRound, title: 'Grown-up account security', text: 'Two-factor sign-in with recovery codes, Google sign-in, email confirmation, rate limits and an admin panel for people, files and quotas.' },
 ]
 
-const ROWS: [string, string, string][] = [
-  ['Where your files live', 'On your server', 'On the provider’s cloud'],
-  ['Cost', 'Free software, you pay for the machine', 'Per person, per month, by tier'],
-  ['AI assistant', 'Any OpenAI-compatible model you choose, optional, asks before it edits', 'The provider’s model, usually on a higher tier'],
-  ['Spelling and grammar', 'Built in and offline, eight English variants', 'Cloud checking'],
-  ['Documents, sheets, slides, forms', 'All five, including wikis, in one app', 'Often separate products'],
-  ['API and developer docs', 'Wiki pages with request blocks readers can send', 'Not included'],
-  ['Offline edits', 'Merged cleanly when you reconnect, with a notice', 'Varies'],
-  ['Your formats', 'Word, Excel, PowerPoint, Markdown, HTML, CSV and PDF in and out', 'Varies'],
-  ['Customising it', 'It is your server and your code', 'Not possible'],
+const ROWS: [string, string, string, string][] = [
+  ['Where your files live', 'On your server', 'Google’s cloud', 'The provider’s cloud'],
+  ['Cost', 'Free software, you pay for the machine', 'Free with a Google account (storage is shared with Gmail and Photos); paid Workspace plans per person', 'Per person, per month, by tier'],
+  ['AI assistant', 'Any OpenAI-compatible model you choose, optional, asks before it edits', 'Gemini, Google’s own model; the fuller features need a paid plan', 'The provider’s model, usually on a higher tier'],
+  ['Spelling and grammar', 'Built in and offline, eight English variants', 'Built in, runs in Google’s cloud, many languages', 'Cloud checking'],
+  ['Documents, sheets, slides, forms', 'All five, including wikis, in one app', 'Separate apps (Docs, Sheets, Slides, Forms) that share Drive', 'Often separate products'],
+  ['Voice typing', 'Your pick: Groq, Mistral, OpenAI, any compatible server, or local on your own machine', 'Built in, in Chrome only', 'Varies'],
+  ['API and developer docs', 'Wiki pages with request blocks readers can send', 'No request blocks; Google Sites for simple pages', 'Not included'],
+  ['Offline edits', 'Merged cleanly when you reconnect, with a notice', 'Offline mode in Chrome, which you turn on first', 'Varies'],
+  ['Your formats', 'Word, Excel, PowerPoint, Markdown, HTML, CSV and PDF in and out', 'Word, PDF, Markdown, HTML, text and more out; Office files in and out', 'Varies'],
+  ['Customising it', 'It is your server and your code', 'Not possible', 'Not possible'],
 ]
 
 export function Why() {
@@ -41,11 +42,11 @@ export function Why() {
       </section>
 
       <section className="mk-sec">
-        <div className="mk-head"><span className="mk-eyebrow">Side by side</span><h2>KokoDocs and a typical hosted suite</h2><p className="lead">A general comparison, not a claim about any one product.</p></div>
+        <div className="mk-head"><span className="mk-eyebrow">Side by side</span><h2>KokoDocs, Google Docs and a typical hosted suite</h2><p className="lead">The Google Docs column describes its public features at the time of writing and changes as Google updates it, so check Google for the latest. “Typical hosted suite” is a generalisation, not a claim about any one product.</p></div>
         <div className="mk-table" role="table" aria-label="Comparison">
-          <div className="mk-tr head" role="row"><span role="columnheader" /><span role="columnheader">KokoDocs</span><span role="columnheader">Typical hosted suite</span></div>
-          {ROWS.map(([k, a, b]) => (
-            <div className="mk-tr" role="row" key={k}><span role="rowheader">{k}</span><span role="cell"><Check size={15} />{a}</span><span role="cell" className="dim"><Minus size={15} />{b}</span></div>
+          <div className="mk-tr head" role="row"><span role="columnheader" /><span role="columnheader">KokoDocs</span><span role="columnheader">Google Docs</span><span role="columnheader">Typical hosted suite</span></div>
+          {ROWS.map(([k, a, g, b]) => (
+            <div className="mk-tr" role="row" key={k}><span role="rowheader">{k}</span><span role="cell" data-col="KokoDocs"><Check size={15} />{a}</span><span role="cell" className="dim" data-col="Google Docs"><Minus size={15} />{g}</span><span role="cell" className="dim" data-col="Typical hosted suite"><Minus size={15} />{b}</span></div>
           ))}
         </div>
       </section>

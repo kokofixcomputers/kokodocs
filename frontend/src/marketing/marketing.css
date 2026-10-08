@@ -53,7 +53,7 @@ main { display: block; }
 
 .mk-reasons { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
 .mk-table { border: 1px solid var(--line); border-radius: 22px; overflow: hidden; background: var(--surface); }
-.mk-tr { display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(0, 2fr) minmax(0, 2fr); gap: 16px; padding: 16px 22px; border-top: 1px solid var(--line); align-items: start; font-size: 14.5px; line-height: 1.45; } .mk-tr.head { border-top: 0; background: var(--accent-soft); font-weight: 700; }
+.mk-tr { display: grid; grid-template-columns: minmax(130px, 1fr) repeat(3, minmax(0, 1.6fr)); gap: 16px; padding: 16px 22px; border-top: 1px solid var(--line); align-items: start; font-size: 14.5px; line-height: 1.45; } .mk-tr.head { border-top: 0; background: var(--accent-soft); font-weight: 700; }
 .mk-tr [role='rowheader'] { font-weight: 600; } .mk-tr [role='cell'] { display: flex; gap: 8px; align-items: flex-start; } .mk-tr [role='cell'] svg { flex: none; margin-top: 2px; } .mk-tr .dim { color: var(--muted); }
 .mk-why-phones { display: flex; justify-content: center; gap: 18px; align-items: flex-start; } .mk-why-phones .phone { max-width: 230px; margin: 0; } .phone-pair { margin-top: 56px; }
 .mk-note { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: clamp(20px, 4vw, 50px); align-items: center; }
@@ -113,3 +113,5 @@ main { display: block; }
 .mic-bars span { width: 4px; height: 6px; border-radius: 4px; background: var(--accent); opacity: .85; transition: height .06s linear; }
 .mic-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; } .mic-msg { font-size: 13.5px; color: var(--muted); } .mic-msg.ok { color: var(--ok); font-weight: 600; }
 .mk-gif .win-body { background: var(--canvas); } .mk-gif img { image-rendering: auto; }
+
+@media (max-width: 900px) { .mk-tr [role='cell']::before { content: attr(data-col) ': '; font-weight: 600; color: var(--ink); white-space: nowrap; } .mk-tr [role='cell'] { display: block; } .mk-tr [role='cell'] svg { display: none; } }
