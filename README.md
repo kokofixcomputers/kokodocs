@@ -363,3 +363,7 @@ When voice typing is set up on the server, the assistant's message box has a mic
 - Columns are nearly full width and snap into place, so a swipe lands on exactly one column.
 - Press and hold a card (or right-click on a computer) for a menu: move it to any column, open it, or delete it. No dragging needed.
 - Dragging by the grip still works, now with a bigger grip and faster edge scrolling; cards and buttons have larger touch targets.
+
+## Checking text fields in a board
+
+A text field can set the fewest and most characters it accepts, and a format it must follow: email address, phone number, digits only, letters only, letters and numbers, or your own pattern (a regular expression the whole text must match). You can add a message to show when the text doesn't fit. The card dialog, the table and the "to fix" warnings on cards all use the same rules, and Koko follows them when it fills in cards (`add_field` and `edit_field` take `min`, `max`, `format`, `pattern` and `message`). A pattern that isn't a valid regular expression is ignored, so it can't lock everyone out. Empty values are only a problem when the field is required.

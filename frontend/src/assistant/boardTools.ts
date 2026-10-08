@@ -1,4 +1,4 @@
-import { COLORS, TYPE_LABEL, isEmpty, problem, uid, type BoardModel, type FieldDef, type FieldType, type Value } from '../board/model'
+import { COLORS, FORMATS, TYPE_LABEL, customRegex, isEmpty, problem, uid, type BoardModel, type FieldDef, type FieldType, type TextFormat, type Value } from '../board/model'
 import { type Adapter, type Tool, MAX_RESULT_CHARS, clip, tool } from './adapter'
 
 export interface BoardDeps {
@@ -10,6 +10,17 @@ export interface BoardDeps {
 
 type F = { id: string } & FieldDef
 const FIELD_TYPES = Object.keys(TYPE_LABEL) as FieldType[]
+
+/** Text-validation settings from a tool call (format, pattern, message), or an error if they don't make sense. */
+function textRules(a: any, type: string): Partial<FieldDef> {
+  const out: Partial<FieldDef> = {}
+  if (a.format === undefined && a.pattern === undefined && a.message === undefined) return out
+  if (type !== 'text') throw new Error('Format, pattern and message only apply to text fields.')
+  if (a.format !== undefined) out.format = a.format === 'none' || a.format === '' ? undefined : (a.format as TextFormat)
+  if (a.pattern !== undefined) { if (a.pattern && !customRegex(String(a.pattern))) throw new Error('That pattern is not a valid regular expression.'); out.pattern = String(a.pattern) || undefined }
+  if (a.message !== undefined) out.message = String(a.message) || undefined
+  return out
+}
 const same = (a: string, b: unknown) => a.trim().toLowerCase() === String(b ?? '').trim().toLowerCase()
 
 export function createBoardAdapter(d: BoardDeps): Adapter {
@@ -63,7 +74,7 @@ export function createBoardAdapter(d: BoardDeps): Adapter {
     label: () => 'Reading the board',
     run: () => {
       const fields = m.fieldList(), cols = m.columns()
-      const out = [`Board: ${d.getTitle() || '(untitled)'}`, `Fields: ${fields.length ? fields.map((f) => `${f.name} (${TYPE_LABEL[f.type].toLowerCase()}${f.required ? ', required' : ''}${f.options ? `: ${f.options.map((o) => o.label).join(' | ')}` : ''}${f.min !== undefined || f.max !== undefined ? `, ${f.min ?? '…'} to ${f.max ?? '…'}` : ''})`).join('; ') : '(none yet)'}`, '']
+      const out = [`Board: ${d.getTitle() || '(untitled)'}`, `Fields: ${fields.length ? fields.map((f) => `${f.name} (${TYPE_LABEL[f.type].toLowerCase()}${f.required ? ', required' : ''}${f.options ? `: ${f.options.map((o) => o.label).join(' | ')}` : ''}${f.min !== undefined || f.max !== undefined ? `, ${f.min ?? '…'} to ${f.max ?? '…'}${f.type === 'text' ? ' characters' : ''}` : ''}${f.format ? `, must be ${f.format === 'custom' ? `pattern ${f.pattern}` : FORMATS.find((x) => x.id === f.format)?.label.toLowerCase()}` : ''})`).join('; ') : '(none yet)'}`, '']
       for (const c of cols) {
         const list = m.cardsIn(c.id)
         out.push(`## ${c.name} (${list.length})`)
@@ -127,7 +138,7 @@ export function createBoardAdapter(d: BoardDeps): Adapter {
       m.removeCol(c.id, to.id); return `Deleted. Its cards went to ${to.name}.`
     },
   })
-  const fieldProps = { type: { type: 'string', enum: FIELD_TYPES }, required: { type: 'boolean' }, options: { type: 'array', items: { type: 'string' }, description: 'The choices (single and multi select)' }, min: { type: 'string', description: 'Smallest number or earliest date' }, max: { type: 'string' }, show_on_card: { type: 'boolean' } }
+  const fieldProps = { type: { type: 'string', enum: FIELD_TYPES }, required: { type: 'boolean' }, options: { type: 'array', items: { type: 'string' }, description: 'The choices (single and multi select)' }, min: { type: 'string', description: 'Smallest number, earliest date, or (text) fewest characters' }, max: { type: 'string', description: 'Largest number, latest date, or (text) most characters' }, format: { type: 'string', enum: ['none', ...FORMATS.map((f) => f.id)], description: 'Text fields only: what the text must look like. none removes it.' }, pattern: { type: 'string', description: 'Text fields with format custom: a regular expression the whole text must match' }, message: { type: 'string', description: 'Text fields: what to tell people when the text does not fit' }, show_on_card: { type: 'boolean' } }
   const addField: Tool = tool('add_field', 'Add a custom field to every card. Types: ' + FIELD_TYPES.join(', ') + '.', { name: { type: 'string' }, ...fieldProps }, ['name', 'type'], {
     edit: true, describe: (a) => ({ title: `Add field “${a.name}” (${String(a.type)})`, detail: Array.isArray(a.options) ? `Options: ${a.options.join(', ')}` : a.required ? 'Required' : undefined }),
     run: (a) => {
@@ -136,9 +147,10 @@ export function createBoardAdapter(d: BoardDeps): Adapter {
       const id = m.addField(a.type); const patch: Partial<FieldDef> = { name: String(a.name).trim() }
       if (a.type === 'single' || a.type === 'multi') { const opts = (Array.isArray(a.options) ? a.options : ['Option 1', 'Option 2']).map(String).filter(Boolean); patch.options = opts.map((label: string, i: number) => ({ id: uid(), label, color: COLORS[i % COLORS.length] })) }
       if (a.required) patch.required = true
-      if (a.min !== undefined && a.min !== '') patch.min = a.type === 'number' ? Number(a.min) : String(a.min)
-      if (a.max !== undefined && a.max !== '') patch.max = a.type === 'number' ? Number(a.max) : String(a.max)
+      if (a.min !== undefined && a.min !== '') patch.min = a.type === 'number' || a.type === 'text' ? Number(a.min) : String(a.min)
+      if (a.max !== undefined && a.max !== '') patch.max = a.type === 'number' || a.type === 'text' ? Number(a.max) : String(a.max)
       if (a.show_on_card === false) patch.hidden = true
+      Object.assign(patch, textRules(a, a.type))
       m.updateField(id, patch); return 'Added.'
     },
   })
@@ -149,13 +161,14 @@ export function createBoardAdapter(d: BoardDeps): Adapter {
       if (a.name !== undefined) patch.name = String(a.name).trim() || f.name
       if (a.required !== undefined) patch.required = !!a.required
       if (a.show_on_card !== undefined) patch.hidden = !a.show_on_card
-      if (a.min !== undefined) patch.min = a.min === '' ? undefined : f.type === 'number' ? Number(a.min) : String(a.min)
-      if (a.max !== undefined) patch.max = a.max === '' ? undefined : f.type === 'number' ? Number(a.max) : String(a.max)
+      if (a.min !== undefined) patch.min = a.min === '' ? undefined : f.type === 'number' || f.type === 'text' ? Number(a.min) : String(a.min)
+      if (a.max !== undefined) patch.max = a.max === '' ? undefined : f.type === 'number' || f.type === 'text' ? Number(a.max) : String(a.max)
       if (Array.isArray(a.options)) {
         if (f.type !== 'single' && f.type !== 'multi') throw new Error('Only single and multi select fields have options.')
         const labels = a.options.map(String).filter(Boolean); if (!labels.length) throw new Error('Keep at least one option.')
         patch.options = labels.map((label: string, i: number) => { const old = (f.options ?? []).find((o) => same(o.label, label)); return old ? { ...old, label } : { id: uid(), label, color: COLORS[i % COLORS.length] } })
       }
+      Object.assign(patch, textRules(a, f.type))
       m.updateField(f.id, patch); return 'Updated.'
     },
   })

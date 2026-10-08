@@ -1,12 +1,25 @@
 import * as Y from 'yjs'
 
 export type FieldType = 'text' | 'number' | 'date' | 'single' | 'multi' | 'checkbox' | 'link'
+export type TextFormat = 'email' | 'phone' | 'digits' | 'letters' | 'alnum' | 'custom'
+export const FORMATS: { id: TextFormat; label: string; hint: string; re: RegExp }[] = [
+  { id: 'email', label: 'Email address', hint: 'Enter a valid email address', re: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/ },
+  { id: 'phone', label: 'Phone number', hint: 'Enter a phone number', re: /^\+?[\d\s().-]{7,20}$/ },
+  { id: 'digits', label: 'Digits only', hint: 'Use digits only', re: /^\d+$/ },
+  { id: 'letters', label: 'Letters only', hint: 'Use letters only', re: /^[\p{L}\s'.-]+$/u },
+  { id: 'alnum', label: 'Letters and numbers', hint: 'Use letters and numbers only', re: /^[\p{L}\p{N}\s]+$/u },
+  { id: 'custom', label: 'Custom pattern', hint: 'Doesn’t match the required format', re: /.*/ },
+]
+/** A pattern someone typed, or null if it isn't a valid regular expression (then it is ignored rather than blocking every card). */
+export function customRegex(src: string | undefined): RegExp | null { if (!src) return null; try { return new RegExp(src, 'u') } catch { try { return new RegExp(src) } catch { return null } } }
+
 export interface Opt { id: string; label: string; color: string }
 export interface FieldDef {
   name: string; type: FieldType; required?: boolean
   options?: Opt[]            // single / multi select
   hidden?: boolean           // not shown on the card face (still in the card dialog)
-  min?: number | string; max?: number | string   // number or date limits
+  min?: number | string; max?: number | string   // number or date limits; for text, the fewest and most characters
+  format?: TextFormat; pattern?: string; message?: string   // text: what it must look like (a preset, or your own pattern), and what to say when it doesn't
 }
 export interface Col { name: string; color: string }
 export type Value = string | number | boolean | string[]
@@ -32,6 +45,15 @@ export function problem(f: FieldDef, v: Value | undefined): string | null {
     const s = String(v)
     if (f.min && s < String(f.min)) return `On or after ${f.min}`
     if (f.max && s > String(f.max)) return `On or before ${f.max}`
+  }
+  if (f.type === 'text') {
+    const s = String(v), say = (d: string) => f.message?.trim() || d
+    if (f.min !== undefined && f.min !== '' && s.length < Number(f.min)) return say(`At least ${f.min} characters`)
+    if (f.max !== undefined && f.max !== '' && s.length > Number(f.max)) return say(`At most ${f.max} characters`)
+    if (f.format) {
+      const fm = FORMATS.find((x) => x.id === f.format), re = f.format === 'custom' ? customRegex(f.pattern) : fm?.re
+      if (re && fm && !re.test(s.trim())) return say(fm.hint)
+    }
   }
   if (f.type === 'link' && !isHttp(String(v))) return 'Enter a web link starting with http:// or https://'
   return null

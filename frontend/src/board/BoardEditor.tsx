@@ -16,7 +16,7 @@ import { Modal } from '../ui/Modal'
 import { Popover } from '../ui/Popover'
 import { toast } from '../ui/Toast'
 import { openSettings } from '../ui/settingsStore'
-import { BoardModel, COLORS, isEmpty, problem, TYPE_LABEL, uid, type Card, type FieldDef, type FieldType, type Value } from './model'
+import { BoardModel, COLORS, customRegex, FORMATS, isEmpty, problem, TYPE_LABEL, uid, type Card, type FieldDef, type FieldType, type TextFormat, type Value } from './model'
 import '../forms/forms.css'
 import { Chip, today, type F } from './shared'
 import { CardComments, forCard } from './CardComments'
@@ -410,6 +410,19 @@ function FieldSettings({ model, f, onRemove }: { model: BoardModel; f: F; onRemo
       {f.type === 'number' && (
         <div className="bd-range"><label>Minimum<input type="number" value={f.min ?? ''} onChange={(e) => model.updateField(f.id, { min: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
           <label>Maximum<input type="number" value={f.max ?? ''} onChange={(e) => model.updateField(f.id, { max: e.target.value === '' ? undefined : Number(e.target.value) })} /></label></div>)}
+      {f.type === 'text' && (<>
+        <div className="bd-range"><label>Fewest characters<input type="number" min={0} value={f.min ?? ''} onChange={(e) => model.updateField(f.id, { min: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) })} /></label>
+          <label>Most characters<input type="number" min={0} value={f.max ?? ''} onChange={(e) => model.updateField(f.id, { max: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) })} /></label></div>
+        <label className="bd-stack">Must look like
+          <select value={f.format ?? ''} onChange={(e) => model.updateField(f.id, { format: (e.target.value || undefined) as TextFormat | undefined })}>
+            <option value="">Anything</option>{FORMATS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+          </select></label>
+        {f.format === 'custom' && <label className="bd-stack">Pattern (regular expression)
+          <input value={f.pattern ?? ''} placeholder="^[A-Z]{3}-\d{4}$" spellCheck={false} aria-invalid={!!f.pattern && !customRegex(f.pattern)} onChange={(e) => model.updateField(f.id, { pattern: e.target.value || undefined })} />
+          {f.pattern && !customRegex(f.pattern) && <span className="bd-bad">Not a valid pattern, so it is ignored.</span>}</label>}
+        {f.format && <label className="bd-stack">Message when it doesn't match (optional)
+          <input value={f.message ?? ''} maxLength={120} placeholder={FORMATS.find((x) => x.id === f.format)?.hint} onChange={(e) => model.updateField(f.id, { message: e.target.value || undefined })} /></label>}
+      </>)}
       {f.type === 'date' && (
         <div className="bd-range"><label>Not before<DatePicker value={String(f.min ?? '')} onChange={(v) => model.updateField(f.id, { min: v || undefined })} ariaLabel="Not before" /></label>
           <label>Not after<DatePicker value={String(f.max ?? '')} onChange={(v) => model.updateField(f.id, { max: v || undefined })} ariaLabel="Not after" /></label>
