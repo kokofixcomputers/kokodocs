@@ -27,3 +27,25 @@ ok('a non-English language switches to the multilingual small model', call('GET'
 call('PUT', '/api/admin/settings', {'stt_language': '', 'stt_draft': False}, A)
 ok('the admin can switch previews off', call('GET', '/api/stt/status')[1].get('draft') is False)
 ok('and the endpoint then refuses', draft(A)[0] == 404)
+
+# which downloaded model writes the preview
+import pathlib, sys
+sys.path.insert(0, '.')
+from app import sttmodels
+fake = sttmodels.MODELS_DIR / 'models--Systran--faster-whisper-base.en' / 'snapshots' / 'abc'   # (a model "downloaded" for the test: only its files' presence matters here)
+fake.mkdir(parents=True, exist_ok=True); (fake / 'model.bin').write_bytes(b'x'); (fake / 'config.json').write_text('{}')
+call('PUT', '/api/admin/settings', {'stt_draft': True, 'stt_language': ''}, A)
+v = lambda: call('GET', '/api/admin/settings', None, A)[1]['stt']
+ok('the options are the models downloaded on the server', 'base.en' in [o['value'] for o in v()['draft_options']], v()['draft_options'])
+ok('by default it is automatic', v()['draft_choice'] == '' and v()['draft_model'] == 'tiny.en')
+ok('a model that is not downloaded is refused', call('PUT', '/api/admin/settings', {'stt_draft_model': 'large-v3'}, A)[0] == 422)
+ok('only admins choose', call('PUT', '/api/admin/settings', {'stt_draft_model': 'base.en'}, V)[0] in (401, 403))
+s, r = call('PUT', '/api/admin/settings', {'stt_draft_model': 'base.en'}, A)
+ok('the admin picks a downloaded model for the preview', s == 200 and r['stt']['draft_choice'] == 'base.en' and r['stt']['draft_model'] == 'base.en', r['stt'].get('draft_model'))
+call('PUT', '/api/admin/settings', {'stt_language': 'fr'}, A)
+ok('an English-only choice is not used for another language (the multilingual tiny is)', v()['draft_model'] == 'tiny')
+call('PUT', '/api/admin/settings', {'stt_language': ''}, A)
+ok('and applies again for English', v()['draft_model'] == 'base.en')
+import shutil; shutil.rmtree(sttmodels.MODELS_DIR / 'models--Systran--faster-whisper-base.en')
+ok('if the chosen model is deleted, it falls back to automatic', v()['draft_model'] == 'tiny.en' and 'base.en' not in [o['value'] for o in v()['draft_options']])
+call('PUT', '/api/admin/settings', {'stt_draft_model': ''}, A); ok('and automatic can be chosen again', v()['draft_choice'] == '')

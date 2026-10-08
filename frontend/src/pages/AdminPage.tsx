@@ -239,6 +239,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   const [url, setUrl] = useState(v.url)
   const [lang, setLang] = useState(v.language)
   const [draftOn, setDraftOn] = useState(v.draft)
+  const [draftModel, setDraftModel] = useState(v.draft_choice)
   const [idleOn, setIdleOn] = useState(v.idle_unload)
   const [idleMin, setIdleMin] = useState(String(v.idle_minutes))
   const [busy, setBusy] = useState(false)
@@ -250,7 +251,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   const save = async () => {
     setBusy(true); setMsg(null)
     try {
-      const body: Parameters<typeof api.adminSaveSettings>[0] = { stt_provider: prov, stt_language: lang.trim(), stt_draft: draftOn, stt_idle_unload: idleOn, stt_idle_minutes: Math.min(1440, Math.max(1, Math.round(Number(idleMin)) || v.idle_minutes)) }
+      const body: Parameters<typeof api.adminSaveSettings>[0] = { stt_provider: prov, stt_language: lang.trim(), stt_draft: draftOn, stt_draft_model: draftModel, stt_idle_unload: idleOn, stt_idle_minutes: Math.min(1440, Math.max(1, Math.round(Number(idleMin)) || v.idle_minutes)) }
       if (prov !== 'auto') {
         body.stt_model = { [prov]: effModel }
         if (key.trim() && prov !== 'local') body.stt_key = { [prov]: key.trim() }
@@ -265,7 +266,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
     catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
   }
   const clearKey = async () => { if (prov === 'auto' || prov === 'local') return; setBusy(true); try { apply(await api.adminSaveSettings({ stt_clear_key: prov })); toast('Key removed') } catch (e) { toast((e as Error).message) } finally { setBusy(false) } }
-  const changed = draftOn !== v.draft || idleOn !== v.idle_unload || (idleOn && Number(idleMin) !== v.idle_minutes) || prov !== v.provider || !!key.trim() || lang.trim() !== v.language || (prov !== 'auto' && effModel !== savedModel(prov)) || (prov === 'openai-compatible' && url.trim() !== v.url)
+  const changed = draftOn !== v.draft || draftModel !== v.draft_choice || idleOn !== v.idle_unload || (idleOn && Number(idleMin) !== v.idle_minutes) || prov !== v.provider || !!key.trim() || lang.trim() !== v.language || (prov !== 'auto' && effModel !== savedModel(prov)) || (prov === 'openai-compatible' && url.trim() !== v.url)
   const hasKey = prov !== 'auto' && prov !== 'local' && v.key_set[prov]
   const envKey = (prov === 'groq' || prov === 'mistral' || prov === 'openai') && v.env_key[prov]
   const active = v.active
@@ -303,6 +304,13 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
         <span><b>Live preview while speaking</b><br /><span className="muted hint">{v.local_installed ? `Shows the words as people talk, written by a small model on this server (${v.draft_model ?? 'tiny'}, free and private). What gets inserted is still the better transcript from the provider above.` : 'Needs faster-whisper on this server (pip install -r requirements-local.txt), then restart. Until then the pill only shows a waveform.'}</span></span>
         <button type="button" role="switch" aria-checked={draftOn} aria-label="Live preview while speaking" disabled={!v.local_installed} className={`toggle ${draftOn ? 'on' : ''}`} onClick={() => setDraftOn(!draftOn)} />
       </div>
+      {draftOn && v.local_installed && (
+        <div className="ai-field" style={{ maxWidth: 420 }}>
+          <span>Model that writes the live preview</span>
+          <Select label="Live preview model" value={v.draft_options.some((o) => o.value === draftModel) ? draftModel : ''} onChange={setDraftModel}
+            options={[{ value: '', label: `Automatic (${v.draft_model ?? 'tiny'})` }, ...v.draft_options.map((o) => ({ value: o.value, label: `${o.label}, ${fmtMB(o.size)}` }))]} />
+          <span className="muted hint">Only models already downloaded on this server are listed (add more in the list above). A bigger model gets the words right more often but is slower, so the preview may lag behind your voice, and it takes more memory while it is loaded. The final text always comes from the provider you chose.</span>
+        </div>)}
       {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'}>{msg.text}</p>}
       <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
         <button className="btn btn-pill btn-primary" disabled={busy || !changed} onClick={save}>Save</button>
@@ -319,7 +327,7 @@ const NO_AI: AiAdmin = { models: [], env: { configured: false, url: '', model: '
  *  older server leaves out so nothing crashes, and say that the server is behind. */
 function normalise(x: AdminSettings): { s: AdminSettings; behind: boolean } {
   const behind = !x.ai || !x.stt || x.stt.loaded === undefined || x.stt.draft === undefined
-  return { behind, s: { ...x, ai: x.ai ?? NO_AI, stt: Object.assign({ draft: false, draft_model: null, loaded: [], idle_unload: false, idle_minutes: 3 }, x.stt ?? {}) as AdminSettings['stt'] } }
+  return { behind, s: { ...x, ai: x.ai ?? NO_AI, stt: Object.assign({ draft: false, draft_model: null, draft_choice: '', draft_options: [], loaded: [], idle_unload: false, idle_minutes: 3 }, x.stt ?? {}) as AdminSettings['stt'] } }
 }
 
 function useAdminSettings() {

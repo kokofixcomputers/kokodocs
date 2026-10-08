@@ -110,7 +110,20 @@ def draft_model(db=None) -> str | None:
         return None
     c = config(db)
     lang = (c.language if c else None) or ""
-    return "tiny.en" if not lang or lang.lower().startswith("en") else "tiny"
+    english = not lang or lang.lower().startswith("en")
+    choice = settings_get(db, "stt_draft_model") if db is not None else ""
+    if choice and any(m["value"] == choice for m in ready_models()) and (english or not choice.endswith(".en")):
+        return choice   # the admin picked one of the models downloaded on this server
+    return "tiny.en" if english else "tiny"
+
+
+def ready_models() -> list[dict]:
+    """Models fully downloaded on this server, as the admin can pick them: {value (what faster-whisper loads), label, size, builtin}."""
+    out = []
+    for m in sttmodels.list_models(builtin_repos()):
+        if m["state"] == "ready":
+            out.append({"value": m["name"] if m["builtin"] else m["repo"], "label": m["name"], "size": m["size"], "builtin": m["builtin"]})
+    return out
 
 
 _draft_slots = asyncio.Semaphore(2)
