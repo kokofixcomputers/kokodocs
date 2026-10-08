@@ -82,7 +82,7 @@ export function SelfHost() {
         </section>
         <section>
           <h2><b>5</b>Make yourself the admin</h2>
-          <p>Accounts whose email is listed in <code>KOKO_ADMIN_EMAILS</code> can open the admin panel at <code>/admin</code>: manage people, set a default storage quota, turn sign-ups on or off, and connect email and Google sign-in.</p>
+          <p>Accounts whose email is listed in <code>KOKO_ADMIN_EMAILS</code> can open the admin panel at <code>/admin</code>: manage people, set a default storage quota, turn sign-ups on or off, and connect email, an AI assistant and single sign-on.</p>
         </section>
         <section>
           <h2><b>6</b>Optional extras</h2>

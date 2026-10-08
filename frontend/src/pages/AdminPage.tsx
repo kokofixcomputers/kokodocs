@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, Sparkles, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
-import { api, ApiError, type AiAdmin, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
+import { api, ApiError, type AiAdmin, type SsoAdmin, type SsoProvider, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
 import { askConfirm, askText } from '../ui/Dialogs'
@@ -9,6 +9,7 @@ import { fmtBytes } from '../ui/StorageMeter'
 import { Select } from '../ui/Select'
 import { KindIcon } from '../ui/KindIcon'
 import { Logo } from '../ui/Logo'
+import { ProviderMark } from '../ui/ProviderMark'
 import { toast } from '../ui/Toast'
 
 const bytes = (n: number) => (n > 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB')
@@ -338,7 +339,7 @@ function AccessSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
     <div className="ad-stack">
       <div className="ad-card">
         <div className="switch-row">
-          <div><b>Allow new sign-ups</b><span>When off, nobody can create an account (including through Google). Existing users can still sign in.</span></div>
+          <div><b>Allow new sign-ups</b><span>When off, nobody can create an account (including through single sign-on). Existing users can still sign in.</span></div>
           <button role="switch" aria-checked={s.signup_enabled} aria-label="Allow sign-ups" className={`toggle ${s.signup_enabled ? 'on' : ''}`} onClick={() => save({ signup_enabled: !s.signup_enabled }, s.signup_enabled ? 'Sign-ups closed' : 'Sign-ups open')} />
         </div>
       </div>
@@ -412,27 +413,94 @@ function AssistantSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSett
   )
 }
 
-function GoogleSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
-  const [cid, setCid] = useState(s.google_client_id)
+const SSO_FIELDS = ['name', 'client_id', 'authorize_url', 'token_url', 'userinfo_url', 'emails_url', 'scopes', 'subject_field', 'email_field', 'name_field', 'verified_field'] as const
+
+function ProviderCard({ p, hint, onChange, onDelete }: { p: SsoProvider; hint: string; onChange: (x: SsoProvider) => void; onDelete: () => void }) {
+  const [open, setOpen] = useState(!p.ready)
+  const [d, setD] = useState<Record<string, string>>(() => Object.fromEntries(SSO_FIELDS.map((k) => [k, p[k]])))
   const [secret, setSecret] = useState('')
+  const [trust, setTrust] = useState(p.trust_email)
+  const [method, setMethod] = useState(p.auth_method)
+  const [issuer, setIssuer] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const set = (k: string, v: string) => setD((x) => ({ ...x, [k]: v }))
+  const dirty = SSO_FIELDS.some((k) => d[k].trim() !== p[k]) || !!secret.trim() || trust !== p.trust_email || method !== p.auth_method
+  const run = async (f: () => Promise<unknown>, fail = true) => { setBusy(true); setMsg(null); try { await f() } catch (e) { if (fail) setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) } }
+  const save = () => run(async () => { const x = await api.adminSsoSave(p.id, { ...Object.fromEntries(SSO_FIELDS.map((k) => [k, d[k].trim()])), ...(secret.trim() ? { client_secret: secret.trim() } : {}), trust_email: trust, auth_method: method }); setSecret(''); onChange(x); toast(`${x.name} saved`) })
+  const toggle = () => run(async () => { onChange(await api.adminSsoSave(p.id, { enabled: !p.enabled })) })
+  const discover = () => run(async () => { const r = await api.adminSsoDiscover(issuer); setD((x) => ({ ...x, authorize_url: r.authorize_url, token_url: r.token_url, userinfo_url: r.userinfo_url, scopes: r.scopes, ...(x.name === 'Single sign-on' && r.name ? { name: new URL(r.name).hostname } : {}) })); setMsg({ ok: true, text: 'Addresses filled in. Add the client ID and secret, then save.' }) })
+  const remove = async () => {
+    if (!(await askConfirm({ title: `Remove ${p.name}?`, text: p.linked ? `${p.linked} ${p.linked === 1 ? 'person has' : 'people have'} signed in or linked with it. They keep their accounts, but those who never set a password won't be able to sign in until they reset it by email (if email is set up).` : 'Nobody has used it yet.', label: 'Remove', danger: true }))) return
+    void run(async () => { await api.adminSsoDelete(p.id); onDelete() })
+  }
+  const state = !p.enabled ? 'Off' : p.ready ? 'On' : 'Needs setup'
+  return (
+    <div className={`ad-card sso-card ${open ? 'open' : ''}`}>
+      <div className="sso-head">
+        <button className="sso-title" onClick={() => setOpen(!open)} aria-expanded={open}><ProviderMark preset={p.preset} /><b>{p.name}</b><span className={`sso-chip ${p.ready && p.enabled ? 'on' : ''}`}>{state}</span>{p.linked > 0 && <em>{p.linked} {p.linked === 1 ? 'person' : 'people'}</em>}<ChevronRight size={16} className="sso-caret" /></button>
+        <button role="switch" aria-checked={p.enabled} aria-label={`Offer ${p.name}`} disabled={busy} className={`toggle ${p.enabled ? 'on' : ''}`} onClick={toggle} />
+      </div>
+      {open && (
+        <div className="ad-form sso-body">
+          {hint && <p className="muted hint" style={{ margin: 0 }}>{hint}</p>}
+          <label className="ai-field"><span>Redirect address (give this to the provider)</span>
+            <span className="sec-secret"><span style={{ flex: 1 }}>{p.redirect_uri}</span><button className="icon-btn sm" aria-label="Copy" onClick={() => { void navigator.clipboard.writeText(p.redirect_uri); toast('Copied') }}><Copy size={15} /></button></span></label>
+          <label className="ai-field"><span>Name shown on the button</span><span className="field"><input value={d.name} maxLength={60} onChange={(e) => set('name', e.target.value)} /></span></label>
+          <label className="ai-field"><span>Client ID</span><span className="field"><input value={d.client_id} onChange={(e) => set('client_id', e.target.value)} spellCheck={false} autoComplete="off" /></span></label>
+          <label className="ai-field"><span>Client secret</span><span className="field"><input type="password" autoComplete="new-password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={p.secret_set ? 'Saved. Leave blank to keep it' : ''} /></span></label>
+          <div className="ai-field"><span>Have an OpenID Connect issuer address? Paste it to fill in the addresses</span>
+            <span className="ai-model"><span className="field"><input value={issuer} onChange={(e) => setIssuer(e.target.value)} placeholder="https://auth.example.com/realms/main" spellCheck={false} /></span>
+              <button className="btn btn-pill btn-soft" disabled={busy || !issuer.trim()} onClick={discover}>Discover</button></span></div>
+          <details className="sso-adv">
+            <summary>Addresses, fields and trust</summary>
+            <div className="ad-form">
+              {([['authorize_url', 'Authorize address'], ['token_url', 'Token address'], ['userinfo_url', 'User info address'], ['emails_url', 'Emails address (optional, for providers like GitHub that list emails separately)'], ['scopes', 'Scopes']] as const).map(([k, label]) => (
+                <label key={k} className="ai-field"><span>{label}</span><span className="field"><input value={d[k]} onChange={(e) => set(k, e.target.value)} spellCheck={false} /></span></label>))}
+              <div className="sso-grid">
+                {([['subject_field', 'Field that identifies the person'], ['email_field', 'Email field'], ['name_field', 'Name field (first that exists)'], ['verified_field', 'Email verified field (blank if none)']] as const).map(([k, label]) => (
+                  <label key={k} className="ai-field"><span>{label}</span><span className="field"><input value={d[k]} onChange={(e) => set(k, e.target.value)} spellCheck={false} /></span></label>))}
+              </div>
+              <div className="ai-field"><span>Send the client secret</span><Select label="Client authentication" value={method} onChange={setMethod} options={[{ value: 'post', label: 'In the request body (most providers)' }, { value: 'basic', label: 'As a Basic authorization header' }]} /></div>
+              <div className="switch-row">
+                <div><b>Trust the email this provider returns</b><span>Accounts are matched by email, so an email is only used when the provider says it is verified. Turn this on only for a provider you control (your own company's), where every email is real.</span></div>
+                <button role="switch" aria-checked={trust} aria-label="Trust emails" className={`toggle ${trust ? 'on' : ''}`} onClick={() => setTrust(!trust)} /></div>
+            </div>
+          </details>
+          {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'}>{msg.text}</p>}
+          <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
+            <button className="btn btn-pill btn-primary" disabled={busy || !dirty} onClick={save}>Save</button>
+            <button className="btn btn-pill btn-ghost" disabled={busy} onClick={remove}><Trash2 size={15} />Remove</button>
+          </div>
+        </div>)}
+    </div>
+  )
+}
+
+/** Single sign-on: any OAuth 2.0 / OpenID Connect provider. Google, GitHub and the rest are just presets that fill the form in. */
+function SsoSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
+  const [data, setData] = useState<SsoAdmin | null>(null)
   const [url, setUrl] = useState(s.public_url)
   const [busy, setBusy] = useState(false)
-  const save = async (b: Parameters<typeof api.adminSaveSettings>[0], msg = 'Saved') => {
-    setBusy(true)
-    try { apply(await api.adminSaveSettings(b)); setSecret(''); toast(msg) } catch (e) { toast((e as Error).message) } finally { setBusy(false) }
-  }
+  const load = () => { api.adminSso().then(setData).catch((e) => toast(e.message)) }
+  useEffect(load, [])
+  if (!data) return <span className="spinner" />
+  const add = async (preset: string) => { setBusy(true); try { await api.adminSsoAdd(preset); load() } catch (e) { toast((e as Error).message) } finally { setBusy(false) } }
+  const savePublic = async () => { setBusy(true); try { const x = await api.adminSaveSettings({ public_url: url.trim() }); apply(x); load(); toast('Saved') } catch (e) { toast((e as Error).message) } finally { setBusy(false) } }
   return (
-    <div className="ad-card ad-form">
-      <p className="muted hint" style={{ marginTop: 0 }}>Create an OAuth client (type: Web application) in Google Cloud Console, add the redirect URI below, then paste the client ID and secret here.</p>
-      <label className="ai-field"><span>Authorized redirect URI</span>
-        <span className="sec-secret"><span style={{ flex: 1 }}>{s.redirect_uri}</span><button className="icon-btn sm" aria-label="Copy" onClick={() => { void navigator.clipboard.writeText(s.redirect_uri); toast('Copied') }}><Copy size={15} /></button></span></label>
-      <label className="ai-field"><span>Public URL (only if the address above is wrong behind your proxy)</span>
-        <span className="field"><input placeholder="https://docs.example.com" value={url} onChange={(e) => setUrl(e.target.value)} /></span></label>
-      <label className="ai-field"><span>Client ID</span><span className="field"><input value={cid} onChange={(e) => setCid(e.target.value)} placeholder="123456-abc.apps.googleusercontent.com" spellCheck={false} /></span></label>
-      <label className="ai-field"><span>Client secret</span><span className="field"><input type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={s.google_secret_set ? 'Saved. Leave blank to keep it' : 'GOCSPX-…'} /></span></label>
-      <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
-        <button className="btn btn-pill btn-primary" disabled={busy} onClick={() => save({ google_client_id: cid, public_url: url, ...(secret ? { google_client_secret: secret } : {}) })}>Save</button>
-        {(s.google_client_id || s.google_secret_set) && <button className="btn btn-pill btn-ghost" disabled={busy} onClick={() => { setCid(''); void save({ google_client_id: '', google_client_secret: '' }, 'Google sign-in removed') }}>Remove Google</button>}
+    <div className="ad-stack">
+      {data.providers.map((p) => <ProviderCard key={p.id} p={p} hint={data.presets.find((x) => x.id === p.preset)?.hint ?? ''} onChange={(x) => setData({ ...data, providers: data.providers.map((y) => (y.id === x.id ? x : y)) })} onDelete={load} />)}
+      <div className="ad-card">
+        <h3 style={{ margin: '0 0 4px' }}>Add a sign-in option</h3>
+        <p className="muted hint" style={{ margin: '0 0 12px' }}>Pick a service to start from, or <b>Single sign-on</b> for any other OAuth 2.0 / OpenID Connect provider (Keycloak, Authentik, Okta, Auth0...).</p>
+        <div className="sso-presets">
+          {data.presets.map((p) => <button key={p.id} className="btn btn-pill btn-soft" disabled={busy} onClick={() => void add(p.id)}><ProviderMark preset={p.id} />{p.name}</button>)}
+        </div>
+      </div>
+      <div className="ad-card ad-form">
+        <label className="ai-field"><span>Public address of this site (only if the redirect addresses above are wrong behind your proxy)</span>
+          <span className="ps-row" style={{ alignItems: 'center' }}><span className="field" style={{ flex: 1 }}><input placeholder="https://docs.example.com" value={url} onChange={(e) => setUrl(e.target.value)} /></span>
+            <button className="btn btn-pill btn-soft btn-sm" disabled={busy || url.trim() === data.public_url} onClick={savePublic}>Save</button></span></label>
       </div>
     </div>
   )
@@ -440,13 +508,14 @@ function GoogleSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
 
 function Overview({ s, go }: { s: AdminSettings | null; go: (id: AdminSection) => void }) {
   const [stats, setStats] = useState<AdminStats | null>(null)
-  useEffect(() => { api.adminStats().then(setStats).catch(() => {}) }, [])
+  const [sso, setSso] = useState<SsoProvider[] | null>(null)
+  useEffect(() => { api.adminStats().then(setStats).catch(() => {}); api.adminSso().then((r) => setSso(r.providers)).catch(() => setSso([])) }, [])
   const stt = s?.stt
   const rows: { id: AdminSection; label: string; value: string; ok: boolean }[] = s ? [
     { id: 'access', label: 'Sign-ups', value: s.signup_enabled ? 'Open' : 'Closed', ok: s.signup_enabled },
     { id: 'access', label: 'Default storage', value: s.default_quota_mb ? `${s.default_quota_mb} MB per user` : 'Unlimited', ok: true },
     { id: 'email', label: 'Email', value: s.email_active ? 'Active' : 'Off', ok: s.email_active },
-    { id: 'google', label: 'Google sign-in', value: s.google_client_id ? 'Configured' : 'Not set up', ok: !!s.google_client_id },
+    { id: 'sso', label: 'Single sign-on', value: sso ? (sso.filter((p) => p.ready && p.enabled).map((p) => p.name).join(', ') || 'Not set up') : '…', ok: !!sso?.some((p) => p.ready && p.enabled) },
     { id: 'assistant', label: 'Koko assistant', value: s.ai.active.available ? `${s.ai.active.from === 'admin' ? 'System connection' : 'From environment'}${s.ai.active.model ? `, ${s.ai.active.model}` : ''}` : 'Everyone brings their own', ok: s.ai.active.available },
     { id: 'voice', label: 'Voice typing', value: stt?.active.available ? `${stt.active.provider}, ${stt.active.model}` : 'Off', ok: !!stt?.active.available },
     { id: 'voice', label: 'Live preview', value: stt?.draft && stt.draft_model ? `On (${stt.draft_model})` : 'Off', ok: !!(stt?.draft && stt.draft_model) },
@@ -468,18 +537,18 @@ function Overview({ s, go }: { s: AdminSettings | null; go: (id: AdminSection) =
   )
 }
 
-type AdminSection = 'overview' | 'users' | 'files' | 'access' | 'email' | 'google' | 'voice' | 'assistant'
+type AdminSection = 'overview' | 'users' | 'files' | 'access' | 'email' | 'sso' | 'voice' | 'assistant'
 const SECTIONS: { id: AdminSection; label: string; icon: React.ReactNode; group: string; blurb: string }[] = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard size={17} />, group: 'Manage', blurb: 'How much is on this server, and how it is set up.' },
   { id: 'users', label: 'Users', icon: <Users size={17} />, group: 'Manage', blurb: 'Accounts, storage limits, admins and two-factor resets.' },
   { id: 'files', label: 'Files', icon: <Files size={17} />, group: 'Manage', blurb: 'Every document on the server. Open, download or delete.' },
   { id: 'access', label: 'Access & storage', icon: <SlidersHorizontal size={17} />, group: 'Configure', blurb: 'Who can sign up, and how much room each person gets.' },
   { id: 'email', label: 'Email', icon: <Mail size={17} />, group: 'Configure', blurb: 'Confirmation codes, password resets and mention emails.' },
-  { id: 'google', label: 'Google sign-in', icon: <KeyRound size={17} />, group: 'Configure', blurb: 'Let people sign in with their Google account.' },
+  { id: 'sso', label: 'Single sign-on', icon: <KeyRound size={17} />, group: 'Configure', blurb: 'Let people sign in with Google, GitHub or any OAuth 2.0 / OpenID Connect provider.' },
   { id: 'assistant', label: 'Assistant (Koko)', icon: <Sparkles size={17} />, group: 'Configure', blurb: 'The AI connection everyone uses by default. People can still bring their own.' },
   { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'Configure', blurb: 'The speech provider, live preview, and models kept on this server.' },
 ]
-const fromHash = (): AdminSection => { const h = location.hash.slice(1) as AdminSection; return SECTIONS.some((x) => x.id === h) ? h : 'overview' }
+const fromHash = (): AdminSection => { const raw = location.hash.slice(1); const h = (raw === 'google' ? 'sso' : raw) as AdminSection; /* (#google was this section's old name) */ return SECTIONS.some((x) => x.id === h) ? h : 'overview' }
 
 export function AdminPage() {
   const { user } = useAuth()
@@ -516,7 +585,7 @@ export function AdminPage() {
           {sec === 'files' && <FilesTab owner={owner} clearOwner={() => setOwner(null)} />}
           {sec === 'access' && settingsBody((x) => <AccessSection s={x} apply={setS} />)}
           {sec === 'email' && settingsBody((x) => <div className="ad-card ad-form"><EmailSettings s={x} apply={setS} /></div>)}
-          {sec === 'google' && settingsBody((x) => <GoogleSection s={x} apply={setS} />)}
+          {sec === 'sso' && settingsBody((x) => <SsoSection s={x} apply={setS} />)}
           {sec === 'assistant' && settingsBody((x) => <AssistantSection s={x} apply={setS} />)}
           {sec === 'assistant' && settingsBody((x) => <AssistantSection s={x} apply={setS} />)}
           {sec === 'voice' && settingsBody((x) => <div className="ad-card ad-form"><VoiceSettings s={x} apply={setS} /></div>)}

@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from . import access
 from . import ai, quota, stt, sttmodels
 from .db import UPLOAD_DIR, get_db, settings_get, settings_set
-from .authx import redirect_uri
 from .emailauth import email_enabled, send_email, smtp_config
 from .security import decrypt_secret, encrypt_secret
 from fastapi import Request
@@ -106,11 +105,10 @@ def delete_user(uid: str, admin=Depends(must_admin), db=Depends(get_db)):
 
 # ───────────── instance settings ─────────────
 def settings_view(db, request: Request):
-    return {"signup_enabled": settings_get(db, "signup_enabled", "1") == "1", "google_client_id": settings_get(db, "google_client_id"),
-            "google_secret_set": bool(settings_get(db, "google_client_secret")), "public_url": settings_get(db, "public_url"), "default_quota_mb": quota.default_mb(db),
+    return {"signup_enabled": settings_get(db, "signup_enabled", "1") == "1", "public_url": settings_get(db, "public_url"), "default_quota_mb": quota.default_mb(db),
             "smtp_host": settings_get(db, "smtp_host"), "smtp_port": int(settings_get(db, "smtp_port", "587") or 587), "smtp_security": settings_get(db, "smtp_security", "starttls"),
             "smtp_user": settings_get(db, "smtp_user"), "smtp_password_set": bool(settings_get(db, "smtp_password")), "smtp_from": settings_get(db, "smtp_from"),
-            "email_active": email_enabled(db), "redirect_uri": redirect_uri(request, db), "stt": stt_view(db), "ai": ai_view(db)}
+            "email_active": email_enabled(db), "stt": stt_view(db), "ai": ai_view(db)}
 
 
 def ai_view(db) -> dict:
@@ -137,8 +135,6 @@ def stt_view(db) -> dict:
 
 class SettingsIn(BaseModel):
     signup_enabled: bool | None = None
-    google_client_id: str | None = Field(None, max_length=300)
-    google_client_secret: str | None = Field(None, max_length=300)
     public_url: str | None = Field(None, max_length=300)
     default_quota_mb: int | None = Field(None, ge=0, le=1_000_000)
     smtp_host: str | None = Field(None, max_length=200)
@@ -172,12 +168,6 @@ def get_settings(request: Request, admin=Depends(must_admin), db=Depends(get_db)
 async def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin), db=Depends(get_db)):
     if b.signup_enabled is not None:
         settings_set(db, "signup_enabled", "1" if b.signup_enabled else "0")
-    if b.google_client_id is not None:
-        settings_set(db, "google_client_id", b.google_client_id.strip())
-    if b.google_client_secret:
-        settings_set(db, "google_client_secret", encrypt_secret(b.google_client_secret.strip()))
-    if b.google_client_secret == "" and b.google_client_id == "":
-        settings_set(db, "google_client_secret", "")
     smtp_changed = False
     for key in ("smtp_host", "smtp_user", "smtp_from"):
         v = getattr(b, key)

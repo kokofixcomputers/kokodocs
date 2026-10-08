@@ -13,7 +13,7 @@ import { AiSettingsBody } from '../assistant/AiSettings'
 import { Capture } from '../voice/VoiceControl'
 import { DEFAULT_SHORTCUT, loadLive, loadShortcut, shortcutLabel, type Shortcut } from '../voice/useVoiceTyping'
 import { closeSettings, subscribeSettings, type SettingsSection } from '../ui/settingsStore'
-import { DeleteForm, GoogleRow, NotifyRow, PasswordForm, StorageRow } from './SecurityDialog'
+import { DeleteForm, LinkedAccounts, NotifyRow, PasswordForm, StorageRow } from './SecurityDialog'
 
 const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string }[] = [
   { id: 'account', label: 'My account', icon: <UserIcon size={17} />, group: 'User settings' },
@@ -93,10 +93,10 @@ function Security() {
     <Section title="Security">
       <Card>
         {pwOpen ? <div className="st-stack"><PasswordForm hasPassword={user?.has_password !== false} totp={!!status?.enabled} onDone={() => setPwOpen(false)} /></div>
-          : <div className="st-row"><div><b>Password</b><span>{user?.has_password === false ? 'You signed in with Google and have no password yet' : 'Change the password you sign in with'}</span></div>
+          : <div className="st-row"><div><b>Password</b><span>{user?.has_password === false ? 'You signed in with a single sign-on provider and have no password yet' : 'Change the password you sign in with'}</span></div>
             <button className="btn btn-pill btn-soft btn-sm" onClick={() => setPwOpen(true)}><Lock size={15} />{user?.has_password === false ? 'Set a password' : 'Change password'}</button></div>}
       </Card>
-      <Card><GoogleRow /></Card>
+      <Card><LinkedAccounts /></Card>
       <Card>
         {!status ? <span className="spinner" /> : codes ? (
           <div className="st-stack">

@@ -48,7 +48,7 @@ const FAQ = [
   ['Can I bring my Word, Excel and PowerPoint files?', 'Yes. Word, Markdown, HTML and text open as documents, Excel and CSV as spreadsheets, and PowerPoint as presentations. Everything exports back out too.'],
   ['Does it work on my phone?', 'Yes. The editors reflow to fit, menus open with a long-press, and there is a floating microphone button for dictation.'],
   ['What happens if I lose my connection?', 'Keep typing. Your changes are kept in the page, and when you are back online they are merged with everyone else’s, with a short notice about what happened.'],
-  ['Can people sign in with Google?', 'If you add a Google client to the admin settings, yes. Email sign-up with confirmation codes and two-factor sign-in are built in as well.'],
+  ['Can people sign in with Google or GitHub?', 'Yes. In the admin panel you can add Google, GitHub, GitLab, Microsoft or Discord with a client ID and secret, or any OAuth 2.0 / OpenID Connect provider such as Keycloak, Authentik or Okta by pasting its address. Email sign-up with confirmation codes and two-factor sign-in are built in as well.'],
 ] as const
 
 export function Home() {

@@ -88,7 +88,7 @@ const GROUPS: Group[] = [
     ['Recycle bin', 'Deleted files wait 30 days and can be restored.'],
   ] },
   { id: 'security', icon: ShieldCheck, name: 'Security and admin', lead: 'The boring, important parts, done properly.', shot: 'settings', url: 'docs.example.com', items: [
-    ['Sign-in', 'Bcrypt passwords, optional email confirmation, Google sign-in and TOTP two-factor with recovery codes.'],
+    ['Sign-in', 'Bcrypt passwords, optional email confirmation, single sign-on (Google, GitHub or any OAuth 2.0 / OpenID Connect provider you add) and TOTP two-factor with recovery codes.'],
     ['Hardened', 'Rate limits on sign-in and uploads, public-only fetching for links and imports, and size limits on everything people send.'],
     ['Storage', 'Per-person limits, a colour-coded breakdown by file and kind, and identical pictures stored only once.'],
     ['Admin panel', 'Manage people, reset passwords and two-factor, look at every file read-only, and set SMTP, Google and quota settings.'],

@@ -4,6 +4,7 @@ import { api, getToken } from '../api'
 import { useAuth } from '../auth'
 import { Modal } from '../ui/Modal'
 import { toast } from '../ui/Toast'
+import { ProviderMark } from '../ui/ProviderMark'
 
 import { fmtBytes, tier } from '../ui/StorageMeter'
 export { fmtBytes }
@@ -38,18 +39,28 @@ export function NotifyRow() {
   )
 }
 
-export function GoogleRow() {
-  const { user, acceptToken } = useAuth()
-  const [available, setAvailable] = useState(false)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => { api.authConfig().then((c) => setAvailable(c.google)).catch(() => {}) }, [])
-  if (!available && !user?.google) return null
-  const link = async () => { setBusy(true); try { location.href = (await api.googleLink()).url } catch (e) { toast((e as Error).message); setBusy(false) } }
-  const unlink = async () => { setBusy(true); try { await api.googleUnlink(); await acceptToken(getToken()!); toast('Google account unlinked') } catch (e) { toast((e as Error).message) } finally { setBusy(false) } }
+/** Which sign-in providers (Google, GitHub...) this person has linked, with a button to link or unlink each one the admin has set up. */
+export function LinkedAccounts() {
+  const [providers, setProviders] = useState<{ id: string; name: string; preset: string }[]>([])
+  const [linked, setLinked] = useState<{ provider: string; name: string; label: string }[]>([])
+  const [busy, setBusy] = useState<string | null>(null)
+  const load = () => { api.authConfig().then((c) => setProviders(c.providers)).catch(() => {}); api.ssoIdentities().then(setLinked).catch(() => {}) }
+  useEffect(load, [])
+  const shown = [...providers.map((p) => ({ id: p.id, name: p.name, preset: p.preset })), ...linked.filter((l) => !providers.some((p) => p.id === l.provider)).map((l) => ({ id: l.provider, name: l.name, preset: 'custom' }))]
+  if (!shown.length) return null
+  const link = async (id: string) => { setBusy(id); try { location.href = (await api.ssoLink(id)).url } catch (e) { toast((e as Error).message); setBusy(null) } }
+  const unlink = async (id: string, name: string) => { setBusy(id); try { await api.ssoUnlink(id); toast(`${name} account unlinked`); load() } catch (e) { toast((e as Error).message) } finally { setBusy(null) } }
   return (
-    <div className="switch-row" style={{ borderBottom: 0, padding: 0 }}>
-      <div><b>Google</b><span>{user?.google ? `Linked to ${user.google}` : 'Link a Google account to sign in with one click'}</span></div>
-      {user?.google ? <button className="btn btn-pill btn-ghost btn-sm" disabled={busy} onClick={unlink}>Unlink</button> : <button className="btn btn-pill btn-soft btn-sm" disabled={busy} onClick={link}>Link Google</button>}
+    <div className="st-stack" style={{ gap: 14 }}>
+      {shown.map((p) => {
+        const l = linked.find((x) => x.provider === p.id)
+        return (
+          <div key={p.id} className="switch-row" style={{ borderBottom: 0, padding: 0 }}>
+            <div><b style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><ProviderMark preset={p.preset} />{p.name}</b><span>{l ? `Linked${l.label ? ` to ${l.label}` : ''}` : `Link a ${p.name} account to sign in with one click`}</span></div>
+            {l ? <button className="btn btn-pill btn-ghost btn-sm" disabled={busy === p.id} onClick={() => void unlink(p.id, p.name)}>Unlink</button>
+              : providers.some((x) => x.id === p.id) ? <button className="btn btn-pill btn-soft btn-sm" disabled={busy === p.id} onClick={() => void link(p.id)}>Link</button> : null}
+          </div>)
+      })}
     </div>
   )
 }
@@ -97,7 +108,7 @@ export function PasswordForm({ hasPassword, totp, onDone }: { hasPassword: boole
   }
   return (
     <>
-      {!hasPassword && <p className="muted" style={{ margin: 0 }}>You signed up with Google, so you don't have a password yet. Set one to also sign in with your email.</p>}
+      {!hasPassword && <p className="muted" style={{ margin: 0 }}>You signed up with a single sign-on provider, so you don't have a password yet. Set one to also sign in with your email.</p>}
       {hasPassword && <label className="field"><Lock size={18} /><input type="password" autoComplete="current-password" placeholder="Current password" value={cur} onChange={(e) => setCur(e.target.value)} /></label>}
       <label className="field"><KeyRound size={18} /><input type="password" autoComplete="new-password" placeholder="New password (8+ characters)" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
       <label className="field"><KeyRound size={18} /><input type="password" autoComplete="new-password" placeholder="Repeat new password" value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !totp && submit()} /></label>
@@ -163,7 +174,7 @@ export function SecurityDialog({ onClose, initial = 'main' }: { onClose: () => v
         ) : status.enabled ? (
           <>
             <button className="btn btn-pill btn-soft" onClick={() => setView('password')}><Lock size={16} />Change password</button>
-            <GoogleRow />
+            <LinkedAccounts />
             <NotifyRow />
             <StorageRow />
             <p style={{ margin: 0 }}><b>Two-factor authentication is on.</b> {status.recovery_left} recovery code{status.recovery_left === 1 ? '' : 's'} left.</p>
@@ -174,7 +185,7 @@ export function SecurityDialog({ onClose, initial = 'main' }: { onClose: () => v
         ) : (
           <>
             <button className="btn btn-pill btn-soft" onClick={() => setView('password')}><Lock size={16} />{user?.has_password === false ? 'Set a password' : 'Change password'}</button>
-            <GoogleRow />
+            <LinkedAccounts />
             <NotifyRow />
             <StorageRow />
             <p style={{ margin: 0 }}>Add a second step to signing in with a code from an authenticator app.</p>

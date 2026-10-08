@@ -8,7 +8,10 @@ export interface SttLoaded { idle: number; unload_in: number | null; roles: stri
 export interface SttModel { repo: string; name: string; builtin: boolean; size: number; loaded?: SttLoaded | null; state: 'ready' | 'downloading' | 'incomplete' | 'error'; total?: number; error?: string | null }
 export interface SttModels { dir: string; max_mb: number; installed: boolean; models: SttModel[]; freed?: number; memory_mb?: number | null; idle_unload?: boolean; unloaded?: string[] }
 export interface SttAdmin { provider: 'auto' | SttProvider; models: Record<SttProvider, string>; url: string; language: string; loaded: string[]; idle_unload: boolean; idle_minutes: number; draft: boolean; draft_model: string | null; key_set: Record<SttProvider, boolean>; env_key: { groq: boolean; mistral: boolean; openai: boolean }; groq_models: string[]; local_models: string[]; local_installed: boolean; active: { available: boolean; provider: string | null; model: string | null } }
-export interface AdminSettings { stt: SttAdmin; ai: AiAdmin; signup_enabled: boolean; google_client_id: string; google_secret_set: boolean; public_url: string; default_quota_mb: number; smtp_host: string; smtp_port: number; smtp_security: 'starttls' | 'ssl' | 'none'; smtp_user: string; smtp_password_set: boolean; smtp_from: string; email_active: boolean; redirect_uri: string }
+export interface SsoPublic { id: string; name: string; preset: string }
+export interface SsoProvider { id: string; preset: string; name: string; enabled: boolean; ready: boolean; secret_set: boolean; linked: number; redirect_uri: string; client_id: string; authorize_url: string; token_url: string; userinfo_url: string; emails_url: string; scopes: string; subject_field: string; email_field: string; name_field: string; verified_field: string; trust_email: boolean; auth_method: 'post' | 'basic' }
+export interface SsoAdmin { providers: SsoProvider[]; public_url: string; presets: { id: string; name: string; hint: string }[] }
+export interface AdminSettings { stt: SttAdmin; ai: AiAdmin; signup_enabled: boolean; public_url: string; default_quota_mb: number; smtp_host: string; smtp_port: number; smtp_security: 'starttls' | 'ssl' | 'none'; smtp_user: string; smtp_password_set: boolean; smtp_from: string; email_active: boolean }
 export type LoginResult = { token: string; user: User } | { mfa_required: true; mfa_token: string }
 export interface Storage { used: number; limit: number; documents: number; versions: number; images: number; files?: number }
 export interface StorageItem { id: string; title: string; kind: DocKind; trashed: boolean; text: number; versions: number; images: number; files: number; total: number }
@@ -110,11 +113,17 @@ export const api = {
   passwordReset: (b: { email: string; code: string; password: string }) => request('/api/auth/password/reset', { method: 'POST', ...json(b) }),
   adminEmailTest: () => request<{ sent_to: string }>('/api/admin/email/test', { method: 'POST' }),
   adminEmailRemove: () => request('/api/admin/email', { method: 'DELETE' }),
-  authConfig: () => request<{ signup_enabled: boolean; google: boolean; email: boolean }>('/api/auth/config'),
+  authConfig: () => request<{ signup_enabled: boolean; providers: SsoPublic[]; email: boolean }>('/api/auth/config'),
   login2fa: (b: { mfa_token: string; code: string }) => request<{ token: string; user: User }>('/api/auth/login/2fa', { method: 'POST', ...json(b) }),
   changePassword: (b: { current?: string; new: string; code?: string }) => request('/api/auth/password', { method: 'POST', ...json(b) }),
-  googleLink: () => request<{ url: string }>('/api/auth/google/link', { method: 'POST' }),
-  googleUnlink: () => request('/api/auth/google/unlink', { method: 'POST' }),
+  ssoLink: (id: string) => request<{ url: string }>(`/api/auth/sso/${id}/link`, { method: 'POST' }),
+  ssoUnlink: (id: string) => request(`/api/auth/sso/${id}/unlink`, { method: 'POST' }),
+  ssoIdentities: () => request<{ provider: string; name: string; label: string }[]>('/api/auth/sso/identities'),
+  adminSso: () => request<SsoAdmin>('/api/admin/sso'),
+  adminSsoAdd: (preset: string) => request<SsoProvider>('/api/admin/sso', { method: 'POST', ...json({ preset }) }),
+  adminSsoSave: (id: string, b: Partial<Omit<SsoProvider, 'id' | 'preset' | 'ready' | 'secret_set' | 'linked' | 'redirect_uri'> & { client_secret: string }>) => request<SsoProvider>(`/api/admin/sso/${id}`, { method: 'PUT', ...json(b) }),
+  adminSsoDelete: (id: string) => request(`/api/admin/sso/${id}`, { method: 'DELETE' }),
+  adminSsoDiscover: (issuer: string) => request<{ authorize_url: string; token_url: string; userinfo_url: string; scopes: string; name: string }>('/api/admin/sso/discover', { method: 'POST', ...json({ issuer }) }),
   twofaStatus: () => request<{ enabled: boolean; recovery_left: number }>('/api/auth/2fa'),
   twofaSetup: () => request<{ secret: string; uri: string }>('/api/auth/2fa/setup', { method: 'POST' }),
   twofaEnable: (code: string) => request<{ recovery_codes: string[] }>('/api/auth/2fa/enable', { method: 'POST', ...json({ code }) }),
@@ -213,7 +222,7 @@ export const api = {
   adminSttDeleteModel: (repo: string) => request<SttModels>(`/api/admin/stt/models?repo=${encodeURIComponent(repo)}`, { method: 'DELETE' }),
   adminSttTest: () => request<{ ok: boolean; provider: string; model: string; ms: number; note?: string }>('/api/admin/stt/test', { method: 'POST', body: '{}' }),
   adminSettings: () => request<AdminSettings>('/api/admin/settings'),
-  adminSaveSettings: (b: Partial<{ ai_url: string; ai_model: string; ai_key: string; ai_clear_key: boolean; ai_enabled: boolean; stt_provider: string; stt_model: Record<string, string>; stt_key: Record<string, string>; stt_clear_key: string; stt_url: string; stt_language: string; stt_draft: boolean; stt_idle_unload: boolean; stt_idle_minutes: number; smtp_host: string; smtp_port: number; smtp_security: string; smtp_user: string; smtp_password: string; smtp_from: string; default_quota_mb: number; signup_enabled: boolean; google_client_id: string; google_client_secret: string; public_url: string }>) => request<AdminSettings>('/api/admin/settings', { method: 'PUT', ...json(b) }),
+  adminSaveSettings: (b: Partial<{ ai_url: string; ai_model: string; ai_key: string; ai_clear_key: boolean; ai_enabled: boolean; stt_provider: string; stt_model: Record<string, string>; stt_key: Record<string, string>; stt_clear_key: string; stt_url: string; stt_language: string; stt_draft: boolean; stt_idle_unload: boolean; stt_idle_minutes: number; smtp_host: string; smtp_port: number; smtp_security: string; smtp_user: string; smtp_password: string; smtp_from: string; default_quota_mb: number; signup_enabled: boolean; public_url: string }>) => request<AdminSettings>('/api/admin/settings', { method: 'PUT', ...json(b) }),
   adminFiles: (p: { owner?: string; q?: string }) => request<AdminFile[]>(`/api/admin/files?${new URLSearchParams(Object.entries(p).filter(([, v]) => v) as [string, string][])}`),
   adminDeleteFile: (id: string) => request(`/api/admin/files/${id}`, { method: 'DELETE' }),
   deleteAccount: (b: { email: string; password?: string; code?: string }) => request('/api/auth/delete', { method: 'POST', ...json(b) }),

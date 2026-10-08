@@ -83,10 +83,11 @@ export function Dashboard() {
   const folderId = params.get('folder')
   const sf = params.get('sf') // folder opened inside "Shared with me"
   useEffect(() => {
-    const g = new URLSearchParams(location.search).get('google')
+    const qs = new URLSearchParams(location.search)
+    const g = qs.get('sso') ?? qs.get('google')   // (the older address used ?google=)
     if (!g) return
     history.replaceState(null, '', location.pathname)
-    toast(g === 'linked' ? 'Google account linked' : g)
+    toast(g === 'linked' ? 'Account linked' : g.startsWith('linked:') ? `${g.slice(7)} account linked` : g)
     openSettings('security')
   }, [])
   const [docs, setDocs] = useState<{ mine: DocSummary[]; shared: DocSummary[] } | null>(null)

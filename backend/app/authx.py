@@ -68,7 +68,7 @@ def verify_second_factor(db, user, code: str) -> bool:
 @router.get("/auth/config")
 def auth_config(db=Depends(get_db)):
     return {"signup_enabled": settings_get(db, "signup_enabled", "1") == "1",
-            "google": bool(settings_get(db, "google_client_id") and settings_get(db, "google_client_secret")),
+            "providers": [{"id": p["id"], "name": p["name"], "preset": p["preset"]} for p in __import__("app.sso", fromlist=["providers"]).providers(db)],
             "email": email_enabled(db)}
 
 
@@ -140,7 +140,7 @@ def twofa_disable(b: Code, user=Depends(must_user), db=Depends(get_db)):
     return {"ok": True}
 
 
-# ───────────── Google sign-in (OAuth 2.0 authorization-code flow) ─────────────
+# ───────────── the public address (used to build the sign-in redirect addresses) ─────────────
 def base_url(request: Request, db) -> str:
     override = settings_get(db, "public_url").rstrip("/")
     if override:
@@ -148,94 +148,6 @@ def base_url(request: Request, db) -> str:
     proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
     host = request.headers.get("x-forwarded-host", request.headers.get("host", "localhost")).split(",")[0].strip()
     return f"{proto}://{host}"
-
-
-def redirect_uri(request: Request, db) -> str:
-    return f"{base_url(request, db)}/api/auth/google/callback"
-
-
-def google_url(request: Request, db, state: str) -> str:
-    cid = settings_get(db, "google_client_id")
-    if not cid or not settings_get(db, "google_client_secret"):
-        raise HTTPException(404, "Google sign-in isn't set up")
-    q = urllib.parse.urlencode({"client_id": cid, "redirect_uri": redirect_uri(request, db), "response_type": "code", "scope": "openid email profile",
-                                "state": state, "prompt": "select_account"})
-    return f"https://accounts.google.com/o/oauth2/v2/auth?{q}"
-
-
-@router.get("/auth/google/start")
-def google_start(request: Request, next: str = "/", db=Depends(get_db)):
-    if not next.startswith("/") or next.startswith("//"):
-        next = "/"
-    return RedirectResponse(google_url(request, db, make_state(next)))
-
-
-@router.post("/auth/google/link")
-def google_link(request: Request, user=Depends(must_user), db=Depends(get_db)):
-    """Returns the Google URL that attaches a Google account to the signed-in user."""
-    return {"url": google_url(request, db, make_state("/", link=user["id"]))}
-
-
-@router.post("/auth/google/unlink")
-def google_unlink(user=Depends(must_user), db=Depends(get_db)):
-    if not user["pw_set"]:
-        raise HTTPException(400, "Set a password first, otherwise you'd be locked out")
-    db.execute("UPDATE users SET google_sub = NULL, google_email = NULL WHERE id = ?", (user["id"],))
-    db.commit()
-    return {"ok": True}
-
-
-def fail(msg: str, link: bool = False) -> RedirectResponse:
-    return RedirectResponse(("/?google=" if link else "/login?error=") + urllib.parse.quote(msg))
-
-
-@router.get("/auth/google/callback")
-def google_callback(request: Request, code: str = "", state: str = "", error: str = "", db=Depends(get_db)):
-    if error:
-        return fail("Google sign-in was cancelled")
-    st = read_state(state)
-    next_url, link_uid = st if st else (None, None)
-    cid, secret_enc = settings_get(db, "google_client_id"), settings_get(db, "google_client_secret")
-    if next_url is None or not code or not cid or not secret_enc:
-        return fail("Google sign-in failed. Please try again.")
-    try:
-        tok = httpx.post("https://oauth2.googleapis.com/token", timeout=15, data={
-            "code": code, "client_id": cid, "client_secret": decrypt_secret(secret_enc), "redirect_uri": redirect_uri(request, db), "grant_type": "authorization_code"})
-        tok.raise_for_status()
-        info = httpx.get("https://openidconnect.googleapis.com/v1/userinfo", timeout=15, headers={"authorization": f"Bearer {tok.json()['access_token']}"}).json()
-    except Exception:
-        return fail("Couldn't reach Google. Please try again.")
-    email = str(info.get("email", "")).lower()
-    sub = str(info.get("sub", ""))
-    if not sub or not EMAIL_RE.match(email) or not info.get("email_verified"):
-        return fail("Your Google email isn't verified", bool(link_uid))
-    if link_uid:
-        taken = db.execute("SELECT id FROM users WHERE google_sub = ? AND id != ?", (sub, link_uid)).fetchone()
-        if taken:
-            return fail("That Google account is already linked to another user", True)
-        db.execute("UPDATE users SET google_sub = ?, google_email = ? WHERE id = ?", (sub, email, link_uid))
-        db.commit()
-        return RedirectResponse("/?google=linked")
-    user = db.execute("SELECT * FROM users WHERE google_sub = ?", (sub,)).fetchone() or db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    if user is None:
-        if settings_get(db, "signup_enabled", "1") != "1":
-            return fail("Sign-ups are currently closed")
-        uid = uuid.uuid4().hex
-        db.execute("INSERT INTO users (id, email, name, password_hash, color, created_at, pw_set) VALUES (?,?,?,?,?,?,0)",
-                   (uid, email, str(info.get("name") or email.split("@")[0])[:60], hash_password(secrets.token_urlsafe(24)), COLORS[secrets.randbelow(len(COLORS))], time.time()))
-        db.commit()
-        user = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
-    if user["disabled"]:
-        return fail("This account has been suspended")
-    if not user["google_sub"]:
-        db.execute("UPDATE users SET google_sub = ?, google_email = ? WHERE id = ?", (sub, email, user["id"]))
-        db.commit()
-    frag = {"next": next_url}
-    if user["totp_enabled"]:
-        frag["mfa"] = make_mfa_token(user["id"])
-    else:
-        frag["token"] = make_token(user["id"])
-    return RedirectResponse("/auth/callback#" + urllib.parse.urlencode(frag))
 
 
 # ───────────── change password ─────────────

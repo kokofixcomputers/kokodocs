@@ -9,7 +9,7 @@ const REASONS = [
   { icon: Sparkles, title: 'An assistant on your terms', text: 'Connect the model you trust, or none. It reads your files with tools, and every edit waits for your approval. Keys are encrypted at rest and never sent back to the browser.' },
   { icon: Lock, title: 'Private by default', text: 'New files are restricted to you. Sharing is by person, link, password or folder, and roles are enforced on the server. Spelling and grammar run locally unless you say otherwise.' },
   { icon: WifiOff, title: 'Kind to bad connections', text: 'Lose signal mid-sentence and keep typing. When you are back, your edits and everyone else’s merge, and a short notice tells you what happened.' },
-  { icon: KeyRound, title: 'Grown-up account security', text: 'Two-factor sign-in with recovery codes, Google sign-in, email confirmation, rate limits and an admin panel for people, files and quotas.' },
+  { icon: KeyRound, title: 'Grown-up account security', text: 'Two-factor sign-in with recovery codes, single sign-on with Google, GitHub or your own provider, email confirmation, rate limits and an admin panel for people, files and quotas.' },
 ]
 
 const ROWS: [string, string, string, string][] = [

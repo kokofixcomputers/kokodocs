@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -224,6 +225,30 @@ def migrate(db: sqlite3.Connection) -> None:
         if col not in ucols:
             db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_sub) WHERE google_sub IS NOT NULL")
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS sso_providers (
+      id TEXT PRIMARY KEY, preset TEXT NOT NULL DEFAULT 'custom', name TEXT NOT NULL, client_id TEXT NOT NULL DEFAULT '', client_secret_enc TEXT,
+      authorize_url TEXT NOT NULL DEFAULT '', token_url TEXT NOT NULL DEFAULT '', userinfo_url TEXT NOT NULL DEFAULT '', emails_url TEXT NOT NULL DEFAULT '',
+      scopes TEXT NOT NULL DEFAULT 'openid email profile', subject_field TEXT NOT NULL DEFAULT 'sub', email_field TEXT NOT NULL DEFAULT 'email',
+      name_field TEXT NOT NULL DEFAULT 'name', verified_field TEXT NOT NULL DEFAULT 'email_verified', trust_email INTEGER NOT NULL DEFAULT 0,
+      auth_method TEXT NOT NULL DEFAULT 'post', extra_params TEXT NOT NULL DEFAULT '{}', enabled INTEGER NOT NULL DEFAULT 1, position INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS user_identities (
+      provider TEXT NOT NULL, subject TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, label TEXT NOT NULL DEFAULT '', created_at REAL NOT NULL,
+      PRIMARY KEY (provider, subject)
+    );
+    CREATE INDEX IF NOT EXISTS idx_identities_user ON user_identities(user_id);
+    """)
+    # Google sign-in used to be built in. Carry its settings and linked accounts over, once, as the "google" provider.
+    gid = db.execute("SELECT value FROM app_settings WHERE key = 'google_client_id'").fetchone()
+    if gid and gid["value"] and not db.execute("SELECT 1 FROM sso_providers WHERE id = 'google'").fetchone():
+        gs = db.execute("SELECT value FROM app_settings WHERE key = 'google_client_secret'").fetchone()
+        db.execute("""INSERT INTO sso_providers (id, preset, name, client_id, client_secret_enc, authorize_url, token_url, userinfo_url, scopes, subject_field, email_field, name_field,
+                      verified_field, extra_params, enabled, position, created_at) VALUES ('google','google','Google',?,?,'https://accounts.google.com/o/oauth2/v2/auth','https://oauth2.googleapis.com/token',
+                      'https://openidconnect.googleapis.com/v1/userinfo','openid email profile','sub','email','name','email_verified','{"prompt": "select_account"}',1,0,?)""",
+                   (gid["value"], (gs["value"] if gs and gs["value"] else None), time.time()))
+        db.execute("""INSERT OR IGNORE INTO user_identities (provider, subject, user_id, label, created_at)
+                      SELECT 'google', google_sub, id, COALESCE(google_email, ''), ? FROM users WHERE google_sub IS NOT NULL""", (time.time(),))
     acols = {r["name"] for r in db.execute("PRAGMA table_info(ai_settings)")}
     if "use_own" not in acols:   # does this person use their own connection (1) or the system-wide one (0)? Existing connections keep being used.
         db.execute("ALTER TABLE ai_settings ADD COLUMN use_own INTEGER NOT NULL DEFAULT 0")

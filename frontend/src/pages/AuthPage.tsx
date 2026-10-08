@@ -4,10 +4,8 @@ import { ArrowLeft, KeyRound, Lock, Mail, ShieldCheck, User as UserIcon } from '
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { Logo } from '../ui/Logo'
+import { ProviderMark } from '../ui/ProviderMark'
 
-const GoogleMark = () => (
-  <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z" /><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.1 5.3-4.5 7l7.3 5.7c4.3-4 6.9-9.9 6.9-17.2z" /><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z" /><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.800l-7.300-5.700c-2 1.400-4.600 2.200-8.600 2.200-6.300 0-11.600-4.100-13.500-9.800l-7.900 6.100C6.500 42.600 14.600 48 24 48z" /></svg>
-)
 
 /** Six-digit email code entry with a resend countdown. */
 function CodeStep({ email, cooldown, onVerify, onResend, onBack, hint }: { email: string; cooldown: number; onVerify: (code: string) => Promise<void>; onResend: () => Promise<number>; onBack: () => void; hint?: string }) {
@@ -68,9 +66,9 @@ export function AuthEmbedded({ mode, onDone, next = '/' }: { mode: 'login' | 'si
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [mfa, setMfa] = useState<string | null>(null)
-  const [cfg, setCfg] = useState<{ signup_enabled: boolean; google: boolean; email: boolean } | null>(null)
+  const [cfg, setCfg] = useState<{ signup_enabled: boolean; providers: { id: string; name: string; preset: string }[]; email: boolean } | null>(null)
   const [params] = useSearchParams()
-  useEffect(() => { api.authConfig().then(setCfg).catch(() => setCfg({ signup_enabled: true, google: false, email: false })) }, [])
+  useEffect(() => { api.authConfig().then(setCfg).catch(() => setCfg({ signup_enabled: true, providers: [], email: false })) }, [])
   useEffect(() => { const e = params.get('error'); if (e) setErr(e) }, [params])
 
   if (mfa) return <MfaForm token={mfa} onDone={() => onDone?.()} />
@@ -91,9 +89,10 @@ export function AuthEmbedded({ mode, onDone, next = '/' }: { mode: 'login' | 'si
 
   return (
     <>
-      {cfg?.google && (
+      {!!cfg?.providers.length && (
         <>
-          <a className="btn btn-ghost btn-pill btn-lg google-btn" href={`/api/auth/google/start?next=${encodeURIComponent(next)}`}><GoogleMark />Continue with Google</a>
+          {cfg.providers.map((p) => (
+            <a key={p.id} className="btn btn-ghost btn-pill btn-lg google-btn" href={`/api/auth/sso/${p.id}/start?next=${encodeURIComponent(next)}`}><ProviderMark preset={p.preset} />Continue with {p.name}</a>))}
           <div className="auth-or"><span>or</span></div>
         </>
       )}
@@ -163,7 +162,7 @@ export function ForgotPage() {
   )
 }
 
-/** Landing page after Google sign-in: picks the token (or a 2FA challenge) out of the URL fragment. */
+/** Landing page after single sign-on: picks the token (or a 2FA challenge) out of the URL fragment. */
 export function AuthCallback() {
   const { acceptToken } = useAuth()
   const nav = useNavigate()
