@@ -86,7 +86,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const [panel, setPanel] = useState<'none' | 'history' | 'assistant' | 'proof'>('none')
   const [preview, setPreview] = useState<Version | null>(null)
   const [verKey, setVerKey] = useState(0)
-  const proof = useProofread(ed)
+  const proof = useProofread(ed, info.id)
   const voice = useVoiceTyping({ editor: ed, docId: info.id, enabled: !readOnly && !preview })
   const { status, synced } = useProviderStatus(provider)
   const people = usePresence(provider)

@@ -250,7 +250,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
     return () => dom.removeEventListener('click', click)
   }, [editor, readOnly])
 
-  const proof = useProofread(editor)
+  const proof = useProofread(editor, info.id)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [activeComment, setActiveComment] = useState<string | null>(null)
   const comments = useComments(info.id, !!user)

@@ -221,8 +221,8 @@ export const api = {
     fd.append('file', wav, 'speech.wav')
     return (await request<{ text: string }>(`/api/docs/${id}/transcribe/draft`, { method: 'POST', body: fd, signal }, id)).text
   },
-  proofread: (blocks: { id: number; text: string }[], language?: string) =>
-    request<{ issues: ProofIssue[] }>('/api/proofread', { method: 'POST', ...json({ blocks, ...(language ? { language } : {}) }) }),
+  proofread: (docId: string, blocks: { id: number; text: string }[], language?: string) =>
+    request<{ issues: ProofIssue[] }>(`/api/docs/${docId}/proofread`, { method: 'POST', ...json({ blocks, ...(language ? { language } : {}) }) }, docId),
 }
 
 /** Raw streaming call to the assistant proxy (the caller reads the event stream). */

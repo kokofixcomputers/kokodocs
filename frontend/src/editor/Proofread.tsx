@@ -54,7 +54,7 @@ function initialLanguage(): string {
   return PROOF_LANGUAGES.find((l) => l.value.toLowerCase() === nav.toLowerCase())?.value ?? 'en-US'
 }
 
-export function useProofread(editor: Editor | null) {
+export function useProofread(editor: Editor | null, docId: string) {
   const [language, setLanguageState] = useState(initialLanguage)
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(false)
@@ -79,7 +79,7 @@ export function useProofread(editor: Editor | null) {
     const blocks = gather(editor)
     if (!blocks.length) { setIssues([]); return }
     setLoading(true)
-    api.proofread(blocks, language).then(({ issues: raw }) => {
+    api.proofread(docId, blocks, language).then(({ issues: raw }) => {
       if (my !== seq.current || editor.isDestroyed) return
       const out: Issue[] = []
       for (const i of raw) {
@@ -91,7 +91,7 @@ export function useProofread(editor: Editor | null) {
       }
       setIssues(out); setFailed(false)
     }).catch(() => { if (my === seq.current) setFailed(true) }).finally(() => { if (my === seq.current) setLoading(false) })
-  }, [editor, tick, language])
+  }, [editor, tick, language, docId])
 
   const visible = issues.filter((i) => !ignored.has(i.key))
   useEffect(() => {
