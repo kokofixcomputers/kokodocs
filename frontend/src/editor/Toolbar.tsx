@@ -15,6 +15,7 @@ import type { Voice } from '../voice/useVoiceTyping'
 import { ColorPicker } from './ColorPicker'
 import { useFormatPainter } from './FormatPainter'
 import { FontPicker } from './FontPicker'
+import { HeadingPicker } from './headingLinks'
 
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72, 96]
 const HEADING_SIZE: Record<number, number> = { 1: 26, 2: 20, 3: 16, 4: 14, 5: 12, 6: 11 }
@@ -68,7 +69,13 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
   const setLink = (close: () => void, url: string) => {
     close()
     if (!url.trim()) run().extendMarkRange('link').unsetLink().run()
-    else run().extendMarkRange('link').setLink({ href: /^(https?:|mailto:)/i.test(url) ? url : `https://${url}` }).run()
+    else run().extendMarkRange('link').setLink({ href: /^(https?:|mailto:|#h-)/i.test(url) ? url : `https://${url}` }).run()
+  }
+  const linkToHeading = (close: () => void, anchor: string, h: { text: string }) => {   // a link that jumps to a heading in this document
+    close()
+    const { from, to } = editor.state.selection
+    if (from === to && !editor.isActive('link')) run().insertContent({ type: 'text', text: h.text, marks: [{ type: 'link', attrs: { href: `#${anchor}` } }] }).run()
+    else run().extendMarkRange('link').setLink({ href: `#${anchor}` }).run()
   }
 
   return (
@@ -133,10 +140,13 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
           <Popover className="pop-link" trigger={({ toggle }) => (
             <TBtn icon={<Link2 size={17} />} label="Link" active={editor.isActive('link')} onClick={toggle} />)}>
             {(close) => (
+              <>
               <form className="link-form" onSubmit={(e) => { e.preventDefault(); setLink(close, (e.currentTarget.elements.namedItem('url') as HTMLInputElement).value) }}>
                 <input name="url" autoFocus placeholder="Paste a link" defaultValue={editor.getAttributes('link').href ?? ''} />
                 <button className="btn btn-primary btn-pill btn-sm">Apply</button>
-              </form>)}
+              </form>
+              <div className="link-heads"><h5>Or jump to a heading in this document</h5><HeadingPicker editor={editor} current={String(editor.getAttributes('link').href ?? '').slice(1) || null} onPick={(a, h) => linkToHeading(close, a, h)} /></div>
+              </>)}
           </Popover>
         </div>
 

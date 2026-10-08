@@ -2,11 +2,12 @@ import { viewBottom, viewRight } from '../ui/viewport'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
-import { Check, Copy, ExternalLink, Link2, Pencil, Unlink, X } from 'lucide-react'
+import { ArrowRight, Check, Copy, ExternalLink, Link2, Pencil, Unlink, X } from 'lucide-react'
+import { HeadingPicker, findHeading, isInternal, jumpTo } from './headingLinks'
 import { toast } from '../ui/Toast'
 
 interface Hit { el: HTMLAnchorElement; href: string; rect: DOMRect }
-const normalize = (u: string) => (/^(https?:|mailto:)/i.test(u.trim()) ? u.trim() : `https://${u.trim()}`)
+const normalize = (u: string) => (/^(https?:|mailto:|#h-)/i.test(u.trim()) ? u.trim() : `https://${u.trim()}`)
 const shown = (href: string) => { const s = href.replace(/^https?:\/\//i, '').replace(/^mailto:/i, '').replace(/\/$/, ''); return s.length > 44 ? s.slice(0, 43) + '…' : s }
 
 /** A small pill that floats under a link when you point at it: the address, plus open, copy, edit and remove. */
@@ -56,6 +57,8 @@ export function LinkHover({ editor }: { editor: Editor }) {
 
   if (!hit) return null
   const editable = editor.isEditable
+  const internal = isInternal(hit.href)
+  const target = internal ? findHeading(editor, hit.href.slice(1)) : null
   const select = () => {   // select the whole link so the next command applies to all of it
     const at = editor.view.posAtDOM(hit.el, 0)
     editor.chain().focus().setTextSelection(at + 1).extendMarkRange('link').run()
@@ -78,12 +81,22 @@ export function LinkHover({ editor }: { editor: Editor }) {
           <input name="url" autoFocus onFocus={(e) => e.currentTarget.select()} spellCheck={false} defaultValue={hit.href} placeholder="Paste a link" aria-label="Link address" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEditing(false) } }} />
           <button type="submit" className="lp-btn" aria-label="Save link" title="Save"><Check size={16} /></button>
           <button type="button" className="lp-btn" aria-label="Cancel" title="Cancel" onClick={() => setEditing(false)}><X size={16} /></button>
+          <div className="link-heads lp-heads"><h5>Or jump to a heading</h5><HeadingPicker editor={editor} current={isInternal(hit.href) ? hit.href.slice(1) : null} onPick={(a) => apply(`#${a}`)} /></div>
         </form>
       ) : (
         <>
-          <a className="lp-url" href={hit.href} target="_blank" rel="noopener noreferrer" title={hit.href}><Link2 size={15} /><span>{shown(hit.href)}</span></a>
-          <button type="button" className="lp-btn" aria-label="Open link" title="Open in a new tab" onClick={() => window.open(hit.href, '_blank', 'noopener,noreferrer')}><ExternalLink size={15} /></button>
-          <button type="button" className="lp-btn" aria-label="Copy link" title="Copy link" onClick={() => navigator.clipboard.writeText(hit.href).then(() => toast('Link copied'), () => toast(hit.href))}><Copy size={15} /></button>
+          {internal ? (
+            <>
+              <button type="button" className="lp-url" title="Jump to this heading" onClick={() => { jumpTo(editor, hit.href.slice(1)); setHit(null) }}><ArrowRight size={15} /><span>{target ? target.text || 'Heading' : 'Heading no longer exists'}</span></button>
+              <button type="button" className="lp-btn" aria-label="Go to heading" title="Go to the heading" disabled={!target} onClick={() => { jumpTo(editor, hit.href.slice(1)); setHit(null) }}><ArrowRight size={15} /></button>
+            </>
+          ) : (
+            <>
+              <a className="lp-url" href={hit.href} target="_blank" rel="noopener noreferrer" title={hit.href}><Link2 size={15} /><span>{shown(hit.href)}</span></a>
+              <button type="button" className="lp-btn" aria-label="Open link" title="Open in a new tab" onClick={() => window.open(hit.href, '_blank', 'noopener,noreferrer')}><ExternalLink size={15} /></button>
+              <button type="button" className="lp-btn" aria-label="Copy link" title="Copy link" onClick={() => navigator.clipboard.writeText(hit.href).then(() => toast('Link copied'), () => toast(hit.href))}><Copy size={15} /></button>
+            </>
+          )}
           {editable && <button type="button" className="lp-btn" aria-label="Edit link" title="Edit link" onClick={() => setEditing(true)}><Pencil size={15} /></button>}
           {editable && <button type="button" className="lp-btn" aria-label="Remove link" title="Remove link" onClick={() => { select(); editor.chain().focus().unsetLink().run(); setHit(null) }}><Unlink size={15} /></button>}
         </>

@@ -454,3 +454,10 @@ img.emoji { display: inline-block; height: 1.2em; width: 1.2em; vertical-align: 
 img.emoji.emoji-failed { width: auto; height: auto; font-size: 1em; color: inherit; vertical-align: baseline; user-select: text; }
 
 .emoji-suggest .sm-ico img.emoji { width: 22px; height: 22px; margin: 0; } .emoji-suggest .sm-text b { font-weight: 600; } .emoji-suggest { width: 288px; }
+
+/* links that jump to a heading */
+.link-heads { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; width: 100%; } .link-heads h5 { margin: 0 4px 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+.heading-pick { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; min-width: 240px; } .heading-pick button { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 13.5px; text-align: left; padding: 6px 10px; border-radius: 10px; cursor: pointer; } .heading-pick button:hover { background: var(--hover); } .heading-pick button.on { background: var(--accent-soft); font-weight: 600; }
+.hp-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .hp-empty { margin: 6px 4px; font-size: 13px; color: var(--muted); max-width: 260px; }
+.lp-heads { flex-basis: 100%; } .link-pill.editing { flex-wrap: wrap; }
+.koko-prose a[href^="#h-"] { text-decoration-style: dotted; }
