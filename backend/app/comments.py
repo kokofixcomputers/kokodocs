@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from . import access
 from .db import get_db
 from . import notifications
+from .collab import notify_comments
 from .routes import ctx, must_user
 
 router = APIRouter(prefix="/api")
@@ -93,6 +94,7 @@ def add_comment(doc_id: str, b: NewComment, request: Request, tasks: BackgroundT
     for to, actor, text, link in emails:
         tasks.add_task(notifications.send_mail_background, to, *notifications.mention_mail(actor, doc["title"], text, base + link))
     r = db.execute("SELECT * FROM comments WHERE id = ?", (cid,)).fetchone()
+    notify_comments(doc_id)
     return {**view(r, {user["id"]: user["name"]}), "skipped": skipped}
 
 
@@ -105,6 +107,7 @@ def resolve_comment(doc_id: str, cid: str, b: Resolve, c=Depends(ctx), user=Depe
     access.require(db, doc_id, *c)
     db.execute("UPDATE comments SET resolved = ?, updated_at = ? WHERE id = ? AND doc_id = ?", (int(b.resolved), time.time(), cid, doc_id))
     db.commit()
+    notify_comments(doc_id)
     return {"ok": True}
 
 
@@ -118,4 +121,5 @@ def delete_comment(doc_id: str, cid: str, c=Depends(ctx), user=Depends(must_user
         raise HTTPException(403, "You can only delete your own comments")
     db.execute("DELETE FROM comments WHERE id = ? OR parent_id = ?", (cid, cid))
     db.commit()
+    notify_comments(doc_id)
     return {"ok": True}

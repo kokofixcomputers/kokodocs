@@ -3,6 +3,7 @@
 Frame format (binary): first byte = message type, rest = payload.
   0 = Yjs update   1 = awareness update (cursors / presence)   2 = ping (answered with the same frame: lets a client
   notice a connection that died without telling it, so it can reconnect and merge what it missed)
+  3 = comments changed (server to client only, no payload): the client fetches the list again, so comments need no polling
 Viewers can receive everything but their document updates are dropped.
 """
 import asyncio
@@ -18,7 +19,7 @@ from .db import connect
 from .snapshots import AUTO_INTERVAL, CLOSE_MIN_GAP, latest_time, take_snapshot
 
 router = APIRouter()
-MSG_UPDATE, MSG_AWARENESS, MSG_PING = 0, 1, 2
+MSG_UPDATE, MSG_AWARENESS, MSG_PING, MSG_COMMENTS = 0, 1, 2, 3
 MAX_FRAME = 16 * 1024 * 1024
 
 
@@ -152,6 +153,18 @@ async def broadcast(room: Room, frame: bytes, exclude: Conn | None = None) -> No
 
 
 ACCESS_CHANGED = 4002
+_loop: asyncio.AbstractEventLoop | None = None
+
+
+def notify_comments(doc_id: str) -> None:
+    """Tell everyone connected to a document that its comments changed. Safe to call from the threads that run the REST handlers."""
+    room = rooms.get(doc_id)
+    if not room or not _loop:
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(broadcast(room, bytes([MSG_COMMENTS, 0])), _loop)
+    except Exception:
+        pass
 
 
 async def refresh_access(doc_id: str) -> None:
@@ -200,6 +213,8 @@ async def ws_doc(ws: WebSocket, doc_id: str):
         await ws.close(code=4403)
         return
     await ws.accept()
+    global _loop
+    _loop = asyncio.get_running_loop()
 
     async with _lock:
         room = rooms.get(doc_id)

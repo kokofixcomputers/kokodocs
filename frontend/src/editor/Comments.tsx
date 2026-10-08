@@ -13,7 +13,12 @@ export const ago = (t: number) => { const s = Date.now() / 1000 - t; return s < 
 export function useComments(docId: string, enabled: boolean) {
   const [list, setList] = useState<Comment[]>([])
   const refresh = useCallback(() => { if (enabled) api.comments(docId).then(setList).catch(() => {}) }, [docId, enabled])
-  useEffect(() => { refresh(); if (!enabled) return; const t = setInterval(refresh, 7000); return () => clearInterval(t) }, [refresh, enabled])
+  // No polling: the document's websocket says when comments change (and when it reconnects), see KokoProvider
+  useEffect(() => {
+    refresh(); if (!enabled) return
+    const f = (e: Event) => { if ((e as CustomEvent).detail?.docId === docId) refresh() }
+    window.addEventListener('koko:comments', f); return () => window.removeEventListener('koko:comments', f)
+  }, [refresh, enabled, docId])
   return { list, refresh, setList }
 }
 

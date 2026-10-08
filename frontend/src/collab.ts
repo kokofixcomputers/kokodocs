@@ -5,6 +5,7 @@ import { getDocToken, getToken } from './api'
 const MSG_UPDATE = 0
 const MSG_AWARENESS = 1
 const MSG_PING = 2
+const MSG_COMMENTS = 3   // server to client: the comments changed, fetch them again (this is what replaces polling)
 
 export type ConnStatus = 'connecting' | 'connected' | 'disconnected' | 'offline' | 'denied'
 
@@ -84,6 +85,7 @@ export class KokoProvider {
       this.everConnected = true
       this.pending = 0
       this.setStatus('connected')
+      this.commentsChanged()   // anything said while we were away
       this.startHeartbeat()
     }
     ws.onmessage = (e) => {
@@ -104,10 +106,14 @@ export class KokoProvider {
         }
       } else if (data[0] === MSG_AWARENESS) {
         applyAwarenessUpdate(this.awareness, body, this)
+      } else if (data[0] === MSG_COMMENTS) {
+        this.commentsChanged()
       }
     }
     ws.onclose = (e) => this.lost(ws, e.code)
   }
+
+  private commentsChanged() { window.dispatchEvent(new CustomEvent('koko:comments', { detail: { docId: this.docId } })) }
 
   /** The socket is gone (closed, errored, or judged dead). Clean up and plan the next try. */
   private lost(ws: WebSocket, code = 1006) {

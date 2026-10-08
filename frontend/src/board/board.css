@@ -122,3 +122,7 @@
 .bd-road-today { position: absolute; top: 54px; bottom: 0; width: 2px; background: var(--accent); opacity: .55; z-index: 2; pointer-events: none; }
 .bd-undated { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; font-size: 13px; color: var(--muted); }
 .bd-undated .bd-chip { border: 0; cursor: pointer; font: inherit; font-size: 12px; }
+
+.bd-comments { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.bd-comments .bd-flabel { display: flex; align-items: center; gap: 6px; }
+.bd-muted { color: var(--muted); font-size: 13px; margin: 0; }

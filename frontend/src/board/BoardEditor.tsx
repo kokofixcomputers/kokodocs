@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
-import { AlertCircle, ArrowLeft, ArrowRight, Calendar, CheckSquare, ChevronDown, ChevronUp, Cloud, CloudOff, Copy, GripVertical, Hash, Kanban, CalendarDays, GanttChart, Table2, Link2, LogIn, Moon, MoreHorizontal, Plus, Redo2, Settings2, Share2, Sun, Tags, Trash2, Type, Undo2, X } from 'lucide-react'
-import { api, type ApiError, type DocInfo } from '../api'
+import { AlertCircle, ArrowLeft, ArrowRight, Calendar, CheckSquare, ChevronDown, ChevronUp, Cloud, CloudOff, Copy, GripVertical, Hash, Kanban, MessageSquare, CalendarDays, GanttChart, Table2, Link2, LogIn, Moon, MoreHorizontal, Plus, Redo2, Settings2, Share2, Sun, Tags, Trash2, Type, Undo2, X } from 'lucide-react'
+import { api, type ApiError, type Comment, type DocInfo, type User } from '../api'
 import { useAuth } from '../auth'
 import { KokoProvider } from '../collab'
 import { ShareDialog } from '../editor/ShareDialog'
@@ -18,6 +18,8 @@ import { openSettings } from '../ui/settingsStore'
 import { BoardModel, COLORS, isEmpty, problem, TYPE_LABEL, uid, type Card, type FieldDef, type FieldType, type Value } from './model'
 import '../forms/forms.css'
 import { Chip, today, type F } from './shared'
+import { CardComments, forCard } from './CardComments'
+import { useComments } from '../editor/Comments'
 import { CalendarView } from './CalendarView'
 import { RoadmapView } from './RoadmapView'
 import { TableView } from './TableView'
@@ -71,6 +73,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
   const [open, setOpen] = useState<OpenTarget | null>(null)
   const [people, setPeople] = useState<{ id: number; name: string; color: string }[]>([])
   const [filter, setFilter] = useState('')
+  const { list: comments, refresh: refreshComments } = useComments(info.id, true)
   void version
   const cols = model.columns(), fields = model.fieldList()
 
@@ -136,13 +139,13 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
         {tab !== 'fields' && <input className="bd-filter" type="search" placeholder="Filter cards" aria-label="Filter cards" value={filter} onChange={(e) => setFilter(e.target.value)} />}
       </nav>
 
-      {tab === 'board' && <Columns model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} />}
+      {tab === 'board' && <Columns model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} comments={comments} />}
       {tab === 'table' && <TableView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} title={title} />}
       {tab === 'roadmap' && <RoadmapView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} />}
       {tab === 'calendar' && <CalendarView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} />}
       {tab === 'fields' && !readOnly && <FieldsPage model={model} fields={fields} />}
 
-      {open && <CardDialog model={model} fields={fields} cols={cols} target={open} readOnly={readOnly} onClose={() => setOpen(null)} />}
+      {open && <CardDialog model={model} fields={fields} cols={cols} target={open} readOnly={readOnly} onClose={() => setOpen(null)} docId={info.id} user={user} comments={comments} refreshComments={refreshComments} />}
       {share && <ShareDialog info={{ ...info, title }} onClose={() => setShare(false)} />}
     </div>
   )
@@ -150,7 +153,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
 
 // ---------- the columns ----------
 
-function Columns({ model, cols, fields, readOnly, filter, onOpen }: { model: BoardModel; cols: ({ id: string; name: string; color: string })[]; fields: F[]; readOnly: boolean; filter: string; onOpen: (t: OpenTarget) => void }) {
+function Columns({ model, cols, fields, readOnly, filter, onOpen, comments }: { model: BoardModel; cols: ({ id: string; name: string; color: string })[]; fields: F[]; readOnly: boolean; filter: string; onOpen: (t: OpenTarget) => void; comments: Comment[] }) {
   const [drag, setDrag] = useState<{ id: string; x: number; y: number; title: string; over: string | null; before: string | null } | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
   const q = filter.trim().toLowerCase()
@@ -212,9 +215,10 @@ function Columns({ model, cols, fields, readOnly, filter, onOpen }: { model: Boa
                       onClick={() => { if (!suppressClick.current) onOpen({ id: c.id }) }} onKeyDown={(e) => { if (e.key === 'Enter') onOpen({ id: c.id }) }}>
                       {!readOnly && <span className="bd-grip" aria-hidden><GripVertical size={14} /></span>}
                       <b>{c.title || 'Untitled'}</b>
-                      {(visible.some((f) => !isEmpty(c.v?.[f.id])) || issues.length > 0) && (
+                      {(visible.some((f) => !isEmpty(c.v?.[f.id])) || issues.length > 0 || forCard(comments, c.id).length > 0) && (
                         <div className="bd-chips">
                           {visible.map((f) => <Chip key={f.id} f={f} v={c.v?.[f.id]} />)}
+                          {forCard(comments, c.id).length > 0 && <span className="bd-chip plain" title="Comments"><MessageSquare size={12} />{forCard(comments, c.id).length}</span>}
                           {issues.length > 0 && <span className="bd-chip warn" title={issues.map((i) => `${i.field}: ${i.msg}`).join('\n')}><AlertCircle size={12} />{issues.length === 1 ? issues[0].field : `${issues.length} to fix`}</span>}
                         </div>)}
                     </article>
@@ -281,7 +285,7 @@ function FieldInput({ f, value, onChange, error }: { f: F; value: Value | undefi
 }
 
 /** Opens an existing card (every change is saved as you make it) or starts a new one (nothing is saved until the required fields are filled in). */
-function CardDialog({ model, fields, cols, target, readOnly, onClose }: { model: BoardModel; fields: F[]; cols: { id: string; name: string }[]; target: OpenTarget; readOnly: boolean; onClose: () => void }) {
+function CardDialog({ model, fields, cols, target, readOnly, onClose, docId, user, comments, refreshComments }: { docId: string; user: User | null; comments: Comment[]; refreshComments: () => void; model: BoardModel; fields: F[]; cols: { id: string; name: string }[]; target: OpenTarget; readOnly: boolean; onClose: () => void }) {
   const existing = 'id' in target ? model.card(target.id) : null
   const [draft, setDraft] = useState<{ title: string; desc: string; v: Record<string, Value>; col: string }>(() => ({ title: '', desc: '', v: 'col' in target ? { ...(target.v ?? {}) } : {}, col: 'col' in target ? target.col : '' }))
   const [tried, setTried] = useState(false)
@@ -301,7 +305,12 @@ function CardDialog({ model, fields, cols, target, readOnly, onClose }: { model:
     model.addCard(draft.col, draft.title.trim(), draft.v, draft.desc.trim() || undefined); onClose()
   }
   const colId = existing ? existing.col : draft.col
-  const remove = async () => { if (existing && await askConfirm({ title: 'Delete this card?', text: 'It is removed from the board for everyone.', label: 'Delete', danger: true })) { model.removeCard(existing.id); onClose() } }
+  const remove = async () => {
+    if (!existing || !(await askConfirm({ title: 'Delete this card?', text: 'It is removed from the board for everyone, with its comments.', label: 'Delete', danger: true }))) return
+    const gone = forCard(comments, existing.id)
+    model.removeCard(existing.id); onClose()
+    await Promise.all(gone.map((c) => api.deleteComment(docId, c.id).catch(() => undefined))); if (gone.length) refreshComments()   // comments you can't delete (someone else's) stay hidden: the card is gone
+  }
 
   return (
     <Modal title={existing ? 'Card' : 'New card'} onClose={onClose} width={620}>
@@ -318,6 +327,7 @@ function CardDialog({ model, fields, cols, target, readOnly, onClose }: { model:
         <label className="bd-field"><span className="bd-flabel">Description</span>
           <textarea rows={5} maxLength={20000} readOnly={readOnly} placeholder="Add more detail…" value={existing ? existing.desc ?? '' : draft.desc}
             onChange={(e) => existing ? model.updateCard(existing.id, { desc: e.target.value || undefined }) : setDraft({ ...draft, desc: e.target.value })} /></label>
+        {existing && <CardComments docId={docId} cardId={existing.id} user={user} list={comments} refresh={refreshComments} />}
         <div className="modal-actions">
           {existing && !readOnly ? <button className="btn btn-pill btn-ghost danger" onClick={() => void remove()}><Trash2 size={16} />Delete</button> : <span />}
           {existing ? <button className="btn btn-pill btn-primary" onClick={onClose}>Done</button>

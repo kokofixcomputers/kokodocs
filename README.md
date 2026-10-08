@@ -249,4 +249,10 @@ Code: `frontend/src/board/{model.ts,BoardEditor.tsx,board.css}`; the board is a 
 - **Roadmap**: a timeline grouped by column. Pick which date fields are the *Start* and *End* (or one field, so cards are single days); drag a bar to move it and its edges to change the dates; zoom by days, weeks or months. Cards without dates are listed under the timeline. The choice of fields is shared with everyone on the board.
 - **Calendar**: a month grid placing cards on a chosen date field; the **+** on a day adds a card with that date filled in.
 
+**Comments**: every card has its own comment thread (open the card), with @mentions that notify like comments in documents, a count on the card, and your own comments deletable. They are ordinary comments whose anchor is `{card: <id>}`; deleting a card deletes its comments.
+
 Not yet: version history, rich-text descriptions, grouping or colouring the board by a field other than the column.
+
+## Comments arrive over the websocket
+
+Comments are no longer polled. When one is added, resolved or deleted, the server sends a 2-byte frame (type 3) down the document's existing websocket to everyone connected (`notify_comments` in `backend/app/collab.py`, called from `backend/app/comments.py`). The browser answers by fetching the list once (`koko:comments` event from `frontend/src/collab.ts`, handled in `useComments`), and does the same when the socket reconnects, so anything said while you were away appears. Comments in documents, spreadsheets, presentations and boards all use this.
