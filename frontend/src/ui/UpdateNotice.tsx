@@ -58,7 +58,7 @@ export function UpdateNotice() {
   return (
     <div className="update-notice" role="status">
       <RefreshCw size={16} /><span>KokoDocs was updated.</span>
-      <button type="button" className="btn btn-pill btn-primary btn-sm" disabled={busy} onClick={() => { setBusy(true); void reloadForUpdate(latestId.current) }}>{busy ? 'Reloading…' : 'Reload'}</button>
+      <button type="button" className="update-btn" disabled={busy} onClick={() => { setBusy(true); void reloadForUpdate(latestId.current) }}>{busy ? 'Reloading…' : 'Reload'}</button>
     </div>
   )
 }

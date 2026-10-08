@@ -489,7 +489,8 @@ a.brand { color: var(--ink); text-decoration: none; }
 
 .update-notice { position: fixed; z-index: 60000; left: 50%; top: calc(var(--vv-top, 0px) + env(safe-area-inset-top, 0px) + 12px);   /* clear of the notch and the iPhone status bar, and still on screen when the keyboard has scrolled the page
   */ transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; touch-action: manipulation; pointer-events: auto; border-radius: 999px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow-2); font-size: 14px; max-width: calc(100vw - 24px); animation: rise .3s var(--ease); }
-.update-notice .btn-primary { background: var(--surface); color: var(--ink); }
+.update-notice .update-btn { appearance: none; border: 0; border-radius: 999px; padding: 0 16px; height: 32px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; background: var(--surface); color: var(--ink); touch-action: manipulation; white-space: nowrap; }   /* inverted against the pill, in both themes */
+.update-notice .update-btn:hover:not(:disabled) { filter: brightness(.94); } .update-notice .update-btn:disabled { opacity: .65; cursor: default; }
 .stt-memory { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13.5px; padding: 8px 12px; border-radius: var(--r); background: color-mix(in srgb, var(--ink) 4%, var(--surface)); } .stt-memory > span:first-child { display: inline-flex; align-items: center; gap: 8px; } .stt-memory .btn { margin-left: auto; }
 .stt-memory .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); opacity: .5; } .stt-memory .dot.on { background: #22c55e; opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 25%, transparent); }
 .tag.live { background: color-mix(in srgb, #22c55e 18%, var(--surface)); color: #15803d; } :root[data-theme='dark'] .tag.live { color: #4ade80; }
