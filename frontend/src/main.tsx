@@ -20,6 +20,7 @@ import { SearchPalette } from './ui/Search'
 import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
 import { KeyboardFit } from './ui/KeyboardFit'
+import { UpdateNotice } from './ui/UpdateNotice'
 import { installEmojiRecovery } from './emoji'
 import './app.css'
 import './editor.css'
@@ -72,3 +73,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </React.StrictMode>,
 )
+
+// its own root: if a lazy-loaded file is gone the app below can crash outright, and the reload offer must outlive that
+const notice = document.createElement('div'); document.body.appendChild(notice)
+ReactDOM.createRoot(notice).render(<UpdateNotice />)

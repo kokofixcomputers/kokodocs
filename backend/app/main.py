@@ -91,6 +91,8 @@ if (DIST / "index.html").exists():
             raise HTTPException(404, "Not found")
         f = (DIST / path).resolve()
         if path and f.is_file() and DIST.resolve() in f.parents:
+            if path == "version.js":
+                return FileResponse(f, headers={"Cache-Control": "no-store"})   # the build id open pages poll: must never come from a cache
             return FileResponse(f, headers={"Cache-Control": "public, max-age=31536000, immutable"} if path.startswith("twemoji/") else None)   # the emoji files never change
         if path.startswith("twemoji/"):
             raise HTTPException(404, "No such emoji")   # not index.html: a page pretending to be a picture is what shows as a broken image
