@@ -59,6 +59,7 @@ export function useProofread(editor: Editor | null) {
   const [issues, setIssues] = useState<Issue[]>([])
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [signedOut, setSignedOut] = useState(false)   // proofreading needs an account
   const [ignored, setIgnored] = useState<Set<string>>(new Set())
   const [tick, setTick] = useState(0)
   const seq = useRef(0)
@@ -89,8 +90,8 @@ export function useProofread(editor: Editor | null) {
         try { text = editor.state.doc.textBetween(from, to, undefined, '￼') } catch { continue }
         out.push({ ...i, from, to, text, key: `${i.kind}|${text}|${i.message}` })
       }
-      setIssues(out); setFailed(false)
-    }).catch(() => { if (my === seq.current) setFailed(true) }).finally(() => { if (my === seq.current) setLoading(false) })
+      setIssues(out); setFailed(false); setSignedOut(false)
+    }).catch((e) => { if (my === seq.current) { setFailed(true); setSignedOut(e?.status === 401) } }).finally(() => { if (my === seq.current) setLoading(false) })
   }, [editor, tick, language])
 
   const visible = issues.filter((i) => !ignored.has(i.key))
@@ -100,7 +101,7 @@ export function useProofread(editor: Editor | null) {
   }, [editor, issues, ignored]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
-    issues: visible, loading, failed, language,
+    issues: visible, loading, failed, signedOut, language,
     setLanguage: (l: string) => { setLanguageState(l); try { localStorage.setItem(LANG_KEY, l) } catch { /* private mode */ } },
     ignore: (i: Issue) => setIgnored((s) => new Set(s).add(i.key)),
     recheck: () => setTick((n) => n + 1),
@@ -117,7 +118,7 @@ export function applyIssue(editor: Editor, i: Issue, replacement: string, rechec
 const KIND = { spelling: 'Spelling', grammar: 'Grammar', style: 'Style' } as const
 
 export function ProofreadPanel({ editor, state }: { editor: Editor; state: ReturnType<typeof useProofread> }) {
-  const { issues, loading, failed, ignore, recheck, language, setLanguage } = state
+  const { issues, loading, failed, signedOut, ignore, recheck, language, setLanguage } = state
   const can = editor.isEditable
 
   const reveal = (i: Issue) => {
@@ -141,9 +142,9 @@ export function ProofreadPanel({ editor, state }: { editor: Editor; state: Retur
       <div className="proof-lang"><span>Language</span><Select value={language} options={PROOF_LANGUAGES} onChange={setLanguage} label="Proofreading language" /></div>
       {failed && issues.length === 0 ? (
         <div className="all-clear err">
-          <strong>Couldn't check right now</strong>
-          <span>The proofreading service isn't reachable.</span>
-          <button className="btn btn-pill btn-soft btn-sm" onClick={recheck}>Try again</button>
+          <strong>{signedOut ? 'Sign in to proofread' : "Couldn't check right now"}</strong>
+          <span>{signedOut ? 'Proofreading is for signed-in people. Sign in, then it will check this document.' : "The proofreading service isn't reachable."}</span>
+          {!signedOut && <button className="btn btn-pill btn-soft btn-sm" onClick={recheck}>Try again</button>}
         </div>
       ) : issues.length === 0 ? (
         <div className="all-clear">

@@ -37,6 +37,7 @@ COLORS = ["#6366f1", "#ec4899", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#0e
 login_limiter = RateLimiter(10, 60)
 unlock_limiter = RateLimiter(8, 60)
 stt_limiter = RateLimiter(20, 60)
+proofread_limiter = RateLimiter(240, 60)   # it runs as people edit, a few times a minute
 draft_limiter = RateLimiter(240, 60)   # live previews are small and free, so they get a much bigger allowance
 
 
@@ -495,7 +496,10 @@ class ProofIn(BaseModel):
 
 
 @router.post("/proofread")
-async def proofread(body: ProofIn):
+async def proofread(body: ProofIn, user=Depends(must_user)):
+    """Signed-in people only: with a LanguageTool server behind it, each call does real work, and anyone on the internet could otherwise use it."""
+    if not proofread_limiter.allow(f"proof:{user['id']}"):
+        raise HTTPException(429, "Slow down: too many proofreading requests. Try again in a minute.")
     return {"issues": await check_blocks([b.model_dump() for b in body.blocks], body.language)}
 
 
