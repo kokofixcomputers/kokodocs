@@ -9,6 +9,7 @@ import { ShareDialog } from '../editor/ShareDialog'
 import { useTheme } from '../theme'
 import { Avatar } from '../ui/Avatar'
 import { askConfirm } from '../ui/Dialogs'
+import { useContextMenu, type CtxItem } from '../ui/ContextMenu'
 import { DatePicker } from '../ui/DatePicker'
 import { Logo } from '../ui/Logo'
 import { Modal } from '../ui/Modal'
@@ -160,6 +161,8 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
 function Columns({ model, cols, fields, readOnly, filter, onOpen, comments }: { model: BoardModel; cols: ({ id: string; name: string; color: string })[]; fields: F[]; readOnly: boolean; filter: string; onOpen: (t: OpenTarget) => void; comments: Comment[] }) {
   const [drag, setDrag] = useState<{ id: string; x: number; y: number; title: string; over: string | null; before: string | null } | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
+  const cm = useContextMenu()
+  const [cur, setCur] = useState(0)   // the column most in view (for the strip of column names shown on phones)
   const q = filter.trim().toLowerCase()
   const visible = fields.filter((f) => !f.hidden)
 
@@ -182,7 +185,7 @@ function Columns({ model, cols, fields, readOnly, filter, onOpen, comments }: { 
       if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return
       moved = true; ev.preventDefault()
       setDrag({ id: c.id, x: ev.clientX, y: ev.clientY, title: c.title, ...locate(ev.clientX, ev.clientY) })
-      const box = wrap.current; if (box) { const r = box.getBoundingClientRect(); if (ev.clientX > r.right - 50) box.scrollLeft += 14; else if (ev.clientX < r.left + 50) box.scrollLeft -= 14 }
+      const box = wrap.current; if (box) { const r = box.getBoundingClientRect(); if (ev.clientX > r.right - 70) box.scrollLeft += 18; else if (ev.clientX < r.left + 70) box.scrollLeft -= 18 }
     }
     const up = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up)
@@ -196,8 +199,29 @@ function Columns({ model, cols, fields, readOnly, filter, onOpen, comments }: { 
   }
   const suppressClick = useRef(false)
 
-  return (
-    <div className="bd-cols" ref={wrap}>
+  /** Press and hold (or right-click) a card: move it to another column without dragging, open it, or delete it. */
+  const cardMenu = (c: C): CtxItem[] => readOnly ? [] : [
+    { heading: 'Move to' },
+    ...cols.map((col) => ({ label: col.name, checked: col.id === c.col, onClick: () => { if (col.id !== c.col) model.moveCard(c.id, col.id, null) } })),
+    { sep: true },
+    { label: 'Open', onClick: () => onOpen({ id: c.id }) },
+    { label: 'Delete', danger: true, onClick: async () => { if (await askConfirm({ title: 'Delete this card?', text: 'It is removed from the board for everyone, with its comments.', label: 'Delete', danger: true })) model.removeCard(c.id) } },
+  ]
+  const onScroll = () => {
+    const box = wrap.current; if (!box) return
+    const kids = [...box.querySelectorAll<HTMLElement>('[data-col]')]
+    let best = 0, d = Infinity
+    const left = box.getBoundingClientRect().left
+    kids.forEach((k, i) => { const x = Math.abs(k.getBoundingClientRect().left - left); if (x < d) { d = x; best = i } })
+    setCur(best)
+  }
+  const jump = (i: number) => { const k = wrap.current?.querySelectorAll<HTMLElement>('[data-col]')[i]; const box = wrap.current; if (k && box) box.scrollTo({ left: box.scrollLeft + k.getBoundingClientRect().left - box.getBoundingClientRect().left - 12, behavior: 'smooth' }) }
+
+  return (<>
+    <nav className="bd-colnav" aria-label="Columns">
+      {cols.map((col, i) => <button key={col.id} type="button" className={i === cur ? 'on' : ''} style={{ '--c': col.color } as React.CSSProperties} aria-current={i === cur} onClick={() => jump(i)}><i />{col.name}<em>{model.cardsIn(col.id).length}</em></button>)}
+    </nav>
+    <div className="bd-cols" ref={wrap} onScroll={onScroll}>
       {cols.map((col, ci) => {
         const all = model.cardsIn(col.id)
         const list = q ? all.filter((c) => (c.title + ' ' + (c.desc ?? '')).toLowerCase().includes(q)) : all
@@ -215,7 +239,7 @@ function Columns({ model, cols, fields, readOnly, filter, onOpen, comments }: { 
                 return (
                   <div key={c.id}>
                     {drag?.over === col.id && drag.before === c.id && <div className="bd-drop" />}
-                    <article data-card={c.id} className={`bd-card ${drag?.id === c.id ? 'dragging' : ''}`} tabIndex={0} onPointerDown={(e) => startDrag(e, c)}
+                    <article data-card={c.id} className={`bd-card ${drag?.id === c.id ? 'dragging' : ''}`} tabIndex={0} onPointerDown={(e) => startDrag(e, c)} {...cm.bind(() => cardMenu(c))}
                       onClick={() => { if (!suppressClick.current) onOpen({ id: c.id }) }} onKeyDown={(e) => { if (e.key === 'Enter') onOpen({ id: c.id }) }}>
                       {!readOnly && <span className="bd-grip" aria-hidden><GripVertical size={14} /></span>}
                       <b>{c.title || 'Untitled'}</b>
@@ -236,8 +260,9 @@ function Columns({ model, cols, fields, readOnly, filter, onOpen, comments }: { 
       })}
       {!readOnly && <button className="bd-newcol" onClick={() => { const id = model.addCol(); setTimeout(() => document.querySelector<HTMLInputElement>(`[data-col="${id}"] input`)?.select(), 50) }}><Plus size={16} />Add column</button>}
       {drag && <div className="bd-ghost" style={{ left: drag.x + 8, top: drag.y + 8 }}>{drag.title || 'Untitled'}</div>}
+      {cm.node}
     </div>
-  )
+  </>)
 }
 
 function ColMenu({ model, col, index, cols }: { model: BoardModel; col: { id: string; name: string; color: string }; index: number; cols: { id: string; name: string }[] }) {

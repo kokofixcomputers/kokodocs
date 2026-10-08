@@ -141,3 +141,21 @@
 .bd-table .bd-group td { padding: 7px 14px; }
 .bd-table .bd-group td > * { vertical-align: middle; } .bd-table .bd-group svg { margin-right: 6px; color: var(--muted); }
 .bd-table .bd-group em { margin-left: 8px; font-style: normal; font-size: 12px; color: var(--muted); }
+
+/* phones: a strip of column names to jump between, roomier grips, columns that snap into place */
+.bd-colnav { display: none; }
+@media (max-width: 720px) {
+  .bd-colnav { display: flex; gap: 6px; padding: 4px 12px 2px; overflow-x: auto; flex: none; scrollbar-width: none; }
+  .bd-colnav::-webkit-scrollbar { display: none; }
+  .bd-colnav button { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; min-height: 34px; }
+  .bd-colnav button i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .bd-colnav button em { font-style: normal; font-size: 12px; opacity: .8; }
+  .bd-colnav button.on { color: var(--ink); border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--surface)); font-weight: 600; }
+  .bd-cols { scroll-snap-type: x mandatory; padding: 6px 12px 18px; gap: 10px; scroll-padding-left: 12px; }
+  .bd-col { width: calc(100vw - 40px); scroll-snap-stop: always; }
+  .bd-grip { padding: 12px 10px; opacity: .8; }
+  .bd-card { padding: 12px 14px; -webkit-touch-callout: none; }
+  .bd-card b { font-size: 15.5px; padding-right: 30px; }
+  .bd-add { min-height: 44px; }
+  .bd-newcol { width: calc(100vw - 40px); scroll-snap-align: start; }
+}

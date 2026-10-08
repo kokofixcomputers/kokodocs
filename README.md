@@ -356,3 +356,10 @@ In a board's Table view, cards are grouped under a header row for each board col
 ## Talking to Koko
 
 When voice typing is set up on the server, the assistant's message box has a microphone button. Click it to start, click again to finish; what you said is transcribed with the provider the admin chose and added to your message, ready to edit or send. Esc cancels. It works in every file type, since it doesn't need a text editor on the page.
+
+## Boards on a phone
+
+- A strip of column names (with card counts) sits above the board; tap one to jump to it. It follows you as you swipe.
+- Columns are nearly full width and snap into place, so a swipe lands on exactly one column.
+- Press and hold a card (or right-click on a computer) for a menu: move it to any column, open it, or delete it. No dragging needed.
+- Dragging by the grip still works, now with a bigger grip and faster edge scrolling; cards and buttons have larger touch targets.
