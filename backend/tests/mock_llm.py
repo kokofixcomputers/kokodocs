@@ -50,7 +50,7 @@ class H(BaseHTTPRequestHandler):
         if msgs[-1]["role"] == "tool":
             idx = max(i for i, m in enumerate(msgs) if m["role"] == "user")
             results = [m["content"] for m in msgs[idx + 1:] if m["role"] == "tool"]
-            reply = "Done. Results: " + " | ".join(r[:140].replace("\n", " ") for r in results)
+            reply = "Done. Results: " + " | ".join(r[:2500].replace("\n", " ") for r in results)
             for i in range(0, len(reply), 24):
                 self.emit({"content": reply[i:i + 24]}); time.sleep(0.01)
             self.emit({}, "stop")

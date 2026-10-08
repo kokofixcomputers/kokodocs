@@ -141,7 +141,7 @@ export function SlidesToolbar({ model, slides, slide, theme, sel, setSel, setEdi
             {(close) => (
               <div className="theme-list">
                 {THEMES.map((t) => (
-                  <button key={t.id} className={`theme-item ${t.id === theme.id ? 'on' : ''}`} onClick={() => { close(); model.setMeta('theme', t.id) }}>
+                  <button key={t.id} className={`theme-item ${t.id === theme.id ? 'on' : ''}`} onClick={() => { close(); model.setMeta('theme', t.id); model.setPalette(null) }}>
                     <span className="theme-sw" style={{ background: t.bg, color: t.fg, boxShadow: `inset 0 0 0 1px ${t.muted}55` }}><b style={{ fontFamily: `"${t.head}"` }}>Aa</b><i style={{ background: t.accent }} /></span>
                     <span>{t.name}</span>
                   </button>))}
@@ -151,7 +151,7 @@ export function SlidesToolbar({ model, slides, slide, theme, sel, setSel, setEdi
             {(close) => <DeckFonts model={model} theme={theme} close={close} />}
           </Popover>
           <Popover trigger={({ toggle }) => <TBtn icon={<PaintBucket size={17} />} label="Slide background" onClick={toggle} />}>
-            {(close) => <ColorPicker noneLabel="Theme background" value={slide.bg} onPick={(c) => { close(); model.setBg(slide.id, c) }} />}
+            {(close) => <ColorPicker noneLabel="Theme background" value={slide.bg && slide.bg.startsWith('#') ? slide.bg : null} onPick={(c) => { close(); model.setBg(slide.id, c) }} />}
           </Popover>
           <Select label="Transition" value={transition as 'none'} onChange={(v) => model.setMeta('transition', v)} options={[{ value: 'fade', label: 'Fade' }, { value: 'slide', label: 'Slide' }, { value: 'none', label: 'No transition' }]} />
         </div>

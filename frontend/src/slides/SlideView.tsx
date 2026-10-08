@@ -97,7 +97,7 @@ export function ElView({ e, t, placeholder, hideText }: { e: El; t: Theme; place
   const box: CSSProperties = { position: 'absolute', left: e.x, top: e.y, width: e.w, height: e.h, opacity: e.opacity ?? 1 }
   if (e.type === 'table') return hideText ? null : <div style={box}><TableView e={e} t={t} /></div>
   if (e.type === 'chart') return <div style={{ ...box, overflow: 'hidden' }}><ChartView e={e} t={t} /></div>
-  if (e.type === 'image') return <div style={box}><img src={e.src} alt={e.alt ?? ''} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', borderRadius: 12 }} /></div>
+  if (e.type === 'image') return <div style={box}><img src={e.src} alt={e.alt ?? ''} draggable={false} style={{ width: '100%', height: '100%', objectFit: e.fit ?? 'contain', display: 'block', borderRadius: 12 }} /></div>
   if (e.type === 'shape') return <div style={box}><ShapeSvg e={e} t={t} />{e.text ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, color: resolveColor(e.color, t, 'fg') }}><TextBody e={{ ...e, align: e.align ?? 'center' }} t={t} /></div> : null}</div>
   const justify = e.valign === 'middle' ? 'center' : e.valign === 'bottom' ? 'flex-end' : 'flex-start'
   return <div style={{ ...box, display: 'flex', flexDirection: 'column', justifyContent: justify, overflow: 'visible' }}>{hideText ? null : <TextBody e={e} t={t} placeholder={placeholder} />}</div>

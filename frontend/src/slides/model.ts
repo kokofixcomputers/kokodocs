@@ -47,7 +47,10 @@ export class SlidesModel {
   get headFont(): string | undefined { return this.meta.get('headFont') || undefined }
   get bodyFont(): string | undefined { return this.meta.get('bodyFont') || undefined }
   /** The theme plus any fonts the deck picked for headings and body text. */
-  deckTheme(): Theme { return withFonts(themeById(this.theme), this.headFont, this.bodyFont) }
+  /** Colours the deck picked itself (or had picked for it), laid over the theme: a design that isn't one of the presets. */
+  get palette(): Partial<Pick<Theme, 'bg' | 'fg' | 'muted' | 'accent' | 'accentInk'>> | null { const p = this.meta.get('palette'); return p && typeof p === 'object' ? (p as never) : null }
+  setPalette(p: Partial<Pick<Theme, 'bg' | 'fg' | 'muted' | 'accent' | 'accentInk'>> | null) { this.t(() => { if (p) this.meta.set('palette', p); else this.meta.delete('palette') }) }
+  deckTheme(): Theme { return withFonts({ ...themeById(this.theme), ...(this.palette ?? {}) }, this.headFont, this.bodyFont) }
   setDeckFont(which: 'head' | 'body', family: string | null) { this.t(() => { const k = which === 'head' ? 'headFont' : 'bodyFont'; if (family) this.meta.set(k, family); else this.meta.delete(k) }) }
   get transition(): string { return this.meta.get('transition') ?? 'fade' }
   get title(): string { return this.meta.get('title') ?? '' }

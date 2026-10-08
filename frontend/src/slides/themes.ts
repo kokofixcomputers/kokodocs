@@ -28,7 +28,7 @@ export interface El {
   align?: 'left' | 'center' | 'right'; valign?: 'top' | 'middle' | 'bottom'
   color?: string; bullets?: boolean
   shape?: ShapeKind; fill?: string; stroke?: string; strokeW?: number
-  src?: string; alt?: string; opacity?: number
+  src?: string; alt?: string; opacity?: number; fit?: 'cover' | 'contain'
   /** tables and charts: a grid of text keyed "row:col". For a chart, row 0 holds the series names and column 0 the category labels. */
   cells?: Record<string, string>; nr?: number; nc?: number; header?: boolean; chart?: ChartKind; legend?: boolean
 }

@@ -337,3 +337,14 @@ Code: `frontend/src/assistant/formTools.ts` and `boardTools.ts`. On wide screens
 ## Editor re-rendering
 
 The document and wiki editors re-render once per animation frame when the editor changes (`frontend/src/editor/useBatchedRerender.ts`, with Tiptap's `shouldRerenderOnTransaction: false`), instead of once per transaction. Tiptap's default re-renders the whole page synchronously for every transaction, and a key press makes several (the text, the collaboration cursor, proofreading marks, page breaks). Typing quickly in a long document could pile enough of them into one burst that React stopped with "Maximum update depth exceeded" (error #185, seen in the production build only). Batching to the next frame removed it; the toolbar, word count and menus are still right by the next paint.
+
+## Koko designs slides from a description
+
+Ask Koko for a look ("dark navy, orange accent, big Space Grotesk headings") and it builds the deck from primitives instead of picking a template.
+
+- `set_design` sets the deck's palette and heading/body fonts; theme tokens (`bg`, `fg`, `muted`, `accent`, `accentInk`, `card`) then follow it. Choosing a preset theme afterwards clears the custom palette.
+- Slides are composed on the `blank` layout with text boxes (colour, font, size, weight), shapes, pictures from a URL, gradient backgrounds, and `arrange_element` / `duplicate_slide` for layering and repeats.
+- `review_design` checks the result: text that overflows its box (measured with the real font), low contrast (WCAG), text under 16px, overlaps, and elements outside or hugging the slide edge. Koko fixes what it reports.
+- The template route (`add_slide` with a layout) still works; Koko picks whichever fits the request.
+
+Limits: untested with a real model so far (scripted with a mock). PowerPoint export keeps only the first colour of a gradient background. Pictures come only from URLs you supply.

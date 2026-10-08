@@ -176,7 +176,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
     setPanel('comments'); if (c.anchor) goComment(c.anchor); history.replaceState(null, '', location.pathname)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [comments.list.length])
-  const assistantDeps = { model, getCur: () => slide?.id ?? '', setCur, getSel: () => sel, getTitle: () => title, canEdit: () => !readOnly }
+  const assistantDeps = { model, getCur: () => slide?.id ?? '', setCur, getSel: () => sel, getTitle: () => title, canEdit: () => !readOnly, docId: info.id }
 
   // right-click menus: on a slide's thumbnail, on an element, and on the empty stage
   const cm = useContextMenu()

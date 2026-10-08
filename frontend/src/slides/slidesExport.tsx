@@ -11,6 +11,8 @@ import { chartColors } from './SlideView'
 import { resolveColor, type El, type Slide, type Theme } from './themes'
 
 const hex = (c: string) => c.replace('#', '').slice(0, 6).toUpperCase()
+/** A slide's background as one colour: a gradient (which PowerPoint export can't draw from this) becomes its first colour. */
+const bgOf = (s: Slide, t: Theme) => /#[0-9a-fA-F]{6}/.exec(s.bg ?? '')?.[0] ?? t.bg
 
 async function dataUrl(src: string): Promise<string | null> {
   try {
@@ -27,19 +29,19 @@ export async function buildPptx(slides: Slide[], t: Theme, title: string): Promi
   const px = (n: number) => n / 96
   for (const s of slides) {
     const sl = pptx.addSlide()
-    sl.background = { color: hex(s.bg ?? t.bg) }
+    sl.background = { color: hex(bgOf(s, t)) }
     for (const e of s.els) {
       const box = { x: px(e.x), y: px(e.y), w: px(e.w), h: px(e.h) }
       if (e.type === 'image' && e.src) {
         const data = await dataUrl(e.src)
-        if (data) sl.addImage({ data, ...box, sizing: { type: 'contain', w: box.w, h: box.h } })
+        if (data) sl.addImage({ data, ...box, sizing: { type: e.fit === 'cover' ? 'cover' : 'contain', w: box.w, h: box.h } })
         continue
       }
       if (e.type === 'table') {
         const m = toMatrix(e), { nr, nc } = dims(e), head = e.header !== false
         const rows = m.map((row, r) => row.map((v) => ({ text: v, options: {
           bold: (head && r === 0) || !!e.bold, color: hex(head && r === 0 ? resolveColor('accentInk', t) : resolveColor(e.color, t, 'fg')),
-          fill: { color: hex(head && r === 0 ? resolveColor('accent', t) : r % 2 === 0 ? s.bg ?? t.bg : resolveColor('card', t)) }, align: e.align ?? 'left', valign: 'middle' as const,
+          fill: { color: hex(head && r === 0 ? resolveColor('accent', t) : r % 2 === 0 ? bgOf(s, t) : resolveColor('card', t)) }, align: e.align ?? 'left', valign: 'middle' as const,
         } })))
         sl.addTable(rows as never, { x: box.x, y: box.y, w: box.w, colW: Array(nc).fill(box.w / nc), rowH: Array(nr).fill(box.h / nr), fontFace: elFont(e, t), fontSize: (e.size ?? 24) * 0.75, border: { type: 'solid', pt: 1, color: hex(resolveColor('muted', t)) }, margin: 8 })
         continue
