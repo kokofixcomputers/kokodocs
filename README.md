@@ -371,3 +371,9 @@ A text field can set the fewest and most characters it accepts, and a format it 
 ## No browser dropdowns
 
 Every dropdown is the app's own now: the text format in board fields, the method badge in wikis (title bar and request blocks), the folder-sharing access level, and the model name boxes in the assistant and admin settings (type anything, or pick a suggestion from the styled list). There are no native `<select>` or `<datalist>` menus left.
+
+## Icons in slides
+
+Koko can put vector icons on slides. `search_icons` finds one in the Lucide set (about 1,700 outline icons) and `add_icon` places it at any size and colour (a theme colour or a hex, with an adjustable line thickness). When nothing fits, Koko can draw its own SVG instead: logo marks, simple illustrations, decorative shapes. Hand-drawn SVG is cleaned before it is used: only drawing shapes, paths and gradients are kept, and scripts, event handlers, images, text and external references are removed. Icons are stored in the slide as vectors, so they stay sharp at any size; PowerPoint export turns them into high-resolution PNGs. The Lucide set loads only the first time Koko asks for an icon (about 180 KB compressed), so it doesn't slow down opening a deck.
+
+Icons take the colour you give them when they are added, so changing the theme later does not recolour them.

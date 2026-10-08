@@ -3,6 +3,7 @@ import { FONTS, fontStack, loadFont } from '../fonts'
 import type { SlidesModel } from '../slides/model'
 import { H, W, resolveColor, type El, type ShapeKind, type Slide, type Theme } from '../slides/themes'
 import { type Tool, clip, tool } from './adapter'
+import { cleanSvg, svgDataUrl } from './svgSafe'
 
 /** Tools that let Koko compose a slide from nothing: its own palette and fonts, shapes, pictures, layering, and a design check. */
 export interface DesignDeps {
@@ -152,6 +153,39 @@ export function designTools(d: DesignDeps): Tool[] {
     },
   })
 
+
+  const searchIcons: Tool = tool('search_icons', 'Find icons in the Lucide set (about 1,700) by keyword, for add_icon. Search with a concept or object, like "rocket", "shield", "chart", "users", "clock". Returns icon names.', { query: { type: 'string' } }, ['query'], {
+    label: (a) => `Looking for icons: ${clip(String(a?.query ?? ''), 40)}`,
+    run: async (a) => {
+      const { searchIcons: find } = await import('./lucideSvg')
+      const r = find(String(a.query ?? ''))
+      return r.length ? r.join(', ') : 'No icon matched. Try a simpler or more general word, or draw it yourself with add_icon and svg.'
+    },
+  })
+
+  const addIcon: Tool = tool('add_icon', 'Put an icon on a slide, as a crisp vector that stays sharp at any size. Two ways: (1) "icon" = the name of a Lucide icon (use search_icons to find one; these are clean outline icons, 24x24, drawn with a stroke); or (2) "svg" = markup you write yourself when no Lucide icon fits, such as a logo mark, a simple illustration, a diagram piece or a decorative shape. For your own SVG: one <svg viewBox="0 0 W H"> using only path, circle, ellipse, rect, line, polyline, polygon, g and gradients; keep it simple and under about 20 shapes; use fill and stroke directly, or "currentColor" to take the "color" you pass. No text, images, scripts or styles. Icons look best at 48 to 96px on their own, or inside a circle or rounded square you drew with add_shape first (add the shape, then the icon on top). Size is in canvas pixels (1280x720).', {
+    slide: { type: 'number' }, x: { type: 'number' }, y: { type: 'number' }, size: { type: 'number', description: 'Width and height in pixels (default 64). For a custom svg that is not square, give width and height instead.' }, width: { type: 'number' }, height: { type: 'number' },
+    icon: { type: 'string', description: 'Lucide icon name like "rocket" or "chart-bar"' }, svg: { type: 'string', description: 'Your own SVG markup (instead of icon)' },
+    color: { type: 'string', description: `Icon colour: ${colorHelp}. Default accent.` }, stroke_width: { type: 'number', description: 'Lucide line thickness, 1 to 3 (default 2)' }, alt: { type: 'string', description: 'A short description' },
+  }, ['slide', 'x', 'y'], {
+    edit: true, describe: (a) => ({ title: a.svg ? `Add a drawn icon to slide ${a.slide}` : `Add the “${String(a.icon ?? '')}” icon to slide ${a.slide}`, detail: [a.color && String(a.color), `${Math.round(Number(a.width ?? a.size ?? 64))}px at ${Math.round(Number(a.x))},${Math.round(Number(a.y))}`].filter(Boolean).join(', '), after: a.svg ? clip(String(a.svg), 160) : undefined }),
+    run: async (a) => {
+      if (!a.icon && !a.svg) throw new Error('Give an icon name (see search_icons) or your own svg markup.')
+      const s = d.slideAt(a.slide), t = m.deckTheme(), color = resolveColor(a.color === undefined ? 'accent' : String(a.color), t, 'accent')
+      let svg: string
+      if (a.svg) svg = cleanSvg(String(a.svg).replace(/currentColor/gi, color))
+      else {
+        const { lucideSvg, searchIcons: find } = await import('./lucideSvg')
+        const out = lucideSvg(String(a.icon), color, Math.max(0.5, Math.min(4, Number(a.stroke_width ?? 2))))
+        if (!out) { const near = find(String(a.icon).replace(/[-_]/g, ' ')).slice(0, 8); throw new Error(`There is no Lucide icon called “${a.icon}”.${near.length ? ` Similar: ${near.join(', ')}.` : ' Use search_icons to find one.'}`) }
+        svg = out
+      }
+      const w = Number(a.width ?? a.size ?? 64), h = Number(a.height ?? a.size ?? a.width ?? 64)
+      m.addEl(s.id, { type: 'image', src: svgDataUrl(svg), alt: a.alt ? String(a.alt) : String(a.icon ?? 'Icon'), fit: 'contain', x: Number(a.x), y: Number(a.y), w, h })
+      return `Added the ${a.icon ? `“${a.icon}” ` : ''}icon.`
+    },
+  })
+
   const arrange: Tool = tool('arrange_element', 'Change the stacking order of an element on a slide (what is in front of what).', { slide: { type: 'number' }, element: { type: 'number' }, order: { type: 'string', enum: ['front', 'back', 'forward', 'backward'] } }, ['slide', 'element', 'order'], {
     edit: true, describe: (a) => ({ title: `Send element ${a.element} on slide ${a.slide} to the ${a.order}` }),
     run: (a) => { const s = d.slideAt(a.slide), e = d.elAt(s, a.element); m.reorder(s.id, [e.id], a.order); return 'Done. Element numbers on this slide may have changed: read the slide again before editing more.' },
@@ -173,5 +207,5 @@ export function designTools(d: DesignDeps): Tool[] {
       return issues.length ? `${issues.length} thing${issues.length === 1 ? '' : 's'} to fix:\n${issues.join('\n')}` : 'No problems found: nothing overflows or overlaps, text is readable and the contrast is fine.'
     },
   })
-  return [setDesign, addShape, addImage, arrange, dupSlide, review]
+  return [setDesign, addShape, addImage, searchIcons, addIcon, arrange, dupSlide, review]
 }

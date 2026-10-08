@@ -21,6 +21,16 @@ async function dataUrl(src: string): Promise<string | null> {
   } catch { return null }
 }
 
+/** PowerPoint and Keynote don't all draw SVG, so vector icons are turned into a sharp PNG (4x the size on the slide) for the export. */
+async function rasterize(url: string, w: number, h: number): Promise<string | null> {
+  try {
+    const img = new Image(); img.src = url; await img.decode()
+    const k = 4, c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k))
+    c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+    return c.toDataURL('image/png')
+  } catch { return null }
+}
+
 export async function buildPptx(slides: Slide[], t: Theme, title: string): Promise<Blob> {
   const { default: Pptx } = await import('pptxgenjs')
   const pptx = new Pptx()
@@ -33,7 +43,8 @@ export async function buildPptx(slides: Slide[], t: Theme, title: string): Promi
     for (const e of s.els) {
       const box = { x: px(e.x), y: px(e.y), w: px(e.w), h: px(e.h) }
       if (e.type === 'image' && e.src) {
-        const data = await dataUrl(e.src)
+        let data = await dataUrl(e.src)
+        if (data && /^data:image\/svg/.test(data)) data = await rasterize(data, e.w, e.h)
         if (data) sl.addImage({ data, ...box, sizing: { type: e.fit === 'cover' ? 'cover' : 'contain', w: box.w, h: box.h } })
         continue
       }
