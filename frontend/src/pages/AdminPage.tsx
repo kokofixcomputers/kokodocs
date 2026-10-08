@@ -167,6 +167,8 @@ const GROQ_LABEL: Record<string, string> = { 'whisper-large-v3-turbo': 'whisper-
 const fmtMB = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${Math.round(n / 1e6)} MB`)
 
 /** The Hugging Face models kept on this server's disk for local voice typing: add one, watch it download, delete it to free the space. */
+const idleText = (s: number, plain = false) => (s < 5 && !plain ? 'just used' : s < 90 ? `${plain ? '' : 'used '}${s} s${plain ? '' : ' ago'}` : `${plain ? '' : 'used '}${Math.round(s / 60)} min${plain ? '' : ' ago'}`)
+
 function LocalModels({ reload, onUse }: { reload: () => void; onUse: (m: string) => void }) {
   const [data, setData] = useState<SttModels | null>(null)
   const [repo, setRepo] = useState('')
@@ -174,6 +176,15 @@ function LocalModels({ reload, onUse }: { reload: () => void; onUse: (m: string)
   const [err, setErr] = useState<{ text: string; suggestion?: string } | null>(null)
   const load = () => api.adminSttModels().then(setData).catch((e) => setErr({ text: e.message }))
   useEffect(() => { void load() }, [])
+  // what is in memory changes by itself (models load when someone dictates and drop when idle), so keep it fresh while this is on screen
+  useEffect(() => {
+    const t = window.setInterval(() => { if (document.visibilityState === 'visible') void api.adminSttModels().then(setData).catch(() => {}) }, 5000)
+    return () => window.clearInterval(t)
+  }, [])
+  const freeNow = async (name?: string) => {
+    setBusy(true)
+    try { const d = await api.adminSttUnload(name); setData(d); reload(); toast(d.unloaded?.length ? 'Freed from memory' : 'Nothing was loaded') } catch (e) { toast((e as Error).message) } finally { setBusy(false) }
+  }
   const downloading = data?.models.some((m) => m.state === 'downloading')
   useEffect(() => {
     if (!downloading) return
@@ -194,15 +205,23 @@ function LocalModels({ reload, onUse }: { reload: () => void; onUse: (m: string)
   return (
     <div className="stt-models">
       <div className="stt-models-head"><b>Models on this server</b><span className="muted">{fmtMB(data.models.reduce((n, m) => n + m.size, 0))} used in <code>{data.dir}</code></span></div>
+      <div className="stt-memory">
+        <span><i className={`dot ${data.models.some((m) => m.loaded) ? 'on' : ''}`} />{data.models.filter((m) => m.loaded).length ? `${data.models.filter((m) => m.loaded).length} in memory: ${data.models.filter((m) => m.loaded).map((m) => m.name).join(', ')}` : 'No speech model is in memory right now'}</span>
+        {data.memory_mb != null && <span className="muted">Server process: {data.memory_mb} MB</span>}
+        {data.models.some((m) => m.loaded) && <button className="btn btn-pill btn-soft btn-sm" disabled={busy} onClick={() => void freeNow()}>Free all now</button>}
+      </div>
       {data.models.length === 0 && <p className="muted hint" style={{ margin: 0 }}>None yet. The built-in sizes download the first time someone dictates; add one below to download it now.</p>}
       {data.models.map((m) => (
         <div key={m.repo} className={`stt-model ${m.state}`}>
-          <div className="stt-model-main"><b>{m.name}</b>{m.builtin && <span className="tag">built-in</span>}<span className="muted">{m.builtin ? m.repo : 'Hugging Face'}</span></div>
+          <div className="stt-model-main"><b>{m.name}</b>{m.builtin && <span className="tag">built-in</span>}<span className="muted">{m.builtin ? m.repo : 'Hugging Face'}</span>
+            {m.loaded && <span className="tag live" title={m.loaded.roles.length ? `Used for ${m.loaded.roles.join(' and ')}` : undefined}>in memory{m.loaded.roles.length ? `, ${m.loaded.roles.join(' + ')}` : ''}</span>}
+            {m.loaded && <span className="muted">{idleText(m.loaded.idle)}{m.loaded.unload_in != null ? `, drops in ${idleText(m.loaded.unload_in, true)}` : ', stays loaded'}</span>}</div>
           {m.state === 'downloading' ? (
             <div className="stt-model-prog"><div className="meter ok"><i style={{ width: `${Math.min(100, ((m.size / Math.max(1, m.total ?? 1)) * 100))}%` }} /></div><span>{fmtMB(m.size)} of {fmtMB(m.total ?? 0)}</span></div>
           ) : m.state === 'error' ? <span className="form-error" style={{ margin: 0 }}>{m.error}</span>
           : <span className="muted">{m.state === 'incomplete' ? 'Incomplete, ' : ''}{fmtMB(m.size)}</span>}
           <span className="stt-model-btns">
+            {m.loaded && <button className="btn btn-pill btn-ghost btn-sm" disabled={busy} onClick={() => void freeNow(m.name)}>Free</button>}
             {m.state === 'ready' && <button className="btn btn-pill btn-soft btn-sm" onClick={() => onUse(m.builtin ? m.name : m.repo)}>Use</button>}
             <button className="icon-btn sm" aria-label={`Delete ${m.name}`} title="Delete from disk" disabled={busy || m.state === 'downloading'} onClick={() => remove(m)}><Trash2 size={16} /></button>
           </span>
@@ -276,7 +295,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
         <label className="ai-field"><span>API key{prov === 'openai-compatible' ? ' (if the server needs one)' : ''}</span>
           <span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={hasKey ? 'Saved. Leave blank to keep it' : envKey ? 'Using the key from the server environment' : prov === 'groq' ? 'gsk_…' : 'sk-…'} /></span></label>)}
       {prov === 'local' && <p className="muted hint" style={{ margin: 0 }}>{v.local_installed ? 'faster-whisper is installed. Audio never leaves this server.' : 'faster-whisper is not installed on this server: run pip install -r requirements-local.txt and restart.'}</p>}
-      {prov === 'local' && v.local_installed && <LocalModels reload={() => { void api.adminSettings().then(apply) }} onUse={(m) => setModel(m)} />}
+      {v.local_installed && (prov === 'local' || v.draft || v.loaded.length > 0) && <LocalModels reload={() => { void api.adminSettings().then(apply) }} onUse={(m) => setModel(m)} />}
       <label className="ai-field" style={{ maxWidth: 260 }}><span>Language (optional, like en; empty detects it)</span><span className="field"><input value={lang} onChange={(e) => setLang(e.target.value)} maxLength={12} spellCheck={false} placeholder="auto" /></span></label>
       {v.local_installed && (
         <div className="ai-field" style={{ gap: 8 }}>

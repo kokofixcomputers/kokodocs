@@ -231,6 +231,46 @@ def loaded_models() -> list[str]:
     return sorted(_models)
 
 
+def loaded_info(db=None) -> dict[str, dict]:
+    """What is in memory: for each model, seconds since it was last used, seconds until it would be dropped (None if never), and what it is used for."""
+    now, limit = time.time(), idle_seconds(db)
+    c, dm = config(db), draft_model(db)
+    out = {}
+    with _model_lock:
+        for n in _models:
+            idle = int(now - _used.get(n, now))
+            roles = [r for r, m in (("dictation", c.model if c and c.provider == "local" else None), ("live preview", dm)) if m == n]
+            out[n] = {"idle": idle, "unload_in": max(0, limit - idle) if limit > 0 else None, "roles": roles}
+    return out
+
+
+def unload_now(name: str | None = None) -> list[str]:
+    """Drops one model (or all of them) from memory right away."""
+    with _model_lock:
+        gone = [n for n in list(_models) if name is None or n == name]
+        for n in gone:
+            _models.pop(n, None)
+            _used.pop(n, None)
+    if gone:
+        _give_memory_back()
+    return gone
+
+
+def process_memory_mb() -> int | None:
+    """How much memory this server process is using right now (Linux), or its peak where that isn't available."""
+    try:
+        with open("/proc/self/statm") as f:
+            return int(f.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") // (1024 * 1024)
+    except Exception:
+        try:
+            import resource, sys
+
+            peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            return peak // (1024 * 1024) if sys.platform == "darwin" else peak // 1024
+        except Exception:
+            return None
+
+
 def _watch() -> None:
     while True:
         time.sleep(30)

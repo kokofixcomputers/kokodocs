@@ -276,13 +276,27 @@ async def stt_test(admin=Depends(must_admin), db=Depends(get_db)):
     return {"ok": True, "provider": c.provider, "model": c.model, "ms": int((time.time() - t0) * 1000)}
 
 
-def _models_view() -> dict:
-    return {"dir": str(sttmodels.MODELS_DIR), "max_mb": sttmodels.MAX_BYTES // sttmodels.MB, "models": sttmodels.list_models(stt.builtin_repos()), "installed": stt._local_available()}
+def _models_view(db=None) -> dict:
+    loaded = stt.loaded_info(db)
+    models = [{**m, "loaded": loaded.get(m["name"]) or loaded.get(m["repo"])} for m in sttmodels.list_models(stt.builtin_repos())]
+    return {"dir": str(sttmodels.MODELS_DIR), "max_mb": sttmodels.MAX_BYTES // sttmodels.MB, "models": models, "installed": stt._local_available(),
+            "memory_mb": stt.process_memory_mb(), "idle_unload": stt.idle_settings(db)[0]}
 
 
 @router.get("/stt/models")
-def stt_models(admin=Depends(must_admin)):
-    return _models_view()
+def stt_models(admin=Depends(must_admin), db=Depends(get_db)):
+    return _models_view(db)
+
+
+class UnloadIn(BaseModel):
+    name: str | None = Field(None, max_length=300)   # a model's name as listed; empty = every loaded model
+
+
+@router.post("/stt/unload")
+def stt_unload(b: UnloadIn, admin=Depends(must_admin), db=Depends(get_db)):
+    """Free speech models from memory now (they load again the next time someone dictates)."""
+    gone = stt.unload_now(b.name or None)
+    return {**_models_view(db), "unloaded": gone}
 
 
 class ModelIn(BaseModel):
@@ -290,7 +304,7 @@ class ModelIn(BaseModel):
 
 
 @router.post("/stt/models")
-async def stt_add_model(b: ModelIn, admin=Depends(must_admin)):
+async def stt_add_model(b: ModelIn, admin=Depends(must_admin), db=Depends(get_db)):
     """Download a Hugging Face model to this server's disk (in the background; poll GET /stt/models for progress)."""
     if not stt._local_available():
         raise HTTPException(400, "Local voice typing needs faster-whisper installed first (pip install -r requirements-local.txt)")
@@ -302,7 +316,7 @@ async def stt_add_model(b: ModelIn, admin=Depends(must_admin)):
         sttmodels.start_download(repo, info["size"])
     except sttmodels.ModelError as e:
         raise HTTPException(e.status, {"message": str(e), "suggestion": e.suggestion})
-    return _models_view()
+    return _models_view(db)
 
 
 @router.delete("/stt/models")
@@ -316,4 +330,4 @@ def stt_delete_model(repo: str, admin=Depends(must_admin), db=Depends(get_db)):
     short = stt.builtin_repos().get(r)
     if settings_get(db, "stt_model_local") in (r, short):
         settings_set(db, "stt_model_local", ""); db.commit()   # fall back to the default rather than point at nothing
-    return {**_models_view(), "freed": freed}
+    return {**_models_view(db), "freed": freed}

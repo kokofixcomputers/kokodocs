@@ -4,8 +4,9 @@ export interface User { id: string; email: string; name: string; color: string; 
 export interface AdminUser { id: string; email: string; name: string; color: string; created_at: number; is_admin: boolean; builtin_admin: boolean; disabled: boolean; used: number; quota_mb: number | null; limit_mb: number; totp: boolean; docs: number; sheets: number }
 export interface AdminFile { id: string; title: string; kind: DocKind; created_at: number; updated_at: number; deleted_at: number | null; link_access: LinkAccess; link_role: string; owner_id: string; owner_name: string; owner_email: string }
 export type SttProvider = 'groq' | 'mistral' | 'openai' | 'openai-compatible' | 'local'
-export interface SttModel { repo: string; name: string; builtin: boolean; size: number; state: 'ready' | 'downloading' | 'incomplete' | 'error'; total?: number; error?: string | null }
-export interface SttModels { dir: string; max_mb: number; installed: boolean; models: SttModel[]; freed?: number }
+export interface SttLoaded { idle: number; unload_in: number | null; roles: string[] }
+export interface SttModel { repo: string; name: string; builtin: boolean; size: number; loaded?: SttLoaded | null; state: 'ready' | 'downloading' | 'incomplete' | 'error'; total?: number; error?: string | null }
+export interface SttModels { dir: string; max_mb: number; installed: boolean; models: SttModel[]; freed?: number; memory_mb?: number | null; idle_unload?: boolean; unloaded?: string[] }
 export interface SttAdmin { provider: 'auto' | SttProvider; models: Record<SttProvider, string>; url: string; language: string; loaded: string[]; idle_unload: boolean; idle_minutes: number; draft: boolean; draft_model: string | null; key_set: Record<SttProvider, boolean>; env_key: { groq: boolean; mistral: boolean; openai: boolean }; groq_models: string[]; local_models: string[]; local_installed: boolean; active: { available: boolean; provider: string | null; model: string | null } }
 export interface AdminSettings { stt: SttAdmin; signup_enabled: boolean; google_client_id: string; google_secret_set: boolean; public_url: string; default_quota_mb: number; smtp_host: string; smtp_port: number; smtp_security: 'starttls' | 'ssl' | 'none'; smtp_user: string; smtp_password_set: boolean; smtp_from: string; email_active: boolean; redirect_uri: string }
 export type LoginResult = { token: string; user: User } | { mfa_required: true; mfa_token: string }
@@ -197,6 +198,7 @@ export const api = {
   adminUsers: () => request<AdminUser[]>('/api/admin/users'),
   adminSttModels: () => request<SttModels>('/api/admin/stt/models'),
   adminSttAddModel: (repo: string) => request<SttModels>('/api/admin/stt/models', { method: 'POST', body: JSON.stringify({ repo }) }),
+  adminSttUnload: (name?: string) => request<SttModels>('/api/admin/stt/unload', { method: 'POST', ...json({ name: name ?? null }) }),
   adminSttDeleteModel: (repo: string) => request<SttModels>(`/api/admin/stt/models?repo=${encodeURIComponent(repo)}`, { method: 'DELETE' }),
   adminSttTest: () => request<{ ok: boolean; provider: string; model: string; ms: number; note?: string }>('/api/admin/stt/test', { method: 'POST', body: '{}' }),
   adminSettings: () => request<AdminSettings>('/api/admin/settings'),

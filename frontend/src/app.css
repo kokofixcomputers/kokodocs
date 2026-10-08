@@ -489,3 +489,6 @@ a.brand { color: var(--ink); text-decoration: none; }
 
 .update-notice { position: fixed; z-index: 60000; left: 50%; top: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 999px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow-2); font-size: 14px; max-width: calc(100vw - 24px); animation: rise .3s var(--ease); }
 .update-notice .btn-primary { background: var(--surface); color: var(--ink); }
+.stt-memory { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13.5px; padding: 8px 12px; border-radius: var(--r); background: color-mix(in srgb, var(--ink) 4%, var(--surface)); } .stt-memory > span:first-child { display: inline-flex; align-items: center; gap: 8px; } .stt-memory .btn { margin-left: auto; }
+.stt-memory .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); opacity: .5; } .stt-memory .dot.on { background: #22c55e; opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 25%, transparent); }
+.tag.live { background: color-mix(in srgb, #22c55e 18%, var(--surface)); color: #15803d; } :root[data-theme='dark'] .tag.live { color: #4ade80; }
