@@ -16,7 +16,7 @@ export default function AssistantHost({ source, docId, user, onClose, initialPro
   const src = useRef(source); src.current = source
   const kind = source.kind
 
-  useEffect(() => { api.aiSettings().then(setSettings).catch(() => setSettings({ configured: false, source: null, base_url: '', model: '', key_hint: null, server_default: false, own_saved: false, use_own: false, system: { available: false, model: '', host: '' } })) }, [])
+  useEffect(() => { api.aiSettings().then(setSettings).catch(() => setSettings({ configured: false, models: [], selected: null })) }, [])
   useEffect(() => {
     let alive = true
     if (kind === 'doc') import('./docTools').then((m) => { if (alive) setAdapter(m.createDocAdapter(live('doc'))) })

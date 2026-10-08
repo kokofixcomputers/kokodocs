@@ -54,8 +54,10 @@ export interface ProofIssue {
   kind: 'spelling' | 'grammar' | 'style'; message: string; suggestions: string[]
 }
 
-export interface AiSettings { configured: boolean; source: 'user' | 'server' | null; base_url: string; model: string; key_hint: string | null; server_default: boolean; own_saved: boolean; use_own: boolean; system: { available: boolean; model: string; host: string } }
-export interface AiAdmin { url: string; model: string; key_set: boolean; enabled: boolean; env: { configured: boolean; url: string; model: string }; active: { available: boolean; from: 'admin' | 'environment' | null; model: string | null }; people_own: number }
+export interface AiModelEntry { id: string; label: string; scope: 'system' | 'user'; model: string; host: string; base_url?: string; key_hint?: string | null }
+export interface AiSettings { configured: boolean; models: AiModelEntry[]; selected: string | null }
+export interface AiAdminModel { id: string; label: string; base_url: string; model: string; key_set: boolean; enabled: boolean; default: boolean }
+export interface AiAdmin { models: AiAdminModel[]; env: { configured: boolean; url: string; model: string }; using_env: boolean; people_own: number }
 export interface SearchHit { id: string; title: string; kind: DocKind; owner: string; updated_at: number; title_match: boolean; snippet: string }
 export interface Notice { id: string; kind: 'mention' | 'comment' | 'share'; doc_id: string; doc_title: string; actor: string; text: string; link: string; created_at: number; read: boolean }
 export interface MentionSkip { email: string; reason: 'not_shared' }
@@ -169,16 +171,22 @@ export const api = {
     return (await request<{ url: string }>(`/api/docs/${id}/images`, { method: 'POST', body: fd }, id)).url
   },
   aiSettings: () => request<AiSettings>('/api/ai/settings'),
-  setAiSource: (use: 'system' | 'own') => request<AiSettings>('/api/ai/source', { method: 'PUT', ...json({ use }) }),
-  adminAiTest: () => request<{ ok: boolean; models: string[]; ms: number; model_ok: boolean }>('/api/admin/ai/test', { method: 'POST' }),
+  adminAiModels: () => request<AiAdmin>('/api/admin/ai/models'),
+  adminAiAdd: (b: { label: string; base_url: string; model: string; api_key?: string; enabled?: boolean }) => request<AiAdmin>('/api/admin/ai/models', { method: 'POST', ...json(b) }),
+  adminAiEdit: (id: string, b: { label?: string; base_url?: string; model?: string; api_key?: string; clear_key?: boolean; enabled?: boolean }) => request<AiAdmin>(`/api/admin/ai/models/${id}`, { method: 'PUT', ...json(b) }),
+  adminAiDelete: (id: string) => request<AiAdmin>(`/api/admin/ai/models/${id}`, { method: 'DELETE' }),
+  adminAiDefault: (id: string) => request<AiAdmin>(`/api/admin/ai/models/${id}/default`, { method: 'POST' }),
+  adminAiTest: (id: string) => request<{ ok: boolean; models: string[]; ms: number; model_ok: boolean }>(`/api/admin/ai/models/${id}/test`, { method: 'POST' }),
   aiFilesMode: () => request<{ mode: AiFilesMode }>('/api/me/ai-files'),
   setAiFilesMode: (mode: AiFilesMode) => request<{ mode: AiFilesMode }>('/api/me/ai-files', { method: 'PUT', ...json({ mode }) }),
   aiFiles: (q: string, exclude: string) => request<AiFileEntry[]>(`/api/ai/files?q=${encodeURIComponent(q)}&exclude=${encodeURIComponent(exclude)}`),
   aiFile: (id: string) => request<AiFileEntry & { text: string; truncated: boolean; empty: boolean }>(`/api/ai/files/${id}`),
   aiFileInfo: (id: string) => request<AiFileEntry>(`/api/ai/files/${id}/info`),
-  saveAiSettings: (b: { base_url: string; model: string; api_key?: string }) => request<AiSettings>('/api/ai/settings', { method: 'PUT', ...json(b) }),
-  deleteAiSettings: () => request<AiSettings>('/api/ai/settings', { method: 'DELETE' }),
-  aiModels: () => request<{ models: string[] }>('/api/ai/models'),
+  addAiModel: (b: { label: string; base_url: string; model: string; api_key?: string }) => request<AiSettings>('/api/ai/connections', { method: 'POST', ...json(b) }),
+  editAiModel: (id: string, b: { label: string; base_url: string; model: string; api_key?: string }) => request<AiSettings>(`/api/ai/connections/${id}`, { method: 'PUT', ...json(b) }),
+  deleteAiModel: (id: string) => request<AiSettings>(`/api/ai/connections/${id}`, { method: 'DELETE' }),
+  pickAiModel: (id: string) => request<AiSettings>('/api/ai/selection', { method: 'PUT', ...json({ id }) }),
+  aiModels: (id?: string) => request<{ models: string[] }>(`/api/ai/models${id ? `?id=${encodeURIComponent(id)}` : ''}`),
   aiConversations: (docId: string) => request<AiConversationInfo[]>(`/api/docs/${docId}/ai/conversations`, {}, docId),
   aiConversation: (docId: string, cid: string) => request<AiConversationInfo & { data: unknown[] }>(`/api/docs/${docId}/ai/conversations/${cid}`, {}, docId),
   saveAiConversation: (docId: string, cid: string, title: string, data: unknown[]) =>

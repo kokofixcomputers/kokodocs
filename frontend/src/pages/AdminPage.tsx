@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, Sparkles, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
-import { api, ApiError, type AiAdmin, type SsoAdmin, type SsoProvider, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
+import { ArrowLeft, Pencil, Plus, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, Sparkles, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
+import { api, ApiError, type AiAdmin, type AiAdminModel, type SsoAdmin, type SsoProvider, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
 import { askConfirm, askText } from '../ui/Dialogs'
@@ -9,6 +9,7 @@ import { fmtBytes } from '../ui/StorageMeter'
 import { Select } from '../ui/Select'
 import { KindIcon } from '../ui/KindIcon'
 import { Logo } from '../ui/Logo'
+import { PRESETS } from '../assistant/AiSettings'
 import { ProviderMark } from '../ui/ProviderMark'
 import { toast } from '../ui/Toast'
 
@@ -312,7 +313,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   )
 }
 
-const NO_AI: AiAdmin = { url: '', model: '', key_set: false, enabled: true, env: { configured: false, url: '', model: '' }, active: { available: false, from: null, model: null }, people_own: 0 }
+const NO_AI: AiAdmin = { models: [], env: { configured: false, url: '', model: '' }, using_env: false, people_own: 0 }
 
 /** The page can be newer than the server it talks to (the site files updated, the backend not yet, or not restarted). Fill in whatever an
  *  older server leaves out so nothing crashes, and say that the server is behind. */
@@ -353,61 +354,79 @@ function AccessSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   )
 }
 
-const AI_PRESETS = [
-  { name: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-large-latest' },
-  { name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
-  { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4' },
-  { name: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
-  { name: 'Ollama', url: 'http://localhost:11434/v1', model: 'llama3.1' },
-]
-
-/** The system-wide assistant connection: everyone uses it by default; people can still choose their own in their settings. */
-function AssistantSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
-  const ai = s.ai
-  const [url, setUrl] = useState(ai.url)
-  const [model, setModel] = useState(ai.model)
+/** One model the admin offers everyone. */
+function GlobalModelCard({ m, count, onChange, onDelete }: { m: AiAdminModel; count: number; onChange: (x: AiAdmin) => void; onDelete: (x: AiAdmin) => void }) {
+  const [edit, setEdit] = useState(false)
+  const [label, setLabel] = useState(m.label)
+  const [url, setUrl] = useState(m.base_url)
+  const [model, setModel] = useState(m.model)
   const [key, setKey] = useState('')
   const [models, setModels] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const changed = url.trim() !== ai.url || model.trim() !== ai.model || !!key.trim()
-  const save = async (b: Parameters<typeof api.adminSaveSettings>[0], done = 'Saved') => {
-    setBusy(true); setMsg(null)
-    try { const x = await api.adminSaveSettings(b); apply(x); setKey(''); setUrl(x.ai.url); setModel(x.ai.model); toast(done) } catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
+  const run = async (f: () => Promise<void>) => { setBusy(true); setMsg(null); try { await f() } catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) } }
+  const save = () => run(async () => { onChange(await api.adminAiEdit(m.id, { label: label.trim(), base_url: url.trim(), model: model.trim(), ...(key.trim() ? { api_key: key.trim() } : {}) })); setKey(''); setEdit(false); toast('Saved') })
+  const test = () => run(async () => { const r = await api.adminAiTest(m.id); setModels(r.models); setMsg({ ok: r.model_ok, text: r.model_ok ? `Works: ${r.models.length ? `${r.models.length} models available, ` : ''}answered in ${r.ms} ms.` : `Connected, but the provider doesn't list “${m.model}”.` }) })
+  const remove = async () => { if (await askConfirm({ title: `Remove “${m.label}”?`, text: 'People who had picked it switch to another model. Their own models are not affected.', label: 'Remove', danger: true })) void run(async () => onDelete(await api.adminAiDelete(m.id))) }
+  return (
+    <div className={`ad-card gm-card ${m.enabled ? '' : 'off'}`}>
+      <div className="gm-head">
+        <div className="gm-title"><b>{m.label}</b>{m.default && <span className="sso-chip on">Default</span>}{!m.enabled && <span className="sso-chip">Off</span>}<span className="muted">{m.model} · {(() => { try { return new URL(m.base_url).hostname } catch { return m.base_url } })()}{m.key_set ? ' · key saved' : ''}</span></div>
+        <div className="gm-actions">
+          <button className="btn btn-pill btn-ghost btn-sm" disabled={busy} onClick={() => void test()}>Test</button>
+          <button className="icon-btn sm" aria-label={`Edit ${m.label}`} onClick={() => setEdit(!edit)}><Pencil size={15} /></button>
+          <button className="icon-btn sm" aria-label={`Remove ${m.label}`} disabled={busy} onClick={() => void remove()}><Trash2 size={15} /></button>
+          <button role="switch" aria-checked={m.enabled} aria-label={`Offer ${m.label}`} disabled={busy} className={`toggle ${m.enabled ? 'on' : ''}`} onClick={() => void run(async () => onChange(await api.adminAiEdit(m.id, { enabled: !m.enabled })))} />
+        </div>
+      </div>
+      {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'} style={{ margin: '8px 0 0' }}>{msg.text}</p>}
+      {!m.default && m.enabled && count > 1 && <button className="cm-link" disabled={busy} onClick={() => void run(async () => onChange(await api.adminAiDefault(m.id)))}>Make this the default</button>}
+      {edit && (
+        <div className="ad-form gm-edit">
+          <label className="ai-field"><span>Name in the model list</span><span className="field"><input value={label} maxLength={60} onChange={(e) => setLabel(e.target.value)} /></span></label>
+          <label className="ai-field"><span>Base URL</span><span className="field"><input value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} /></span></label>
+          <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={m.key_set ? 'Saved. Leave blank to keep it' : 'sk-…'} /></span></label>
+          <label className="ai-field"><span>Model</span><span className="field"><input list={`gm-${m.id}`} value={model} onChange={(e) => setModel(e.target.value)} spellCheck={false} /></span><datalist id={`gm-${m.id}`}>{models.map((x) => <option key={x} value={x} />)}</datalist></label>
+          <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
+            <span>{m.key_set && <button className="btn btn-pill btn-ghost btn-sm" disabled={busy} onClick={() => void run(async () => { onChange(await api.adminAiEdit(m.id, { clear_key: true })); toast('Key removed') })}>Remove key</button>}</span>
+            <span style={{ display: 'flex', gap: 8 }}><button className="btn btn-pill btn-ghost" onClick={() => setEdit(false)}>Cancel</button><button className="btn btn-pill btn-primary" disabled={busy || !url.trim() || !model.trim()} onClick={() => void save()}>Save</button></span>
+          </div>
+        </div>)}
+    </div>
+  )
+}
+
+/** The models Koko offers everyone: as many as you like. People can still add their own and pick which one answers. */
+function AssistantSection() {
+  const [ai, setAi] = useState<AiAdmin | null>(null)
+  const [label, setLabel] = useState('')
+  const [url, setUrl] = useState('')
+  const [model, setModel] = useState('')
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => { api.adminAiModels().then(setAi).catch((e) => toast(e.message)) }, [])
+  if (!ai) return <span className="spinner" />
+  const add = async () => {
+    setBusy(true); setErr('')
+    try { setAi(await api.adminAiAdd({ label: label.trim(), base_url: url.trim(), model: model.trim(), ...(key.trim() ? { api_key: key.trim() } : {}) })); setLabel(''); setUrl(''); setModel(''); setKey(''); toast('Model added') } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
   }
-  const test = async () => {
-    setBusy(true); setMsg(null)
-    try {
-      const r = await api.adminAiTest(); setModels(r.models)
-      setMsg({ ok: r.model_ok, text: r.model_ok ? `Works: ${r.models.length ? `${r.models.length} models available, ` : ''}answered in ${r.ms} ms.` : `Connected, but the provider doesn't list “${ai.model}”. Pick one from the list.` })
-    } catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
-  }
-  const state = !ai.enabled ? 'Not offered' : ai.active.available ? (ai.active.from === 'admin' ? 'Set here' : 'From the server environment') : 'Not set up'
   return (
     <div className="ad-stack">
-      <div className="ad-card">
-        <div className="switch-row">
-          <div><b>Offer Koko to everyone</b><span>{ai.active.available ? <>Everyone uses this connection by default, with nothing to set up. <b>{ai.people_own}</b> {ai.people_own === 1 ? 'person has' : 'people have'} saved their own, and anyone can choose theirs in their settings.</> : 'When this is on and a connection is set below, everyone uses it by default. With it off, or no connection, people bring their own provider and key.'}</span></div>
-          <button role="switch" aria-checked={ai.enabled} aria-label="Offer Koko to everyone" className={`toggle ${ai.enabled ? 'on' : ''}`} onClick={() => void save({ ai_enabled: !ai.enabled }, ai.enabled ? 'Koko is no longer offered system-wide' : 'Koko is offered to everyone')} />
-        </div>
-        <p className="ad-state"><i className={ai.active.available ? 'on' : ''} />{state}{ai.active.available && ai.active.model ? <> · model <code>{ai.active.model}</code></> : null}</p>
-      </div>
+      {ai.models.length === 0 && (
+        <div className="ad-card"><p className="ad-state"><i className={ai.env.configured ? 'on' : ''} />{ai.using_env ? <>Everyone uses the connection from the server's environment: <code>{ai.env.model || 'model'}</code> at <code>{ai.env.url}</code>. Add a model below to replace it.</> : 'No model is offered to everyone yet. Until you add one, people bring their own.'}</p></div>)}
+      {ai.models.map((m) => <GlobalModelCard key={m.id} m={m} count={ai.models.length} onChange={setAi} onDelete={setAi} />)}
+      {ai.models.length > 0 && <p className="muted hint" style={{ margin: '0 4px' }}>The model at the top is the default. Everyone can switch between these in the chat box{ai.people_own > 0 ? `, and ${ai.people_own} ${ai.people_own === 1 ? 'model has' : 'models have'} been added by people for themselves` : ''}.</p>}
       <div className="ad-card ad-form">
-        <h3 style={{ margin: 0 }}>System connection</h3>
-        <p className="muted hint" style={{ margin: 0 }}>Any OpenAI-compatible service. The key is encrypted on the server and never sent to a browser, not even yours.{ai.env.configured && !ai.url ? <> Right now the server's environment provides one (<code>{ai.env.url}</code>); saving here replaces it.</> : null}</p>
-        <div className="ai-presets">{AI_PRESETS.map((p) => <button key={p.name} className={`chip ${url === p.url ? 'on' : ''}`} onClick={() => { setUrl(p.url); setModel(p.model) }}>{p.name}</button>)}</div>
+        <h3 style={{ margin: 0 }}>Add a model for everyone</h3>
+        <p className="muted hint" style={{ margin: 0 }}>Any OpenAI-compatible service. The key is encrypted on the server and never sent to a browser, not even yours.</p>
+        <div className="ai-presets">{PRESETS.map((p) => <button key={p.name} className={`chip ${url === p.url ? 'on' : ''}`} onClick={() => { setUrl(p.url); setModel(p.model); if (!label) setLabel(p.name) }}>{p.name}</button>)}</div>
+        <label className="ai-field"><span>Name in the model list</span><span className="field"><input placeholder="Mistral Large" value={label} maxLength={60} onChange={(e) => setLabel(e.target.value)} /></span></label>
         <label className="ai-field"><span>Base URL</span><span className="field"><input placeholder="https://api.mistral.ai/v1" value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} /></span></label>
-        <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={ai.key_set ? 'Saved. Leave blank to keep it' : 'sk-…'} /></span></label>
-        <label className="ai-field"><span>Model</span>
-          <span className="field"><input list="ai-sys-models" placeholder="mistral-large-latest" value={model} onChange={(e) => setModel(e.target.value)} spellCheck={false} /></span>
-          <datalist id="ai-sys-models">{models.map((m) => <option key={m} value={m} />)}</datalist></label>
-        {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'}>{msg.text}</p>}
-        <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
-          <button className="btn btn-pill btn-primary" disabled={busy || !changed || !url.trim() || !model.trim()} onClick={() => void save({ ai_url: url.trim(), ai_model: model.trim(), ...(key.trim() ? { ai_key: key.trim() } : {}) }, 'System connection saved')}>Save</button>
-          <button className="btn btn-pill btn-soft" disabled={busy || changed || !ai.active.available} onClick={() => void test()}>{busy ? <span className="spinner sm" style={{ borderTopColor: 'var(--ink)' }} /> : 'Test'}</button>
-          {ai.key_set && <button className="btn btn-pill btn-ghost" disabled={busy} onClick={() => void save({ ai_clear_key: true }, 'Key removed')}>Remove key</button>}
-          {ai.url && <button className="btn btn-pill btn-ghost" disabled={busy} onClick={() => void save({ ai_url: '', ai_model: '', ai_clear_key: true }, 'System connection cleared')}>Clear</button>}
-        </div>
+        <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-…" /></span></label>
+        <label className="ai-field"><span>Model</span><span className="field"><input placeholder="mistral-large-latest" value={model} onChange={(e) => setModel(e.target.value)} spellCheck={false} /></span></label>
+        {err && <p className="form-error">{err}</p>}
+        <div className="modal-actions" style={{ justifyContent: 'flex-start' }}><button className="btn btn-pill btn-primary" disabled={busy || !url.trim() || !model.trim()} onClick={() => void add()}><Plus size={15} />Add model</button></div>
       </div>
     </div>
   )
@@ -516,7 +535,7 @@ function Overview({ s, go }: { s: AdminSettings | null; go: (id: AdminSection) =
     { id: 'access', label: 'Default storage', value: s.default_quota_mb ? `${s.default_quota_mb} MB per user` : 'Unlimited', ok: true },
     { id: 'email', label: 'Email', value: s.email_active ? 'Active' : 'Off', ok: s.email_active },
     { id: 'sso', label: 'Single sign-on', value: sso ? (sso.filter((p) => p.ready && p.enabled).map((p) => p.name).join(', ') || 'Not set up') : '…', ok: !!sso?.some((p) => p.ready && p.enabled) },
-    { id: 'assistant', label: 'Koko assistant', value: s.ai.active.available ? `${s.ai.active.from === 'admin' ? 'System connection' : 'From environment'}${s.ai.active.model ? `, ${s.ai.active.model}` : ''}` : 'Everyone brings their own', ok: s.ai.active.available },
+    { id: 'assistant', label: 'Koko models', value: s.ai.models.filter((m) => m.enabled).length ? `${s.ai.models.filter((m) => m.enabled).length} offered (${s.ai.models.find((m) => m.default)?.label ?? ''} is the default)` : s.ai.using_env ? `From the environment${s.ai.env.model ? `, ${s.ai.env.model}` : ''}` : 'Everyone brings their own', ok: s.ai.models.some((m) => m.enabled) || s.ai.using_env },
     { id: 'voice', label: 'Voice typing', value: stt?.active.available ? `${stt.active.provider}, ${stt.active.model}` : 'Off', ok: !!stt?.active.available },
     { id: 'voice', label: 'Live preview', value: stt?.draft && stt.draft_model ? `On (${stt.draft_model})` : 'Off', ok: !!(stt?.draft && stt.draft_model) },
   ] : []
@@ -545,7 +564,7 @@ const SECTIONS: { id: AdminSection; label: string; icon: React.ReactNode; group:
   { id: 'access', label: 'Access & storage', icon: <SlidersHorizontal size={17} />, group: 'Configure', blurb: 'Who can sign up, and how much room each person gets.' },
   { id: 'email', label: 'Email', icon: <Mail size={17} />, group: 'Configure', blurb: 'Confirmation codes, password resets and mention emails.' },
   { id: 'sso', label: 'Single sign-on', icon: <KeyRound size={17} />, group: 'Configure', blurb: 'Let people sign in with Google, GitHub or any OAuth 2.0 / OpenID Connect provider.' },
-  { id: 'assistant', label: 'Assistant (Koko)', icon: <Sparkles size={17} />, group: 'Configure', blurb: 'The AI connection everyone uses by default. People can still bring their own.' },
+  { id: 'assistant', label: 'Assistant (Koko)', icon: <Sparkles size={17} />, group: 'Configure', blurb: 'The models Koko offers everyone. People can pick between them, and add their own.' },
   { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'Configure', blurb: 'The speech provider, live preview, and models kept on this server.' },
 ]
 const fromHash = (): AdminSection => { const raw = location.hash.slice(1); const h = (raw === 'google' ? 'sso' : raw) as AdminSection; /* (#google was this section's old name) */ return SECTIONS.some((x) => x.id === h) ? h : 'overview' }
@@ -586,8 +605,7 @@ export function AdminPage() {
           {sec === 'access' && settingsBody((x) => <AccessSection s={x} apply={setS} />)}
           {sec === 'email' && settingsBody((x) => <div className="ad-card ad-form"><EmailSettings s={x} apply={setS} /></div>)}
           {sec === 'sso' && settingsBody((x) => <SsoSection s={x} apply={setS} />)}
-          {sec === 'assistant' && settingsBody((x) => <AssistantSection s={x} apply={setS} />)}
-          {sec === 'assistant' && settingsBody((x) => <AssistantSection s={x} apply={setS} />)}
+          {sec === 'assistant' && <AssistantSection />}
           {sec === 'voice' && settingsBody((x) => <div className="ad-card ad-form"><VoiceSettings s={x} apply={setS} /></div>)}
         </div>
       </main>

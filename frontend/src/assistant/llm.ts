@@ -10,8 +10,8 @@ export interface ChatMessage {
 export interface ToolSpec { type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }
 
 /** Stream one completion from the proxy, calling onText with the growing reply. Handles providers that don't stream. */
-export async function streamChat(messages: ChatMessage[], tools: ToolSpec[], signal: AbortSignal, onText: (t: string) => void): Promise<{ content: string; toolCalls: ToolCall[] }> {
-  const res = await aiChatRequest({ messages, tools: tools.length ? tools : undefined }, signal)
+export async function streamChat(messages: ChatMessage[], tools: ToolSpec[], signal: AbortSignal, onText: (t: string) => void, modelId?: string | null): Promise<{ content: string; toolCalls: ToolCall[] }> {
+  const res = await aiChatRequest({ messages, tools: tools.length ? tools : undefined, ...(modelId ? { model_id: modelId } : {}) }, signal)
   if (!res.ok) {
     let msg = res.statusText
     try { const j = await res.json(); msg = typeof j.detail === 'string' ? j.detail : j.detail?.message ?? msg } catch { /* keep status text */ }

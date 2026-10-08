@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Check, ChevronDown, CircleAlert, FolderSearch, History, Loader2, MessageSquarePlus, Settings2, ShieldCheck, Sparkles, Square, Trash2, X } from 'lucide-react'
-import { type AiFilesMode, type AiSettings, type User } from '../api'
+import { ArrowUp, Check, ChevronDown, CircleAlert, Cpu, FolderSearch, History, Loader2, MessageSquarePlus, Settings2, ShieldCheck, Sparkles, Square, Trash2, X } from 'lucide-react'
+import { api, type AiFilesMode, type AiSettings, type User } from '../api'
 import { Popover } from '../ui/Popover'
 import { toast } from '../ui/Toast'
 import type { Adapter } from './adapter'
@@ -54,6 +54,30 @@ function Proposal({ item, decide, canEdit }: { item: Extract<Item, { k: 'proposa
   )
 }
 
+/** The model that answers, chosen right in the chat box: the ones the admin offers, then your own, and a way to add more. */
+function ModelPicker({ settings, onSettings, onManage }: { settings: AiSettings | null; onSettings: (s: AiSettings) => void; onManage: () => void }) {
+  const models = settings?.models ?? []
+  const cur = models.find((m) => m.id === settings?.selected) ?? models[0]
+  const pick = async (id: string, close: () => void) => { close(); if (id === settings?.selected) return; try { onSettings(await api.pickAiModel(id)) } catch (e) { toast((e as Error).message) } }
+  const group = (title: string, list: typeof models, close: () => void) => list.length > 0 && (
+    <div className="amp-group"><h5>{title}</h5>
+      {list.map((m) => (
+        <button key={m.id} role="option" aria-selected={m.id === cur?.id} className={m.id === cur?.id ? 'on' : ''} onClick={() => void pick(m.id, close)}>
+          <span><b>{m.label}</b><em>{m.model}</em></span>{m.id === cur?.id && <Check size={15} />}</button>))}
+    </div>)
+  return (
+    <Popover className="ai-model-pop" trigger={({ toggle }) => (
+      <button className="ai-model-btn" aria-label="Model" title="Choose the model" onMouseDown={(e) => e.preventDefault()} onClick={toggle}><Cpu size={13} /><span>{cur?.label ?? 'Choose a model'}</span><ChevronDown size={13} /></button>)}>
+      {(close) => (
+        <div className="ai-model-menu" role="listbox" aria-label="Models">
+          {group('Provided for everyone', models.filter((m) => m.scope === 'system'), close)}
+          {group('Your models', models.filter((m) => m.scope === 'user'), close)}
+          <button className="amp-add" onClick={() => { close(); onManage() }}><Settings2 size={14} />Add or manage your models…</button>
+        </div>)}
+    </Popover>
+  )
+}
+
 export default function AssistantPanel({ adapter, docId, user, settings, onSettings, onClose, initialPrompt }: {
   adapter: Adapter; docId: string; user: User; settings: AiSettings | null; onSettings: (s: AiSettings) => void; onClose: () => void; initialPrompt?: string | null
 }) {
@@ -82,7 +106,7 @@ export default function AssistantPanel({ adapter, docId, user, settings, onSetti
         <div className="ai-head-actions">
           <button className="icon-btn sm" title="New conversation" aria-label="New conversation" onClick={() => { void a.newConversation(); setShowHistory(false) }}><MessageSquarePlus size={17} /></button>
           <button className={`icon-btn sm ${showHistory ? 'active' : ''}`} title="Past conversations" aria-label="Past conversations" onClick={() => setShowHistory((v) => !v)}><History size={17} /></button>
-          <button className="icon-btn sm" title="Connection settings" aria-label="Connection settings" onClick={() => setShowSettings(true)}><Settings2 size={17} /></button>
+          <button className="icon-btn sm" title="Models" aria-label="Models" onClick={() => setShowSettings(true)}><Settings2 size={17} /></button>
           <button className="icon-btn sm" title="Close" aria-label="Close" onClick={onClose}><X size={17} /></button>
         </div>
       </div>
@@ -116,9 +140,9 @@ export default function AssistantPanel({ adapter, docId, user, settings, onSetti
 
       {!a.configured ? (
         <div className="ai-empty">
-          <p><b>Connect a model to get started.</b></p>
-          <p className="muted">Koko works with any OpenAI-compatible service, such as Mistral or OpenAI.</p>
-          <button className="btn btn-pill btn-primary" onClick={() => setShowSettings(true)}>Connect</button>
+          <p><b>Add a model to get started.</b></p>
+          <p className="muted">Koko works with any OpenAI-compatible service, such as Mistral or OpenAI. Your administrator can also offer models to everyone.</p>
+          <button className="btn btn-pill btn-primary" onClick={() => setShowSettings(true)}>Add a model</button>
         </div>
       ) : (
         <>
@@ -151,6 +175,7 @@ export default function AssistantPanel({ adapter, docId, user, settings, onSetti
               ? <button className="ai-send stop" aria-label="Stop" onClick={a.stop}><Square size={13} fill="currentColor" /></button>
               : <button className="ai-send" aria-label="Send" disabled={!text.trim()} onClick={submit}><ArrowUp size={17} /></button>}
           </div>
+          <div className="ai-under"><ModelPicker settings={settings} onSettings={onSettings} onManage={() => setShowSettings(true)} /></div>
         </>
       )}
       {showSettings && <AiSettingsDialog settings={settings} onSaved={onSettings} onClose={() => setShowSettings(false)} />}

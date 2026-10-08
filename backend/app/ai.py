@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from . import access
 from .db import get_db, settings_get
-from .routes import ctx, must_user
+from .routes import ctx, must_admin, must_user
 from .security import RateLimiter, decrypt_secret, encrypt_secret
 
 router = APIRouter(prefix="/api")
@@ -44,16 +44,50 @@ def server_default() -> dict | None:
     return None
 
 
-def system_provider(db) -> dict | None:
-    """The system-wide connection everyone uses by default: the one the admin set in the dashboard, else the environment's.
-    The admin can switch it off ("Offer to everyone" off), and then people bring their own."""
-    g = lambda k: settings_get(db, k)
-    if g("ai_sys_enabled") == "off":
-        return None
-    if g("ai_sys_url"):
-        return {"base_url": g("ai_sys_url"), "model": g("ai_sys_model"), "api_key": decrypt_secret(g("ai_sys_key")) if g("ai_sys_key") else None, "from": "admin"}
+def _conn(r) -> dict:
+    return {"id": r["id"], "label": r["label"], "scope": r["scope"], "base_url": r["base_url"], "model": r["model"], "api_key": decrypt_secret(r["key_enc"]) if r["key_enc"] else None}
+
+
+def system_models(db) -> list[dict]:
+    """The models the admin offers everyone. With none set up in the dashboard, the environment's connection (KOKO_AI_URL...) is the one."""
+    rows = db.execute("SELECT * FROM ai_models WHERE scope = 'system' ORDER BY position, created_at").fetchall()
+    if rows:
+        return [_conn(r) for r in rows if r["enabled"]]
     d = server_default()
-    return {**d, "from": "environment"} if d else None
+    return [{"id": "env", "label": d["model"] or "Koko", "scope": "system", "base_url": d["base_url"], "model": d["model"], "api_key": d["api_key"]}] if d else []
+
+
+def own_models(db, user) -> list[dict]:
+    return [_conn(r) for r in db.execute("SELECT * FROM ai_models WHERE scope = 'user' AND user_id = ? ORDER BY position, created_at", (user["id"],)).fetchall()]
+
+
+def available(db, user) -> list[dict]:
+    return system_models(db) + own_models(db, user)
+
+
+def resolve(db, user, wanted: str | None = None) -> dict | None:
+    """The model a request should use: the one asked for if this person may use it, else the one they picked, else the admin's first, else their own first."""
+    av = available(db, user)
+    by_id = {m["id"]: m for m in av}
+    if wanted in by_id:
+        return by_id[wanted]
+    row = db.execute("SELECT ai_model FROM users WHERE id = ?", (user["id"],)).fetchone()
+    if row and row["ai_model"] in by_id:
+        return by_id[row["ai_model"]]
+    return av[0] if av else None
+
+
+def public_view(db, user) -> dict:
+    av = available(db, user)
+    cur = resolve(db, user)
+    keys = {r["id"]: r["key_enc"] for r in db.execute("SELECT id, key_enc FROM ai_models WHERE scope = 'user' AND user_id = ?", (user["id"],)).fetchall()}
+    def item(m):
+        own = m["scope"] == "user"
+        out = {"id": m["id"], "label": m["label"], "scope": m["scope"], "model": m["model"], "host": urlparse(m["base_url"]).hostname or ""}
+        if own:   # their own connection is theirs to see and edit; the key itself never leaves the server
+            out |= {"base_url": m["base_url"], "key_hint": ("…" + m["api_key"][-4:]) if m["api_key"] else None}
+        return out
+    return {"configured": bool(av), "models": [item(m) for m in av], "selected": cur["id"] if cur else None}
 
 
 async def check_url(url: str) -> str:
@@ -77,40 +111,14 @@ async def check_url(url: str) -> str:
     return url.strip().rstrip("/")
 
 
-def user_settings(db, user) -> dict | None:
-    """What this person's assistant talks to. If a system-wide connection exists they use it, unless they have saved their own and chosen
-    it; with no system connection they need their own."""
-    row = db.execute("SELECT * FROM ai_settings WHERE user_id = ?", (user["id"],)).fetchone()
-    sysp = system_provider(db)
-    if row and (row["use_own"] or not sysp):
-        return {"base_url": row["base_url"], "model": row["model"], "api_key": decrypt_secret(row["key_enc"]), "source": "user"}
-    return {**sysp, "source": "server"} if sysp else None
-
-
-def public_view(db, user) -> dict:
-    row = db.execute("SELECT * FROM ai_settings WHERE user_id = ?", (user["id"],)).fetchone()
-    sysp = system_provider(db)
-    key = decrypt_secret(row["key_enc"]) if row else None
-    using = user_settings(db, user)
-    host = (urlparse(sysp["base_url"]).hostname or "") if sysp else ""
-    return {
-        "configured": bool(using),
-        "source": using["source"] if using else None,
-        # the person's own saved connection (what the form edits), whether or not it is the one in use
-        "base_url": row["base_url"] if row else "",
-        "model": row["model"] if row else "",
-        "key_hint": ("…" + key[-4:]) if key else None,
-        "own_saved": bool(row),
-        "use_own": bool(using and using["source"] == "user"),
-        "server_default": bool(sysp),
-        "system": {"available": bool(sysp), "model": sysp["model"] if sysp else "", "host": host},
-    }
-
-
-class SettingsIn(BaseModel):
+class ConnIn(BaseModel):
+    label: str = Field("", max_length=60)
     base_url: str = Field(max_length=300)
-    model: str = Field("", max_length=200)
-    api_key: str | None = Field(None, max_length=500)  # None = keep the stored key
+    model: str = Field(max_length=200)
+    api_key: str | None = Field(None, max_length=500)   # None = keep the stored key (when editing)
+
+
+MAX_OWN = 12
 
 
 @router.get("/ai/settings")
@@ -118,42 +126,63 @@ def get_settings(user=Depends(must_user), db=Depends(get_db)):
     return public_view(db, user)
 
 
-@router.put("/ai/settings")
-async def put_settings(body: SettingsIn, user=Depends(must_user), db=Depends(get_db)):
+@router.post("/ai/connections")
+async def add_connection(body: ConnIn, user=Depends(must_user), db=Depends(get_db)):
+    """Add one of your own models (any OpenAI-compatible provider). Only you can see or use it."""
+    if db.execute("SELECT COUNT(*) AS n FROM ai_models WHERE scope = 'user' AND user_id = ?", (user["id"],)).fetchone()["n"] >= MAX_OWN:
+        raise HTTPException(409, f"That's the most you can add ({MAX_OWN}). Remove one first.")
+    if not body.model.strip():
+        raise HTTPException(422, "Say which model to use")
     url = await check_url(body.base_url)
-    row = db.execute("SELECT key_enc FROM ai_settings WHERE user_id = ?", (user["id"],)).fetchone()
-    key_enc = row["key_enc"] if row else None
+    mid = uuid.uuid4().hex[:12]
+    key = encrypt_secret(body.api_key.strip()) if body.api_key and body.api_key.strip() else None
+    pos = db.execute("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM ai_models WHERE scope = 'user' AND user_id = ?", (user["id"],)).fetchone()["p"]
+    db.execute("INSERT INTO ai_models (id, scope, user_id, label, base_url, model, key_enc, enabled, position, created_at) VALUES (?,?,?,?,?,?,?,1,?,?)",
+               (mid, "user", user["id"], (body.label.strip() or body.model.strip())[:60], url, body.model.strip(), key, pos, time.time()))
+    db.execute("UPDATE users SET ai_model = ? WHERE id = ?", (mid, user["id"]))   # a model you just added is the one you want to try
+    db.commit()
+    return public_view(db, user)
+
+
+def _own(db, user, mid: str):
+    r = db.execute("SELECT * FROM ai_models WHERE id = ? AND scope = 'user' AND user_id = ?", (mid, user["id"])).fetchone()
+    if not r:
+        raise HTTPException(404, "No such model of yours")
+    return r
+
+
+@router.put("/ai/connections/{mid}")
+async def edit_connection(mid: str, body: ConnIn, user=Depends(must_user), db=Depends(get_db)):
+    r = _own(db, user, mid)
+    url = await check_url(body.base_url)
+    key = r["key_enc"]
     if body.api_key is not None:
-        key_enc = encrypt_secret(body.api_key.strip()) if body.api_key.strip() else None
-    db.execute(
-        """INSERT INTO ai_settings (user_id, base_url, model, key_enc, updated_at, use_own) VALUES (?,?,?,?,?,1)
-           ON CONFLICT(user_id) DO UPDATE SET base_url = excluded.base_url, model = excluded.model, key_enc = excluded.key_enc, updated_at = excluded.updated_at, use_own = 1""",
-        (user["id"], url, body.model.strip(), key_enc, time.time()),
-    )
+        key = encrypt_secret(body.api_key.strip()) if body.api_key.strip() else None
+    db.execute("UPDATE ai_models SET label = ?, base_url = ?, model = ?, key_enc = ? WHERE id = ?", ((body.label.strip() or body.model.strip())[:60], url, body.model.strip(), key, mid))
+    db.commit()
     return public_view(db, user)
 
 
-class SourceIn(BaseModel):
-    use: Literal["system", "own"]
-
-
-@router.put("/ai/source")
-def choose_source(body: SourceIn, user=Depends(must_user), db=Depends(get_db)):
-    """Pick between the system-wide connection and your own saved one, without losing either."""
-    if body.use == "own":
-        if not db.execute("SELECT 1 FROM ai_settings WHERE user_id = ?", (user["id"],)).fetchone():
-            raise HTTPException(409, "Save your own connection first")
-        db.execute("UPDATE ai_settings SET use_own = 1 WHERE user_id = ?", (user["id"],))
-    else:
-        if not system_provider(db):
-            raise HTTPException(409, "There is no system-wide connection to use")
-        db.execute("UPDATE ai_settings SET use_own = 0 WHERE user_id = ?", (user["id"],))
+@router.delete("/ai/connections/{mid}")
+def delete_connection(mid: str, user=Depends(must_user), db=Depends(get_db)):
+    _own(db, user, mid)
+    db.execute("DELETE FROM ai_models WHERE id = ?", (mid,))
+    db.execute("UPDATE users SET ai_model = '' WHERE id = ? AND ai_model = ?", (user["id"], mid))
+    db.commit()
     return public_view(db, user)
 
 
-@router.delete("/ai/settings")
-def delete_settings(user=Depends(must_user), db=Depends(get_db)):
-    db.execute("DELETE FROM ai_settings WHERE user_id = ?", (user["id"],))
+class PickIn(BaseModel):
+    id: str
+
+
+@router.put("/ai/selection")
+def pick_model(body: PickIn, user=Depends(must_user), db=Depends(get_db)):
+    """Which model your assistant uses (also what the model picker in the chat box sets)."""
+    if body.id not in {m["id"] for m in available(db, user)}:
+        raise HTTPException(404, "That model isn't available to you")
+    db.execute("UPDATE users SET ai_model = ? WHERE id = ?", (body.id, user["id"]))
+    db.commit()
     return public_view(db, user)
 
 
@@ -195,14 +224,16 @@ async def fetch_models(s: dict) -> list[str]:
 
 
 @router.get("/ai/models")
-async def list_models(user=Depends(must_user), db=Depends(get_db)):
-    s = user_settings(db, user)
+async def list_models(id: str | None = None, user=Depends(must_user), db=Depends(get_db)):
+    """The model names a provider offers (for the model box when adding or editing one); defaults to the one you are using."""
+    s = resolve(db, user, id)
     if not s:
         raise HTTPException(409, "Connect an AI provider first")
     return {"models": await fetch_models(s)}
 
 
 class ChatIn(BaseModel):
+    model_id: str | None = None   # which of the person's available models to use (else the one they picked)
     messages: list[dict] = Field(max_length=300)
     tools: list[dict] | None = None
     temperature: float | None = Field(None, ge=0, le=2)
@@ -213,7 +244,7 @@ async def chat(body: ChatIn, user=Depends(must_user), db=Depends(get_db)):
     """Relay one chat completion (streamed) to the user's provider. The browser runs the tool loop."""
     if not chat_limiter.allow(f"ai:{user['id']}"):
         raise HTTPException(429, "Slow down: too many assistant requests. Try again in a moment.")
-    s = user_settings(db, user)
+    s = resolve(db, user, body.model_id)
     if not s:
         raise HTTPException(409, "Connect an AI provider in the assistant settings first")
     if not s.get("model"):
@@ -313,3 +344,97 @@ def delete_conversation(doc_id: str, cid: str, c=Depends(ctx), user=Depends(must
     access.require(db, doc_id, *c)
     db.execute("DELETE FROM ai_conversations WHERE id = ? AND doc_id = ? AND user_id = ?", (cid, doc_id, user["id"]))
     return {"ok": True}
+
+
+# ───────────── admin: the models everyone can use ─────────────
+def admin_view(db) -> dict:
+    rows = db.execute("SELECT * FROM ai_models WHERE scope = 'system' ORDER BY position, created_at").fetchall()
+    env = server_default()
+    return {"models": [{"id": r["id"], "label": r["label"], "base_url": r["base_url"], "model": r["model"], "key_set": bool(r["key_enc"]), "enabled": bool(r["enabled"]), "default": i == 0} for i, r in enumerate(rows)],
+            "env": {"configured": bool(env), "url": env["base_url"] if env else "", "model": env["model"] if env else ""},
+            "using_env": bool(env) and not rows, "people_own": db.execute("SELECT COUNT(*) AS n FROM ai_models WHERE scope = 'user'").fetchone()["n"]}
+
+
+class GlobalIn(BaseModel):
+    label: str = Field("", max_length=60)
+    base_url: str | None = Field(None, max_length=300)
+    model: str | None = Field(None, max_length=200)
+    api_key: str | None = Field(None, max_length=500)
+    clear_key: bool | None = None
+    enabled: bool | None = None
+
+
+@router.get("/admin/ai/models")
+def admin_list(admin=Depends(must_admin), db=Depends(get_db)):
+    return admin_view(db)
+
+
+@router.post("/admin/ai/models")
+async def admin_add(b: GlobalIn, admin=Depends(must_admin), db=Depends(get_db)):
+    if not (b.base_url or "").strip() or not (b.model or "").strip():
+        raise HTTPException(422, "Give the provider's address and the model to use")
+    url = await check_url(b.base_url)
+    mid = uuid.uuid4().hex[:12]
+    pos = db.execute("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM ai_models WHERE scope = 'system'").fetchone()["p"]
+    db.execute("INSERT INTO ai_models (id, scope, user_id, label, base_url, model, key_enc, enabled, position, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+               (mid, "system", None, (b.label.strip() or b.model.strip())[:60], url, b.model.strip(), encrypt_secret(b.api_key.strip()) if b.api_key and b.api_key.strip() else None, int(b.enabled is not False), pos, time.time()))
+    db.commit()
+    return admin_view(db)
+
+
+def _sys(db, mid: str):
+    r = db.execute("SELECT * FROM ai_models WHERE id = ? AND scope = 'system'", (mid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "No such model")
+    return r
+
+
+@router.put("/admin/ai/models/{mid}")
+async def admin_edit(mid: str, b: GlobalIn, admin=Depends(must_admin), db=Depends(get_db)):
+    r = _sys(db, mid)
+    sets: dict = {}
+    if b.label.strip():
+        sets["label"] = b.label.strip()[:60]
+    if b.base_url is not None:
+        sets["base_url"] = await check_url(b.base_url)
+    if b.model is not None:
+        if not b.model.strip():
+            raise HTTPException(422, "Say which model to use")
+        sets["model"] = b.model.strip()
+    if b.api_key is not None and b.api_key.strip():
+        sets["key_enc"] = encrypt_secret(b.api_key.strip())
+    if b.clear_key:
+        sets["key_enc"] = None
+    if b.enabled is not None:
+        sets["enabled"] = int(b.enabled)
+    if sets:
+        db.execute(f"UPDATE ai_models SET {', '.join(k + ' = ?' for k in sets)} WHERE id = ?", (*sets.values(), mid))
+        db.commit()
+    return admin_view(db)
+
+
+@router.delete("/admin/ai/models/{mid}")
+def admin_delete(mid: str, admin=Depends(must_admin), db=Depends(get_db)):
+    _sys(db, mid)
+    db.execute("DELETE FROM ai_models WHERE id = ?", (mid,))
+    db.execute("UPDATE users SET ai_model = '' WHERE ai_model = ?", (mid,))
+    db.commit()
+    return admin_view(db)
+
+
+@router.post("/admin/ai/models/{mid}/default")
+def admin_default(mid: str, admin=Depends(must_admin), db=Depends(get_db)):
+    """The first model is what people get until they pick another."""
+    _sys(db, mid)
+    low = db.execute("SELECT COALESCE(MIN(position), 0) AS p FROM ai_models WHERE scope = 'system'").fetchone()["p"]
+    db.execute("UPDATE ai_models SET position = ? WHERE id = ?", (low - 1, mid))
+    db.commit()
+    return admin_view(db)
+
+
+@router.post("/admin/ai/models/{mid}/test")
+async def admin_test(mid: str, admin=Depends(must_admin), db=Depends(get_db)):
+    r = _sys(db, mid)
+    t0 = time.time()
+    names = await fetch_models(_conn(r))
+    return {"ok": True, "models": names, "ms": int((time.time() - t0) * 1000), "model_ok": not names or r["model"] in names}

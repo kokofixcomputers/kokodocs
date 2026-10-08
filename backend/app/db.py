@@ -249,6 +249,29 @@ def migrate(db: sqlite3.Connection) -> None:
                    (gid["value"], (gs["value"] if gs and gs["value"] else None), time.time()))
         db.execute("""INSERT OR IGNORE INTO user_identities (provider, subject, user_id, label, created_at)
                       SELECT 'google', google_sub, id, COALESCE(google_email, ''), ? FROM users WHERE google_sub IS NOT NULL""", (time.time(),))
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS ai_models (
+      id TEXT PRIMARY KEY, scope TEXT NOT NULL, user_id TEXT REFERENCES users(id) ON DELETE CASCADE, label TEXT NOT NULL, base_url TEXT NOT NULL, model TEXT NOT NULL,
+      key_enc TEXT, enabled INTEGER NOT NULL DEFAULT 1, position INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_models_user ON ai_models(user_id);
+    """)
+    if "ai_model" not in {r["name"] for r in db.execute("PRAGMA table_info(users)")}:   # which model each person picked
+        db.execute("ALTER TABLE users ADD COLUMN ai_model TEXT NOT NULL DEFAULT ''")
+    if not db.execute("SELECT 1 FROM app_settings WHERE key = 'ai_models_migrated'").fetchone():
+        # before there was a list of models: one system connection (in settings) and at most one own connection per person (ai_settings). Carry both over, once.
+        g = lambda k: (db.execute("SELECT value FROM app_settings WHERE key = ?", (k,)).fetchone() or {"value": ""})["value"]
+        if g("ai_sys_url"):
+            db.execute("INSERT INTO ai_models (id, scope, user_id, label, base_url, model, key_enc, enabled, position, created_at) VALUES ('sys-1','system',NULL,?,?,?,?,?,0,?)",
+                       ((g("ai_sys_model") or "Koko")[:60], g("ai_sys_url"), g("ai_sys_model") or "", g("ai_sys_key") or None, 0 if g("ai_sys_enabled") == "off" else 1, time.time()))
+        acols0 = {r["name"] for r in db.execute("PRAGMA table_info(ai_settings)")}
+        for r in db.execute("SELECT * FROM ai_settings").fetchall():
+            mid = "own-" + r["user_id"][:10]
+            db.execute("INSERT OR IGNORE INTO ai_models (id, scope, user_id, label, base_url, model, key_enc, enabled, position, created_at) VALUES (?,?,?,?,?,?,?,1,0,?)",
+                       (mid, "user", r["user_id"], (r["model"] or "My model")[:60], r["base_url"], r["model"], r["key_enc"], time.time()))
+            if "use_own" not in acols0 or r["use_own"] or not g("ai_sys_url"):
+                db.execute("UPDATE users SET ai_model = ? WHERE id = ?", (mid, r["user_id"]))
+        db.execute("INSERT INTO app_settings (key, value) VALUES ('ai_models_migrated', '1')")
     acols = {r["name"] for r in db.execute("PRAGMA table_info(ai_settings)")}
     if "use_own" not in acols:   # does this person use their own connection (1) or the system-wide one (0)? Existing connections keep being used.
         db.execute("ALTER TABLE ai_settings ADD COLUMN use_own INTEGER NOT NULL DEFAULT 0")

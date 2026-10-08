@@ -17,6 +17,13 @@ def call(m, p, b=None, t=None, raw=False):
 
 su = lambda e, n: call("POST", "/api/auth/signup", {"email": e, "name": n, "password": "password123"})[1]["token"]
 o, b = su("o@x.com", "Olivia"), su("b@x.com", "Ben")
+def put_settings(body, tok):
+    """The old one-connection call, on top of the list of models: edit the person's own model, or add the first."""
+    cur = call("GET", "/api/ai/settings", t=tok)[1]; own = [m for m in cur["models"] if m["scope"] == "user"]
+    s, r = call("PUT", f"/api/ai/connections/{own[0]['id']}", body, tok) if own else call("POST", "/api/ai/connections", body, tok)
+    if s != 200: return s, r
+    me = [m for m in r["models"] if m["scope"] == "user"][0]
+    return s, {**r, "source": "user", "key_hint": me["key_hint"], "model": me["model"]}
 detail = lambda r: r.get("detail") if isinstance(r, dict) else r
 
 ok("not configured at first", call("GET", "/api/ai/settings", t=o)[1]["configured"] is False)
@@ -25,19 +32,19 @@ ok("settings need login", call("GET", "/api/ai/settings")[0] == 401)
 
 # SSRF guard (default config forbids private hosts / http)
 for url in ["http://169.254.169.254/latest", "https://localhost/v1", "https://127.0.0.1/v1", "ftp://x.com", "https://user:pw@api.mistral.ai/v1", "not a url"]:
-    s, r = call("PUT", "/api/ai/settings", {"base_url": url, "model": "m", "api_key": "k"}, o)
+    s, r = put_settings({"base_url": url, "model": "m", "api_key": "k"}, o)
     ok(f"blocked: {url}", s == 422)
 
 # valid connection to the (local) mock
-s, r = call("PUT", "/api/ai/settings", {"base_url": MOCK, "model": "mock-large", "api_key": "sk-test"}, o)
+s, r = put_settings({"base_url": MOCK, "model": "mock-large", "api_key": "sk-test"}, o)
 ok("save settings", s == 200 and r["configured"] and r["source"] == "user" and r["key_hint"] == "…test" and "api_key" not in r)
 s, r = call("GET", "/api/ai/settings", t=o); ok("key never returned", "sk-test" not in json.dumps(r))
-raw = sqlite3.connect(os.environ.get("KOKO_DATA_DIR", "data") + "/kokodocs.sqlite3").execute("select key_enc, base_url from ai_settings").fetchone()
+raw = sqlite3.connect(os.environ.get("KOKO_DATA_DIR", "data") + "/kokodocs.sqlite3").execute("select key_enc, base_url from ai_models where scope = 'user'").fetchone()
 ok("api key encrypted at rest", raw[0] and "sk-test" not in raw[0] and raw[0].startswith("gAAAA"))
 ok("other users see nothing of it", call("GET", "/api/ai/settings", t=b)[1]["configured"] is False)
 s, r = call("GET", "/api/ai/models", t=o); ok("model list from provider", s == 200 and r["models"] == ["mock-large", "mock-small"])
-s, r = call("PUT", "/api/ai/settings", {"base_url": MOCK, "model": "mock-small"}, o); ok("update keeps stored key when omitted", s == 200 and r["key_hint"] == "…test" and r["model"] == "mock-small")
-call("PUT", "/api/ai/settings", {"base_url": MOCK, "model": "mock-large"}, o)
+s, r = put_settings({"base_url": MOCK, "model": "mock-small"}, o); ok("update keeps stored key when omitted", s == 200 and r["key_hint"] == "…test" and r["model"] == "mock-small")
+put_settings({"base_url": MOCK, "model": "mock-large"}, o)
 
 def stream(msgs, tools=None, token=o):
     body = json.dumps({"messages": msgs, "tools": tools}).encode()
@@ -61,13 +68,13 @@ for e in ev:
 ok("tool calls stream through intact", [v["name"] for v in names.values()] == ["read_document", "get_selection"] and json.loads(names[0]["args"]) == {"x": 1})
 s, _, _, ev = stream([{"role": "user", "content": "x"}, {"role": "assistant", "content": None, "tool_calls": [{"id": "c", "type": "function", "function": {"name": "read_document", "arguments": "{}"}}]}, {"role": "tool", "tool_call_id": "c", "content": "DOC TEXT"}])
 ok("tool results reach the model", "DOC TEXT" in "".join(e["choices"][0]["delta"].get("content", "") for e in ev))
-call("PUT", "/api/ai/settings", {"base_url": MOCK, "model": "missing-model"}, o)
+put_settings({"base_url": MOCK, "model": "missing-model"}, o)
 s, _, _, ev = stream([{"role": "user", "content": "hi"}]); ok("provider error is relayed readably", s == 502 and "does not exist" in ev["detail"]); print("   ->", ev["detail"][:90])
-call("PUT", "/api/ai/settings", {"base_url": MOCK, "model": "mock-large", "api_key": "wrong"}, o)
+put_settings({"base_url": MOCK, "model": "mock-large", "api_key": "wrong"}, o)
 s, _, _, ev = stream([{"role": "user", "content": "hi"}]); ok("bad API key explained", s == 502 and "rejected the API key" in ev["detail"])
-call("PUT", "/api/ai/settings", {"base_url": MOCK, "model": "mock-large", "api_key": "sk-test"}, o)
-ok("clearing the key works", call("PUT", "/api/ai/settings", {"base_url": MOCK, "model": "mock-large", "api_key": ""}, o)[1]["key_hint"] is None)
-call("PUT", "/api/ai/settings", {"base_url": MOCK, "model": "mock-large", "api_key": "sk-test"}, o)
+put_settings({"base_url": MOCK, "model": "mock-large", "api_key": "sk-test"}, o)
+ok("clearing the key works", put_settings({"base_url": MOCK, "model": "mock-large", "api_key": ""}, o)[1]["key_hint"] is None)
+put_settings({"base_url": MOCK, "model": "mock-large", "api_key": "sk-test"}, o)
 
 # conversations: per user, per document
 d = call("POST", "/api/docs", {}, o)[1]["id"]; cid = uuid.uuid4().hex[:12]

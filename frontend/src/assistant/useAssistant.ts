@@ -51,6 +51,7 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
   const waiting = useRef(new Map<string, (d: 'approve' | 'skip') => void>())
   const ad = useRef(adapter); ad.current = adapter
   const approveRef = useRef(sessionApprove); approveRef.current = sessionApprove
+  const modelRef = useRef(settings?.selected ?? null); modelRef.current = settings?.selected ?? null   // the model picked in the chat box, sent with every request
   const modeRef = useRef(filesMode); modeRef.current = filesMode
   const readApproveRef = useRef(readApprove); readApproveRef.current = readApprove
   const toolsNow = () => [...ad.current.tools, ...(modeRef.current !== 'off' ? crossTools(docId) : [])]
@@ -114,7 +115,7 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
         let started = false
         const { content, toolCalls } = await streamChat([sys, ...msgs.current], a.canEdit() ? toolsNow().map((t) => t.spec) : toolsNow().filter((t) => !t.edit).map((t) => t.spec), ac.signal, (txt) => {
           if (!started) { started = true; add({ k: 'assistant', id: aid, text: txt }) } else patch(aid, (i) => ({ ...i, text: txt }) as Item)
-        })
+        }, modelRef.current)
         msgs.current.push({ role: 'assistant', content: content || null, ...(toolCalls.length && { tool_calls: toolCalls.map((c) => ({ id: c.id, type: 'function' as const, function: { name: c.name, arguments: c.arguments } })) }) })
         if (!toolCalls.length) { if (!content.trim() && !started) add({ k: 'notice', id: uid(), text: 'The model sent an empty reply.' }); break }
 
