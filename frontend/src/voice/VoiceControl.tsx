@@ -49,6 +49,8 @@ export function VoiceControl({ voice, editable }: { voice: Voice; editable: bool
               <p className="vc-hint">Hold <kbd>{shortcutLabel(voice.shortcut)}</kbd>, speak, then let go. What you said is typed at the cursor.</p>
               {unavailable && <p className="vc-warn"><AlertCircle size={16} />Voice typing isn't set up on this server. An admin needs to add a speech provider (see the README).</p>}
               <button className="btn btn-pill btn-primary btn-sm vc-main" disabled={unavailable} onClick={() => { close(); voice.toggle() }}>{on ? 'Stop and insert' : 'Start dictating'}</button>
+              {voice.serverDraft && (
+                <label className="vc-live"><input type="checkbox" checked={voice.live} onChange={(e) => voice.setLive(e.target.checked)} /><span><b>Show words while I speak</b><em>A quick preview in the pill. The final text is still the more accurate version.</em></span></label>)}
               <div className="vc-row">
                 <button className="vc-link" onClick={() => voice.setCapturing(true)}>Change shortcut</button>
                 {shortcutLabel(voice.shortcut) !== shortcutLabel(DEFAULT_SHORTCUT) && <button className="vc-link" onClick={() => voice.setShortcut(DEFAULT_SHORTCUT)}>Reset</button>}

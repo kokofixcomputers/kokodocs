@@ -8,6 +8,8 @@ export interface Shortcut { code: string; ctrl: boolean; alt: boolean; shift: bo
 export type Phase = 'idle' | 'listening' | 'transcribing'
 
 const KEY = 'koko.voiceShortcut'
+const LIVE_KEY = 'koko.voiceLive'
+export const loadLive = () => { try { return localStorage.getItem(LIVE_KEY) !== 'off' } catch { return true } }
 const MAX_SECONDS = 120
 const MIN_SECONDS = 0.4
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -53,7 +55,10 @@ export function useVoiceTyping({ editor, docId, enabled }: { editor: Editor | nu
   const [available, setAvailable] = useState<boolean | null>(null)
   const [capturing, setCapturing] = useState(false)
   const [draft, setDraft] = useState('')   // a rough live transcript while the key is held
-  const [canDraft, setCanDraft] = useState(false)
+  const [serverDraft, setServerDraft] = useState(false)   // the server can write previews (small local model, switched on by the admin)
+  const [live, setLiveState] = useState(loadLive)          // and this person wants to see them
+  const canDraft = serverDraft && live
+  const setLive = useCallback((v: boolean) => { setLiveState(v); try { localStorage.setItem(LIVE_KEY, v ? 'on' : 'off') } catch { /* ignore */ } }, [])
   const rec = useRef<Recorder | null>(null)
   const phaseRef = useRef<Phase>('idle')
   const viaKey = useRef(false)
@@ -81,7 +86,7 @@ export function useVoiceTyping({ editor, docId, enabled }: { editor: Editor | nu
     return () => { stopped = true; ac.abort(); window.clearInterval(id) }
   }, [phase, canDraft, docId])
 
-  useEffect(() => { api.sttStatus().then((s) => { setAvailable(s.available); setCanDraft(!!s.draft) }).catch(() => setAvailable(false)) }, [])
+  useEffect(() => { api.sttStatus().then((s) => { setAvailable(s.available); setServerDraft(!!s.draft) }).catch(() => setAvailable(false)) }, [])
 
   const target = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
   /** Type into a plain text field (like the assistant's message box) when that is where the user was focused. */
@@ -172,6 +177,6 @@ export function useVoiceTyping({ editor, docId, enabled }: { editor: Editor | nu
   const cancel = useCallback(() => void stop(false), [stop])
   const setShortcut = useCallback((s: Shortcut) => { setShortcutState(s); try { localStorage.setItem(KEY, JSON.stringify(s)) } catch { /* ignore */ } }, [])
 
-  return { phase, draft, canDraft, shortcut, setShortcut, available, toggle, cancel, capturing, setCapturing, recorder: rec, enabled }
+  return { phase, draft, canDraft, serverDraft, live, setLive, shortcut, setShortcut, available, toggle, cancel, capturing, setCapturing, recorder: rec, enabled }
 }
 export type Voice = ReturnType<typeof useVoiceTyping>

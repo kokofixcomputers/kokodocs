@@ -11,7 +11,7 @@ import { Avatar } from '../ui/Avatar'
 import { toast } from '../ui/Toast'
 import { AiSettingsBody } from '../assistant/AiSettings'
 import { Capture } from '../voice/VoiceControl'
-import { DEFAULT_SHORTCUT, loadShortcut, shortcutLabel, type Shortcut } from '../voice/useVoiceTyping'
+import { DEFAULT_SHORTCUT, loadLive, loadShortcut, shortcutLabel, type Shortcut } from '../voice/useVoiceTyping'
 import { closeSettings, subscribeSettings, type SettingsSection } from '../ui/settingsStore'
 import { DeleteForm, GoogleRow, NotifyRow, PasswordForm, StorageRow } from './SecurityDialog'
 
@@ -171,6 +171,10 @@ function Assistant() {
 function Voice() {
   const [sc, setSc] = useState<Shortcut>(loadShortcut)
   const [cap, setCap] = useState(false)
+  const [live, setLive] = useState(loadLive)
+  const [canLive, setCanLive] = useState(false)
+  useEffect(() => { api.sttStatus().then((s) => setCanLive(!!s.draft)).catch(() => {}) }, [])
+  const toggleLive = (v: boolean) => { setLive(v); try { localStorage.setItem('koko.voiceLive', v ? 'on' : 'off') } catch { /* ignore */ } toast(v ? 'Live words are on. They apply the next time you open a document' : 'Live words are off. They apply the next time you open a document') }
   const save = (s: Shortcut) => { setSc(s); try { localStorage.setItem('koko.voiceShortcut', JSON.stringify(s)) } catch { /* ignore */ } setCap(false); toast('Shortcut saved. It applies the next time you open a document') }
   return (
     <Section title="Voice typing">
@@ -180,6 +184,8 @@ function Voice() {
             <span className="st-btns">
               {shortcutLabel(sc) !== shortcutLabel(DEFAULT_SHORTCUT) && <button className="btn btn-pill btn-ghost btn-sm" onClick={() => save(DEFAULT_SHORTCUT)}>Reset</button>}
               <button className="btn btn-pill btn-soft btn-sm" onClick={() => setCap(true)}>Change</button></span></div>)}
+        {canLive && <div className="st-row"><div><b>Show words while I speak</b><span>A quick preview in the pill as you talk. What gets typed is still the more accurate final version.</span></div>
+          <span className="st-btns"><input type="checkbox" role="switch" aria-label="Show words while I speak" checked={live} onChange={(e) => toggleLive(e.target.checked)} style={{ width: 20, height: 20, accentColor: 'var(--accent)' }} /></span></div>}
       </Card>
       <p className="muted hint">On phones, use the microphone button that floats in the editor.</p>
     </Section>
