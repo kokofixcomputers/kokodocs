@@ -434,3 +434,15 @@ img.emoji { display: inline-block; height: 1.2em; width: 1.2em; vertical-align: 
   .canvas .sheet { max-width: 100%; }
   .canvas .tableWrapper, .wiki-body .tableWrapper { touch-action: pan-x pan-y; }
 }
+
+/* live voice preview: text on top, a thin waveform strip underneath */
+.voice-pill.live { flex-direction: column; align-items: stretch; gap: 6px; height: auto; width: min(560px, calc(100vw - 24px)); padding: 12px 18px 10px; border-radius: 26px; box-sizing: border-box; }
+.vp-draft { margin: 0; font-size: 16px; line-height: 1.4; max-height: 4.2em; overflow: hidden; overflow-wrap: anywhere; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.1em); mask-image: linear-gradient(to bottom, transparent 0, #000 1.1em); }
+.vp-draft.empty { opacity: .55; -webkit-mask-image: none; mask-image: none; }
+.voice-pill.live.transcribing .vp-draft { opacity: .6; }
+.voice-pill.live .vp-row { display: flex; align-items: center; gap: 10px; min-height: 26px; }
+.voice-pill.live .vp-row em { font-style: normal; font-size: 12px; opacity: .7; margin-left: auto; }
+.voice-pill.live .vp-rec.sm { width: 18px; height: 18px; } .voice-pill.live .vp-rec.sm i { width: 8px; height: 8px; }
+.voice-pill.live .vp-bars { height: 18px; gap: 2px; } .voice-pill.live .vp-bars span { width: 2px; height: 16px; }
+.voice-pill.live .vp-actions button { width: 30px; height: 30px; }
+@media (max-width: 460px) { .voice-pill.live .vp-bars { display: flex; } .voice-pill.live .vp-bars span:nth-child(odd) { display: none; } }

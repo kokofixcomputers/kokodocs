@@ -31,7 +31,28 @@ export function VoicePill({ voice }: { voice: Voice }) {
     return () => cancelAnimationFrame(raf)
   }, [listening, voice.recorder])
 
+  const draftRef = useRef<HTMLParagraphElement>(null)
+  useEffect(() => { const el = draftRef.current; if (el) el.scrollTop = el.scrollHeight }, [voice.draft])   // newest words stay in view
   if (voice.phase === 'idle') return null
+  if (voice.canDraft) {   // live preview: the words as they come in, with the waveform shrunk to a thin strip below
+    return createPortal(
+      <div className={`voice-pill live ${voice.phase}`} role="status" aria-live="off">
+        <p ref={draftRef} className={`vp-draft ${voice.draft ? '' : 'empty'}`}>{voice.draft || (listening ? 'Listening…' : 'Transcribing…')}</p>
+        <div className="vp-row">
+          {listening ? (
+            <>
+              <span className="vp-rec sm" aria-hidden><i /></span>
+              <span className="vp-bars" aria-hidden>{Array.from({ length: BARS }, (_, i) => <span key={i} ref={(el) => { bars.current[i] = el }} />)}</span>
+              <em className="vp-key">Release {shortcutLabel(voice.shortcut)} to insert</em><em className="vp-tap">Tap the tick to insert</em>
+              <span className="vp-actions">
+                <button type="button" aria-label="Cancel" onMouseDown={(e) => e.preventDefault()} onClick={voice.cancel}><X size={18} /></button>
+                <button type="button" className="ok" aria-label="Insert" onMouseDown={(e) => e.preventDefault()} onClick={voice.toggle}><Check size={18} /></button>
+              </span>
+            </>
+          ) : (<><Loader2 size={15} className="spin" /><em>Polishing the text…</em></>)}
+        </div>
+      </div>, document.body)
+  }
   return createPortal(
     <div className={`voice-pill ${voice.phase}`} role="status" aria-live="polite">
       {listening ? (

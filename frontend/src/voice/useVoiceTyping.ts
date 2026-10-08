@@ -52,14 +52,36 @@ export function useVoiceTyping({ editor, docId, enabled }: { editor: Editor | nu
   const [shortcut, setShortcutState] = useState<Shortcut>(loadShortcut)
   const [available, setAvailable] = useState<boolean | null>(null)
   const [capturing, setCapturing] = useState(false)
+  const [draft, setDraft] = useState('')   // a rough live transcript while the key is held
+  const [canDraft, setCanDraft] = useState(false)
   const rec = useRef<Recorder | null>(null)
   const phaseRef = useRef<Phase>('idle')
   const viaKey = useRef(false)
   const pending = useRef<number | undefined>(undefined)
   const timer = useRef<number | undefined>(undefined)
-  const setP = (p: Phase) => { phaseRef.current = p; setPhase(p) }
+  const setP = (p: Phase) => { phaseRef.current = p; setPhase(p); if (p === 'idle') setDraft('') }
 
-  useEffect(() => { api.sttStatus().then((s) => setAvailable(s.available)).catch(() => setAvailable(false)) }, [])
+  // Live preview: every moment or so, send the last few seconds to the small local model and show what it heard.
+  // It only ever displays; what gets inserted is the better transcript made when you finish. One request at a time, and a
+  // failure (model still downloading, server busy) just stops previews for this recording.
+  useEffect(() => {
+    if (phase !== 'listening' || !canDraft) return
+    let stopped = false, busy = false, lastLen = -1
+    const ac = new AbortController()
+    const tick = async () => {
+      const r = rec.current
+      if (stopped || busy || !r || r.seconds < 0.8) return
+      const wav = r.snapshot(); if (!wav || wav.size === lastLen) return
+      lastLen = wav.size; busy = true
+      try { const t = (await api.transcribeDraft(docId, wav, ac.signal)).trim(); if (!stopped) setDraft(t) }
+      catch { if (!ac.signal.aborted) stopped = true }
+      finally { busy = false }
+    }
+    const id = window.setInterval(() => void tick(), 900)
+    return () => { stopped = true; ac.abort(); window.clearInterval(id) }
+  }, [phase, canDraft, docId])
+
+  useEffect(() => { api.sttStatus().then((s) => { setAvailable(s.available); setCanDraft(!!s.draft) }).catch(() => setAvailable(false)) }, [])
 
   const target = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
   /** Type into a plain text field (like the assistant's message box) when that is where the user was focused. */
@@ -150,6 +172,6 @@ export function useVoiceTyping({ editor, docId, enabled }: { editor: Editor | nu
   const cancel = useCallback(() => void stop(false), [stop])
   const setShortcut = useCallback((s: Shortcut) => { setShortcutState(s); try { localStorage.setItem(KEY, JSON.stringify(s)) } catch { /* ignore */ } }, [])
 
-  return { phase, shortcut, setShortcut, available, toggle, cancel, capturing, setCapturing, recorder: rec, enabled }
+  return { phase, draft, canDraft, shortcut, setShortcut, available, toggle, cancel, capturing, setCapturing, recorder: rec, enabled }
 }
 export type Voice = ReturnType<typeof useVoiceTyping>

@@ -256,3 +256,9 @@ Not yet: version history, rich-text descriptions, grouping or colouring the boar
 ## Comments arrive over the websocket
 
 Comments are no longer polled. When one is added, resolved or deleted, the server sends a 2-byte frame (type 3) down the document's existing websocket to everyone connected (`notify_comments` in `backend/app/collab.py`, called from `backend/app/comments.py`). The browser answers by fetching the list once (`koko:comments` event from `frontend/src/collab.ts`, handled in `useComments`), and does the same when the socket reconnects, so anything said while you were away appears. Comments in documents, spreadsheets, presentations and boards all use this.
+
+## Live voice preview
+
+While you hold the dictation key, the pill shows the words as you say them, with the waveform shrunk to a thin strip underneath. The preview is written by a small model on your own server (faster-whisper `tiny.en`, or `tiny` when a language other than English is set), so it costs nothing and sends no audio to a third party. About once a second the browser sends the last 14 seconds to `POST /api/docs/{id}/transcribe/draft`, one request at a time. It is only shown: when you release the key, the whole recording goes to the provider the admin chose, and *that* text is what is inserted. Drafts can therefore differ a little from the final text.
+
+It needs `faster-whisper` on the server (`pip install -r requirements-local.txt`); without it the pill keeps its old look (waveform and label). Admins can switch it off under *Settings → Voice typing → Live preview while speaking*. The first preview downloads the tiny model (about 75 MB) if it isn't there yet. Previews have their own, larger rate limit than the final transcription. Tests: `backend/tests/test_stt_draft.py`.

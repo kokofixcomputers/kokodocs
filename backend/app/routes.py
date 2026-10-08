@@ -37,6 +37,7 @@ COLORS = ["#6366f1", "#ec4899", "#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#0e
 login_limiter = RateLimiter(10, 60)
 unlock_limiter = RateLimiter(8, 60)
 stt_limiter = RateLimiter(20, 60)
+draft_limiter = RateLimiter(240, 60)   # live previews are small and free, so they get a much bigger allowance
 
 
 def bearer(authorization: str | None) -> str | None:
@@ -502,6 +503,22 @@ async def proofread(body: ProofIn):
 @router.get("/stt/status")
 def stt_status(db=Depends(get_db)):
     return stt.status(db)
+
+
+@router.post("/docs/{doc_id}/transcribe/draft")
+async def transcribe_draft(doc_id: str, request: Request, file: UploadFile = File(...), language: str | None = None, c=Depends(ctx), db=Depends(get_db)):
+    """A rough live preview of a recording still in progress, from the small local model. The real text comes from /transcribe."""
+    _, acc = access.require(db, doc_id, *c, minimum="editor")
+    who = acc.user["id"] if acc.user else (request.client.host if request.client else "?")
+    if not draft_limiter.allow(f"draft:{who}"):
+        raise HTTPException(429, "Too many previews")
+    audio = await file.read(stt.MAX_BYTES + 1)
+    if len(audio) < 1000:
+        return {"text": ""}
+    try:
+        return {"text": await stt.draft(audio, language, db)}
+    except stt.STTError as e:
+        raise HTTPException(e.status, str(e))
 
 
 @router.post("/docs/{doc_id}/transcribe")

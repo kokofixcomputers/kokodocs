@@ -99,6 +99,39 @@ def config(db=None) -> Cfg | None:
     return Cfg(pick, model, url, key, language)
 
 
+def draft_model(db=None) -> str | None:
+    """The small model that writes the live preview while you talk (the real transcript still comes from the chosen provider),
+    or None when previews are switched off or faster-whisper isn't installed here. An English-only model unless another language is set."""
+    if db is not None and settings_get(db, "stt_draft") == "off":
+        return None
+    if not _local_available():
+        return None
+    c = config(db)
+    lang = (c.language if c else None) or ""
+    return "tiny.en" if not lang or lang.lower().startswith("en") else "tiny"
+
+
+_draft_slots = asyncio.Semaphore(2)
+
+
+async def draft(audio: bytes, language: str | None = None, db=None) -> str:
+    """A quick, rough transcript of the audio so far, from the small local model. Never spends API credits."""
+    name = draft_model(db)
+    if not name:
+        raise STTError("Live preview is off", 404)
+    if len(audio) > MAX_BYTES:
+        raise STTError("That recording is too long", 413)
+    c = config(db)
+    language = language or (c.language if c else None) or ("en" if name.endswith(".en") else None)
+    async with _draft_slots:
+        try:
+            return await asyncio.to_thread(_local_transcribe, audio, language, name)
+        except STTError:
+            raise
+        except Exception as e:
+            raise STTError(f"Live preview failed ({type(e).__name__})") from e
+
+
 def provider(db=None) -> str | None:
     c = config(db)
     return c.provider if c and c.ready else None
@@ -107,7 +140,7 @@ def provider(db=None) -> str | None:
 def status(db=None) -> dict:
     c = config(db)
     ok = bool(c and c.ready)
-    return {"available": ok, "provider": c.provider if ok else None}
+    return {"available": ok, "provider": c.provider if ok else None, "draft": ok and draft_model(db) is not None}
 
 
 async def _remote(url: str, key: str | None, model: str, audio: bytes, filename: str, content_type: str, language: str | None) -> str:

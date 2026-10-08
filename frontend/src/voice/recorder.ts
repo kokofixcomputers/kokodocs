@@ -42,6 +42,19 @@ export class Recorder {
     this.startedAt = performance.now()
   }
 
+  /** The last `seconds` of what has been said so far, as a 16 kHz WAV, while recording carries on (for the live preview). */
+  snapshot(seconds = 14): Blob | null {
+    if (!this.ctx || !this.chunks.length) return null
+    const rate = this.ctx.sampleRate, want = Math.floor(seconds * rate)
+    let n = 0, i = this.chunks.length
+    while (i > 0 && n < want) n += this.chunks[--i].length
+    const part = this.chunks.slice(i), total = part.reduce((s, c) => s + c.length, 0)
+    const all = new Float32Array(total)
+    let o = 0
+    for (const c of part) { all.set(c, o); o += c.length }
+    return encodeWav(downsample(all.length > want ? all.subarray(all.length - want) : all, rate, 16000), 16000)
+  }
+
   /** 0..1 loudness right now (for the waveform). */
   level(): number {
     if (!this.analyser) return 0

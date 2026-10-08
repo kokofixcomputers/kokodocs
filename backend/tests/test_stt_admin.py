@@ -36,7 +36,7 @@ ok('only admins can change it', put({'stt_provider': 'groq'}, U)[0] in (401, 403
 s, r = put({'stt_provider': 'groq', 'stt_key': {'groq': 'gsk_secret_value'}})
 ok('choosing Groq and saving a key works', s == 200 and r['stt']['provider'] == 'groq' and r['stt']['key_set']['groq'] is True, r.get('stt'))
 ok('the key is never sent back', 'gsk_secret_value' not in json.dumps(r) and 'gsk_secret_value' not in json.dumps(view()))
-ok('the live status says Groq is available', call('GET', '/api/stt/status', None, U)[1] == {'available': True, 'provider': 'groq'})
+ok('the live status says Groq is available', call('GET', '/api/stt/status', None, U)[1] .items() >= {'available': True, 'provider': 'groq'}.items())
 ok('whisper-large-v3-turbo is the default model', view()['active']['model'] == 'whisper-large-v3-turbo')
 ok('whisper-large-v3 can be chosen', put({'stt_model': {'groq': 'whisper-large-v3'}})[1]['stt']['active']['model'] == 'whisper-large-v3')
 ok('other model names are refused for Groq', put({'stt_model': {'groq': 'gpt-4'}})[0] == 422)

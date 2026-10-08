@@ -225,6 +225,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   const [model, setModel] = useState('')
   const [url, setUrl] = useState(v.url)
   const [lang, setLang] = useState(v.language)
+  const [draftOn, setDraftOn] = useState(v.draft)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   // each provider remembers its own model, so switching back and forth keeps what was chosen
@@ -234,7 +235,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   const save = async () => {
     setBusy(true); setMsg(null)
     try {
-      const body: Parameters<typeof api.adminSaveSettings>[0] = { stt_provider: prov, stt_language: lang.trim() }
+      const body: Parameters<typeof api.adminSaveSettings>[0] = { stt_provider: prov, stt_language: lang.trim(), stt_draft: draftOn }
       if (prov !== 'auto') {
         body.stt_model = { [prov]: effModel }
         if (key.trim() && prov !== 'local') body.stt_key = { [prov]: key.trim() }
@@ -249,7 +250,7 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
     catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
   }
   const clearKey = async () => { if (prov === 'auto' || prov === 'local') return; setBusy(true); try { apply(await api.adminSaveSettings({ stt_clear_key: prov })); toast('Key removed') } catch (e) { toast((e as Error).message) } finally { setBusy(false) } }
-  const changed = prov !== v.provider || !!key.trim() || lang.trim() !== v.language || (prov !== 'auto' && effModel !== savedModel(prov)) || (prov === 'openai-compatible' && url.trim() !== v.url)
+  const changed = draftOn !== v.draft || prov !== v.provider || !!key.trim() || lang.trim() !== v.language || (prov !== 'auto' && effModel !== savedModel(prov)) || (prov === 'openai-compatible' && url.trim() !== v.url)
   const hasKey = prov !== 'auto' && prov !== 'local' && v.key_set[prov]
   const envKey = (prov === 'groq' || prov === 'mistral' || prov === 'openai') && v.env_key[prov]
   const active = v.active
@@ -275,6 +276,10 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
       {prov === 'local' && <p className="muted hint" style={{ margin: 0 }}>{v.local_installed ? 'faster-whisper is installed. Audio never leaves this server.' : 'faster-whisper is not installed on this server: run pip install -r requirements-local.txt and restart.'}</p>}
       {prov === 'local' && v.local_installed && <LocalModels reload={() => { void api.adminSettings().then(apply) }} onUse={(m) => setModel(m)} />}
       <label className="ai-field" style={{ maxWidth: 260 }}><span>Language (optional, like en; empty detects it)</span><span className="field"><input value={lang} onChange={(e) => setLang(e.target.value)} maxLength={12} spellCheck={false} placeholder="auto" /></span></label>
+      <label className="ai-field" style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+        <input type="checkbox" checked={draftOn} disabled={!v.local_installed} onChange={(e) => setDraftOn(e.target.checked)} style={{ marginTop: 4 }} />
+        <span><b>Live preview while speaking</b><br /><span className="muted hint">{v.local_installed ? `Shows the words as people talk, written by a small model on this server (${v.draft_model ?? 'tiny'}, free and private). What gets inserted is still the better transcript from the provider above.` : 'Needs faster-whisper on this server (pip install -r requirements-local.txt), then restart. Until then the pill only shows a waveform.'}</span></span>
+      </label>
       {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'}>{msg.text}</p>}
       <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
         <button className="btn btn-pill btn-primary" disabled={busy || !changed} onClick={save}>Save</button>

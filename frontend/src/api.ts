@@ -6,7 +6,7 @@ export interface AdminFile { id: string; title: string; kind: DocKind; created_a
 export type SttProvider = 'groq' | 'mistral' | 'openai' | 'openai-compatible' | 'local'
 export interface SttModel { repo: string; name: string; builtin: boolean; size: number; state: 'ready' | 'downloading' | 'incomplete' | 'error'; total?: number; error?: string | null }
 export interface SttModels { dir: string; max_mb: number; installed: boolean; models: SttModel[]; freed?: number }
-export interface SttAdmin { provider: 'auto' | SttProvider; models: Record<SttProvider, string>; url: string; language: string; key_set: Record<SttProvider, boolean>; env_key: { groq: boolean; mistral: boolean; openai: boolean }; groq_models: string[]; local_models: string[]; local_installed: boolean; active: { available: boolean; provider: string | null; model: string | null } }
+export interface SttAdmin { provider: 'auto' | SttProvider; models: Record<SttProvider, string>; url: string; language: string; draft: boolean; draft_model: string | null; key_set: Record<SttProvider, boolean>; env_key: { groq: boolean; mistral: boolean; openai: boolean }; groq_models: string[]; local_models: string[]; local_installed: boolean; active: { available: boolean; provider: string | null; model: string | null } }
 export interface AdminSettings { stt: SttAdmin; signup_enabled: boolean; google_client_id: string; google_secret_set: boolean; public_url: string; default_quota_mb: number; smtp_host: string; smtp_port: number; smtp_security: 'starttls' | 'ssl' | 'none'; smtp_user: string; smtp_password_set: boolean; smtp_from: string; email_active: boolean; redirect_uri: string }
 export type LoginResult = { token: string; user: User } | { mfa_required: true; mfa_token: string }
 export interface Storage { used: number; limit: number; documents: number; versions: number; images: number; files?: number }
@@ -200,7 +200,7 @@ export const api = {
   adminSttDeleteModel: (repo: string) => request<SttModels>(`/api/admin/stt/models?repo=${encodeURIComponent(repo)}`, { method: 'DELETE' }),
   adminSttTest: () => request<{ ok: boolean; provider: string; model: string; ms: number; note?: string }>('/api/admin/stt/test', { method: 'POST', body: '{}' }),
   adminSettings: () => request<AdminSettings>('/api/admin/settings'),
-  adminSaveSettings: (b: Partial<{ stt_provider: string; stt_model: Record<string, string>; stt_key: Record<string, string>; stt_clear_key: string; stt_url: string; stt_language: string; smtp_host: string; smtp_port: number; smtp_security: string; smtp_user: string; smtp_password: string; smtp_from: string; default_quota_mb: number; signup_enabled: boolean; google_client_id: string; google_client_secret: string; public_url: string }>) => request<AdminSettings>('/api/admin/settings', { method: 'PUT', ...json(b) }),
+  adminSaveSettings: (b: Partial<{ stt_provider: string; stt_model: Record<string, string>; stt_key: Record<string, string>; stt_clear_key: string; stt_url: string; stt_language: string; stt_draft: boolean; smtp_host: string; smtp_port: number; smtp_security: string; smtp_user: string; smtp_password: string; smtp_from: string; default_quota_mb: number; signup_enabled: boolean; google_client_id: string; google_client_secret: string; public_url: string }>) => request<AdminSettings>('/api/admin/settings', { method: 'PUT', ...json(b) }),
   adminFiles: (p: { owner?: string; q?: string }) => request<AdminFile[]>(`/api/admin/files?${new URLSearchParams(Object.entries(p).filter(([, v]) => v) as [string, string][])}`),
   adminDeleteFile: (id: string) => request(`/api/admin/files/${id}`, { method: 'DELETE' }),
   deleteAccount: (b: { email: string; password?: string; code?: string }) => request('/api/auth/delete', { method: 'POST', ...json(b) }),
@@ -209,11 +209,17 @@ export const api = {
   adminStats: () => request<AdminStats>('/api/admin/stats'),
   adminPatch: (id: string, b: { quota_mb?: number; clear_quota?: boolean; reset_2fa?: boolean; is_admin?: boolean; disabled?: boolean; name?: string; password?: string }) => request<AdminUser>(`/api/admin/users/${id}`, { method: 'PATCH', ...json(b) }),
   adminDelete: (id: string) => request(`/api/admin/users/${id}`, { method: 'DELETE' }),
-  sttStatus: () => request<{ available: boolean; provider: string | null }>('/api/stt/status'),
+  sttStatus: () => request<{ available: boolean; provider: string | null; draft?: boolean }>('/api/stt/status'),
   transcribe: async (id: string, wav: Blob) => {
     const fd = new FormData()
     fd.append('file', wav, 'speech.wav')
     return (await request<{ text: string }>(`/api/docs/${id}/transcribe`, { method: 'POST', body: fd }, id)).text
+  },
+  /** A rough preview of a recording still in progress (small local model); the final text still comes from `transcribe`. */
+  transcribeDraft: async (id: string, wav: Blob, signal?: AbortSignal) => {
+    const fd = new FormData()
+    fd.append('file', wav, 'speech.wav')
+    return (await request<{ text: string }>(`/api/docs/${id}/transcribe/draft`, { method: 'POST', body: fd, signal }, id)).text
   },
   proofread: (blocks: { id: number; text: string }[], language?: string) =>
     request<{ issues: ProofIssue[] }>('/api/proofread', { method: 'POST', ...json({ blocks, ...(language ? { language } : {}) }) }),
