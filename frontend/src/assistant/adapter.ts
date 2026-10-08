@@ -7,6 +7,10 @@ export interface Tool {
   spec: ToolSpec
   /** Edits need the user's approval (unless they allowed edits for the session). Reads run immediately. */
   edit?: boolean
+  /** Reads another file of the person's: runs only if they allow it, and in "ask" mode only after they say yes (see `prepare`). */
+  access?: boolean
+  /** What the permission card shows for an `access` tool. */
+  prepare?: (args: any) => Promise<ProposalItem>
   describe?: (args: any) => ProposalItem
   /** Short label for the activity feed while a read tool runs. */
   label?: (args: any) => string

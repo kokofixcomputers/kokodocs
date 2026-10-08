@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api, type AiConversationInfo, type AiSettings, type User } from '../api'
+import { api, type AiConversationInfo, type AiFilesMode, type AiSettings, type User } from '../api'
+import { crossTools } from './crossTools'
 import { type Adapter, type ProposalItem } from './adapter'
 import { type ChatMessage, streamChat } from './llm'
 
@@ -8,16 +9,18 @@ export type Item =
   | { k: 'user'; id: string; text: string }
   | { k: 'assistant'; id: string; text: string }
   | { k: 'activity'; id: string; text: string; status: 'run' | 'done' | 'error' }
-  | { k: 'proposal'; id: string; calls: PCall[]; status: 'pending' | 'approved' | 'skipped' }
+  | { k: 'proposal'; id: string; calls: PCall[]; status: 'pending' | 'approved' | 'skipped'; kind?: 'edit' | 'read' }
   | { k: 'notice'; id: string; text: string }
 
 const SESSION_KEY = 'koko-ai-approve-edits'
+const READ_KEY = 'koko-ai-approve-reads'
 const MAX_STEPS = 14
 let seq = 0
 const uid = () => `${Date.now().toString(36)}${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`
 const readSession = () => { try { return sessionStorage.getItem(SESSION_KEY) === '1' } catch { return false } }
+const readReadSession = () => { try { return sessionStorage.getItem(READ_KEY) === '1' } catch { return false } }
 
-function systemPrompt(a: Adapter, user: User) {
+function systemPrompt(a: Adapter, user: User, filesMode: AiFilesMode) {
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   return `You are Koko, a capable colleague who works alongside ${user.name} inside KokoDocs. They have opened a ${a.noun} called “${a.title()}” and you can see all of it through your tools.
 Today is ${today}.
@@ -30,7 +33,7 @@ How to work:
 - If something is ambiguous and a wrong guess would be costly, ask one short question. Otherwise pick a sensible default and mention it.
 - If an edit fails or the user skips it, adapt: re-read, try another approach, or ask.
 - Reply in Markdown (short paragraphs, bullets, bold, tables or code only when they help).
-${a.canEdit() ? '' : '- This user can only view the file, so you cannot edit it. Offer suggestions as text instead.\n'}
+${a.canEdit() ? '' : '- This user can only view the file, so you cannot edit it. Offer suggestions as text instead.\n'}${filesMode === 'off' ? '' : `- ${user.name} has let you look at their OTHER files (search_other_files, read_other_file). Use that when the question needs something from elsewhere, such as a number, a decision or a plan written in another file, or when they point at one. It is read only: never try to change another file. Look only as much as the task needs, say which files you used (by name), and if a lookup is declined, carry on without it.\n`}
 ${a.guide}`
 }
 
@@ -38,6 +41,8 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
   const [items, setItems] = useState<Item[]>([])
   const [busy, setBusy] = useState(false)
   const [sessionApprove, setSessionApprove] = useState(readSession)
+  const [filesMode, setFilesModeState] = useState<AiFilesMode>('off')
+  const [readApprove, setReadApprove] = useState(readReadSession)
   const [convId, setConvId] = useState(uid)
   const [title, setTitle] = useState('')
   const [history, setHistory] = useState<AiConversationInfo[]>([])
@@ -46,6 +51,11 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
   const waiting = useRef(new Map<string, (d: 'approve' | 'skip') => void>())
   const ad = useRef(adapter); ad.current = adapter
   const approveRef = useRef(sessionApprove); approveRef.current = sessionApprove
+  const modeRef = useRef(filesMode); modeRef.current = filesMode
+  const readApproveRef = useRef(readApprove); readApproveRef.current = readApprove
+  const toolsNow = () => [...ad.current.tools, ...(modeRef.current !== 'off' ? crossTools(docId) : [])]
+  useEffect(() => { api.aiFilesMode().then((r) => setFilesModeState(r.mode)).catch(() => {}) }, [])
+  const setFilesMode = useCallback(async (m: AiFilesMode) => { const prev = modeRef.current; setFilesModeState(m); try { await api.setAiFilesMode(m) } catch (e) { setFilesModeState(prev); throw e } }, [])
   const itemsRef = useRef(items); itemsRef.current = items
   const idRef = useRef(convId); idRef.current = convId
   const titleRef = useRef(title); titleRef.current = title
@@ -71,14 +81,19 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
   useEffect(() => () => { stop(); void save() }, [stop, save])
 
   const decide = useCallback((id: string, d: 'approve' | 'session' | 'skip') => {
-    if (d === 'session') { try { sessionStorage.setItem(SESSION_KEY, '1') } catch { /* private mode */ } setSessionApprove(true); approveRef.current = true }
+    if (d === 'session') {
+      const isRead = itemsRef.current.some((i) => i.k === 'proposal' && i.id === id && i.kind === 'read')
+      if (isRead) { try { sessionStorage.setItem(READ_KEY, '1') } catch { /* private mode */ } setReadApprove(true); readApproveRef.current = true }
+      else { try { sessionStorage.setItem(SESSION_KEY, '1') } catch { /* private mode */ } setSessionApprove(true); approveRef.current = true }
+    }
     const r = waiting.current.get(id); waiting.current.delete(id)
     r?.(d === 'skip' ? 'skip' : 'approve')
   }, [])
   const revokeSession = useCallback(() => { try { sessionStorage.removeItem(SESSION_KEY) } catch { /* ignore */ } setSessionApprove(false) }, [])
+  const revokeReads = useCallback(() => { try { sessionStorage.removeItem(READ_KEY) } catch { /* ignore */ } setReadApprove(false); readApproveRef.current = false }, [])
 
   const exec = async (name: string, rawArgs: string): Promise<{ ok: boolean; text: string; args: any }> => {
-    const t = ad.current.tools.find((x) => x.spec.function.name === name)
+    const t = toolsNow().find((x) => x.spec.function.name === name)
     if (!t) return { ok: false, text: `Unknown tool “${name}”.`, args: {} }
     let args: any = {}
     try { args = rawArgs.trim() ? JSON.parse(rawArgs) : {} } catch { return { ok: false, text: 'The arguments were not valid JSON. Try again.', args: {} } }
@@ -94,10 +109,10 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
     msgs.current.push({ role: 'user', content: userText })
     try {
       for (let step = 0; step < MAX_STEPS; step++) {
-        const sys: ChatMessage = { role: 'system', content: systemPrompt(a, user) + `\n\nCurrent state: ${a.context()}` }
+        const sys: ChatMessage = { role: 'system', content: systemPrompt(a, user, modeRef.current) + `\n\nCurrent state: ${a.context()}` }
         const aid = uid()
         let started = false
-        const { content, toolCalls } = await streamChat([sys, ...msgs.current], a.canEdit() ? a.tools.map((t) => t.spec) : a.tools.filter((t) => !t.edit).map((t) => t.spec), ac.signal, (txt) => {
+        const { content, toolCalls } = await streamChat([sys, ...msgs.current], a.canEdit() ? toolsNow().map((t) => t.spec) : toolsNow().filter((t) => !t.edit).map((t) => t.spec), ac.signal, (txt) => {
           if (!started) { started = true; add({ k: 'assistant', id: aid, text: txt }) } else patch(aid, (i) => ({ ...i, text: txt }) as Item)
         })
         msgs.current.push({ role: 'assistant', content: content || null, ...(toolCalls.length && { tool_calls: toolCalls.map((c) => ({ id: c.id, type: 'function' as const, function: { name: c.name, arguments: c.arguments } })) }) })
@@ -106,14 +121,14 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
         let i = 0
         while (i < toolCalls.length) {
           const tc = toolCalls[i]
-          const t = a.tools.find((x) => x.spec.function.name === tc.name)
+          const t = toolsNow().find((x) => x.spec.function.name === tc.name)
           if (t?.edit && a.canEdit()) {
             // gather the consecutive run of edits into one approval
             const group = [] as typeof toolCalls
-            while (i < toolCalls.length && a.tools.find((x) => x.spec.function.name === toolCalls[i].name)?.edit) group.push(toolCalls[i++])
+            while (i < toolCalls.length && toolsNow().find((x) => x.spec.function.name === toolCalls[i].name)?.edit) group.push(toolCalls[i++])
             const pcalls: PCall[] = group.map((c) => {
               let args: any = {}; try { args = c.arguments.trim() ? JSON.parse(c.arguments) : {} } catch { /* reported on run */ }
-              const tool = a.tools.find((x) => x.spec.function.name === c.name)!
+              const tool = toolsNow().find((x) => x.spec.function.name === c.name)!
               let item: ProposalItem; try { item = tool.describe?.(args) ?? { title: c.name } } catch { item = { title: c.name } }
               return { id: c.id, name: c.name, args, item }
             })
@@ -138,6 +153,18 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
             i++
             const aidAct = uid()
             let args: any = {}; try { args = tc.arguments.trim() ? JSON.parse(tc.arguments) : {} } catch { /* reported by exec */ }
+            if (t?.access && modeRef.current === 'ask' && !readApproveRef.current) {   // the person asked to be asked first
+              let card: ProposalItem; try { card = (await t.prepare?.(args)) ?? { title: tc.name } } catch (e) { card = { title: tc.name, detail: (e as Error).message } }
+              const pid = uid()
+              add({ k: 'proposal', id: pid, kind: 'read', status: 'pending', calls: [{ id: tc.id, name: tc.name, args, item: card }] })
+              const decision: 'approve' | 'skip' = await new Promise((res) => { waiting.current.set(pid, res); ac.signal.addEventListener('abort', () => res('skip'), { once: true }) })
+              patch(pid, (x) => ({ ...x, status: decision === 'skip' ? 'skipped' : 'approved' }) as Item)
+              if (decision === 'skip' || ac.signal.aborted) {
+                msgs.current.push({ role: 'tool', tool_call_id: tc.id, content: 'The user declined to let you look at their other files for this. Do not ask again for the same thing; carry on without it.' })
+                if (ac.signal.aborted) throw new DOMException('aborted', 'AbortError')
+                continue
+              }
+            }
             const label = t?.edit ? 'Tried to edit' : t?.label?.(args) ?? tc.name.replace(/_/g, ' ')
             add({ k: 'activity', id: aidAct, text: label, status: 'run' })
             const r = t?.edit ? { ok: false, text: 'This user has view-only access; you cannot edit.' } : await exec(tc.name, tc.arguments)
@@ -178,5 +205,5 @@ export function useAssistant(adapter: Adapter, docId: string, user: User, settin
     refreshHistory()
   }, [docId, refreshHistory, reset])
 
-  return { items, busy, send, stop, decide, sessionApprove, revokeSession, history, convId, title, newConversation, openConversation, removeConversation, configured: !!settings?.configured }
+  return { items, busy, send, stop, decide, sessionApprove, revokeSession, filesMode, setFilesMode, readApprove, revokeReads, history, convId, title, newConversation, openConversation, removeConversation, configured: !!settings?.configured }
 }

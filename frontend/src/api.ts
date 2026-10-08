@@ -14,6 +14,9 @@ export interface Storage { used: number; limit: number; documents: number; versi
 export interface StorageItem { id: string; title: string; kind: DocKind; trashed: boolean; text: number; versions: number; images: number; files: number; total: number }
 export interface StorageItems { items: StorageItem[]; unattached_images: number }
 export interface AdminStats { users: number; documents: number; spreadsheets: number; trashed: number; comments: number; versions: number; upload_bytes: number }
+/** May the assistant read this person's other files: not at all, only after asking each time, or freely. */
+export type AiFilesMode = 'off' | 'ask' | 'allow'
+export interface AiFileEntry { id: string; title: string; kind: DocKind; owner: string; updated_at: number; snippet?: string }
 export type DocKind = 'doc' | 'sheet' | 'slides' | 'form' | 'wiki' | 'board'
 export type Role = 'owner' | 'manager' | 'editor' | 'viewer'
 export type LinkAccess = 'restricted' | 'anyone' | 'password'
@@ -156,6 +159,11 @@ export const api = {
     return (await request<{ url: string }>(`/api/docs/${id}/images`, { method: 'POST', body: fd }, id)).url
   },
   aiSettings: () => request<AiSettings>('/api/ai/settings'),
+  aiFilesMode: () => request<{ mode: AiFilesMode }>('/api/me/ai-files'),
+  setAiFilesMode: (mode: AiFilesMode) => request<{ mode: AiFilesMode }>('/api/me/ai-files', { method: 'PUT', ...json({ mode }) }),
+  aiFiles: (q: string, exclude: string) => request<AiFileEntry[]>(`/api/ai/files?q=${encodeURIComponent(q)}&exclude=${encodeURIComponent(exclude)}`),
+  aiFile: (id: string) => request<AiFileEntry & { text: string; truncated: boolean; empty: boolean }>(`/api/ai/files/${id}`),
+  aiFileInfo: (id: string) => request<AiFileEntry>(`/api/ai/files/${id}/info`),
   saveAiSettings: (b: { base_url: string; model: string; api_key?: string }) => request<AiSettings>('/api/ai/settings', { method: 'PUT', ...json(b) }),
   deleteAiSettings: () => request<AiSettings>('/api/ai/settings', { method: 'DELETE' }),
   aiModels: () => request<{ models: string[] }>('/api/ai/models'),

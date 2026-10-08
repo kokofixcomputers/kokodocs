@@ -533,3 +533,10 @@ a.brand { color: var(--ink); text-decoration: none; }
 }
 .ad-card .switch-row { border: 0; padding: 0; }
 .ad-brand > :first-child { flex: none; border-radius: 9px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .22); }
+
+/* the assistant looking at the person's other files */
+.ai-files-row { padding: 0 12px 8px; display: flex; } .ai-files-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12.5px; cursor: pointer; } .ai-files-btn b { color: var(--ink); font-weight: 600; } .ai-files-btn.on { border-color: color-mix(in srgb, #22c55e 55%, var(--line)); } .ai-files-btn:hover { border-color: var(--faint); }
+.ai-files-menu { width: min(320px, calc(100vw - 32px)); padding: 6px; display: flex; flex-direction: column; gap: 2px; } .ai-files-menu > p { margin: 4px 8px 8px; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.ai-files-menu button { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; padding: 9px 10px; border-radius: var(--r); cursor: pointer; } .ai-files-menu button:hover { background: var(--hover); } .ai-files-menu button.on { background: var(--accent-soft); }
+.ai-files-menu button span { display: flex; flex-direction: column; gap: 1px; } .ai-files-menu em { font-style: normal; font-size: 12px; color: var(--muted); }
+.ai-card.read { border-left: 3px solid #0ea5e9; }

@@ -226,6 +226,8 @@ def migrate(db: sqlite3.Connection) -> None:
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_sub) WHERE google_sub IS NOT NULL")
     if "notify_email" not in ucols:
         db.execute("ALTER TABLE users ADD COLUMN notify_email INTEGER NOT NULL DEFAULT 1")
+    if "ai_files" not in ucols:   # may the assistant read this person's other files: off | ask | allow
+        db.execute("ALTER TABLE users ADD COLUMN ai_files TEXT NOT NULL DEFAULT 'off'")
     ccols = {r["name"] for r in db.execute("PRAGMA table_info(comments)")}
     if "anchor" not in ccols:
         db.execute("ALTER TABLE comments ADD COLUMN anchor TEXT")
