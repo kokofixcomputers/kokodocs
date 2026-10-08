@@ -3,9 +3,9 @@ import type { Editor } from '@tiptap/react'
 import { Bird, Clock, Flag, Hand, Lightbulb, Pizza, Plane, Search, Shapes, Smile, Trophy } from 'lucide-react'
 import { Popover } from '../ui/Popover'
 import { TBtn } from './Toolbar'
-import { emojiUrl, hasArt, loadEmojiPack, prefetchEmojiPack } from '../emoji'
+import { emojiUrl, loadEmojiPack, prefetchEmojiPack } from '../emoji'
+import { type Emo, loadEmojiIndex } from './emojiData'
 
-interface Emo { group?: number; hexcode: string; label: string; tags?: string[]; unicode: string; skins?: { unicode: string; hexcode: string }[] }
 const GROUPS: { id: number; name: string; icon: typeof Smile }[] = [
   { id: 0, name: 'Smileys', icon: Smile }, { id: 1, name: 'People', icon: Hand }, { id: 3, name: 'Animals & nature', icon: Bird }, { id: 4, name: 'Food & drink', icon: Pizza },
   { id: 5, name: 'Travel', icon: Plane }, { id: 6, name: 'Activities', icon: Trophy }, { id: 7, name: 'Objects', icon: Lightbulb }, { id: 8, name: 'Symbols', icon: Shapes }, { id: 9, name: 'Flags', icon: Flag },
@@ -13,8 +13,7 @@ const GROUPS: { id: number; name: string; icon: typeof Smile }[] = [
 const TONES = ['#f5c542', '#f7d7b5', '#e0b48a', '#c18e63', '#8d5a3b', '#4a2f21']
 const RECENT_KEY = 'koko.emoji.recent'
 
-let cache: Emo[] | null = null
-const load = async () => cache ?? (cache = ((await import('emojibase-data/en/compact.json')).default as unknown as Emo[]).filter((e) => e.group !== undefined && e.group !== 2 && hasArt(e.unicode)))
+const load = async () => (await loadEmojiIndex()).list
 const readRecent = (): string[] => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') } catch { return [] } }
 
 function Panel({ editor, close }: { editor: Editor; close: () => void }) {

@@ -23,6 +23,7 @@ import { ScrollAnchor } from '../editor/ScrollAnchor'
 import { ImageUpload } from '../editor/ResizableImage'
 import { PasteChecklists } from '../editor/PasteChecklists'
 import { SlashCommand, SlashMenu } from '../editor/SlashMenu'
+import { EmojiSuggest, EmojiSuggestMenu } from '../editor/EmojiSuggest'
 import { CalloutMenu, ImageMenu, ShapeMenu, TableMenu } from '../editor/BubbleMenus'
 import { LinkHover } from '../editor/LinkHover'
 import { DocContextMenu } from '../editor/TextContextMenu'
@@ -357,6 +358,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         <VoiceFab voice={voice} editable={!readOnly && !preview} />
         {ed && !preview && <ProofMenu editor={ed} state={proof} />}
         <SlashMenu />
+        <EmojiSuggestMenu />
         {notion && <NotionImport ydoc={ydoc} tree={tree} upload={(f) => api.uploadImage(info.id, f)} onClose={() => setNotion(false)} onOpen={go} />}
         {share && <ShareDialog info={info} onClose={() => setShare(false)} />}
         {varsOpen && <VariablesDialog shared={sharedVars} mine={myVars} canEdit={!readOnly} id={info.id}
@@ -399,6 +401,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
       },
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
+    EmojiSuggest,
     ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])

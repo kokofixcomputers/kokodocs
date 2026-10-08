@@ -452,3 +452,5 @@ img.emoji { display: inline-block; height: 1.2em; width: 1.2em; vertical-align: 
 .vc-live { justify-content: space-between; align-items: center; } .vc-live .toggle { flex: none; }
 
 img.emoji.emoji-failed { width: auto; height: auto; font-size: 1em; color: inherit; vertical-align: baseline; user-select: text; }
+
+.emoji-suggest .sm-ico img.emoji { width: 22px; height: 22px; margin: 0; } .emoji-suggest .sm-text b { font-weight: 600; } .emoji-suggest { width: 288px; }

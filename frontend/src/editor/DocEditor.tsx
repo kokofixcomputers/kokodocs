@@ -19,6 +19,7 @@ import { Logo } from '../ui/Logo'
 import { Popover } from '../ui/Popover'
 import { toast } from '../ui/Toast'
 import { SlashCommand, SlashMenu } from './SlashMenu'
+import { EmojiSuggest, EmojiSuggestMenu } from './EmojiSuggest'
 import { FindBar } from './FindBar'
 import { FindReplace } from './FindReplace'
 import { CalloutMenu, CommentMenu, ImageMenu, ShapeMenu, TableMenu } from './BubbleMenus'
@@ -164,6 +165,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       AiFlash,
       FindReplace,
       SlashCommand,
+      EmojiSuggest,
       CommentMark,
     ], [provider, identity, ydoc, upload])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
@@ -409,6 +411,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       <VoiceFab voice={voice} editable={!readOnly && !preview} />
       {editor && !preview && <LinkHover editor={editor} />}
       <SlashMenu />
+      <EmojiSuggestMenu />
       <TableMenu editor={editor} />
       <CalloutMenu editor={editor} />
       {user && <CommentMenu editor={editor} onComment={startComment} />}
