@@ -367,3 +367,7 @@ When voice typing is set up on the server, the assistant's message box has a mic
 ## Checking text fields in a board
 
 A text field can set the fewest and most characters it accepts, and a format it must follow: email address, phone number, digits only, letters only, letters and numbers, or your own pattern (a regular expression the whole text must match). You can add a message to show when the text doesn't fit. The card dialog, the table and the "to fix" warnings on cards all use the same rules, and Koko follows them when it fills in cards (`add_field` and `edit_field` take `min`, `max`, `format`, `pattern` and `message`). A pattern that isn't a valid regular expression is ignored, so it can't lock everyone out. Empty values are only a problem when the field is required.
+
+## No browser dropdowns
+
+Every dropdown is the app's own now: the text format in board fields, the method badge in wikis (title bar and request blocks), the folder-sharing access level, and the model name boxes in the assistant and admin settings (type anything, or pick a suggestion from the styled list). There are no native `<select>` or `<datalist>` menus left.

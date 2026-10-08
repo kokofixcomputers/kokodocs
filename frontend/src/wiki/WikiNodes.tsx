@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Select } from '../ui/Select'
 import { Node, type Editor, type Range } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react'
 import { Plugin } from '@tiptap/pm/state'
@@ -100,9 +101,7 @@ function ApiView({ node, updateAttributes, editor, selected }: NodeViewProps) {
   return (
     <NodeViewWrapper className={`wk-api ${selected ? 'selected' : ''}`} data-method={spec.method.toLowerCase()} contentEditable={false}>
       <div className="wk-api-bar">
-        <select className="wk-badge wk-method-select" data-tone={badgeTone(spec.method)} value={spec.method} aria-label="Method" onChange={(e) => upd({ method: e.target.value as Method })}>
-          {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
+        <Select className="wk-badge wk-method-select" tone={badgeTone(spec.method)} label="Method" value={spec.method} options={METHODS.map((m) => ({ value: m, label: m }))} onChange={(m) => upd({ method: m })} />
         <input className="wk-url" value={spec.url} spellCheck={false} placeholder="{{baseUrl}}/path" aria-label="Address" onChange={(e) => upd({ url: e.target.value })}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void send(false) } }} />
         <button className="btn btn-pill btn-primary btn-sm wk-send" disabled={busy} onClick={() => send(false)}>{busy ? <Loader2 size={15} className="spin" /> : <Send size={15} />}Send</button>

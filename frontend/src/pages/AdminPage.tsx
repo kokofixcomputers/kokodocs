@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ComboInput } from '../ui/ComboInput'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Pencil, Plus, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, Sparkles, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
 import { api, ApiError, type AiAdmin, type AiAdminModel, type SsoAdmin, type SsoProvider, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
@@ -394,7 +395,7 @@ function GlobalModelCard({ m, count, onChange, onDelete }: { m: AiAdminModel; co
           <label className="ai-field"><span>Name in the model list</span><span className="field"><input value={label} maxLength={60} onChange={(e) => setLabel(e.target.value)} /></span></label>
           <label className="ai-field"><span>Base URL</span><span className="field"><input value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} /></span></label>
           <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={m.key_set ? 'Saved. Leave blank to keep it' : 'sk-…'} /></span></label>
-          <label className="ai-field"><span>Model</span><span className="field"><input list={`gm-${m.id}`} value={model} onChange={(e) => setModel(e.target.value)} spellCheck={false} /></span><datalist id={`gm-${m.id}`}>{models.map((x) => <option key={x} value={x} />)}</datalist></label>
+          <label className="ai-field"><span>Model</span><span className="field"><ComboInput label="Model" options={models} value={model} onChange={setModel} /></span></label>
           <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
             <span>{m.key_set && <button className="btn btn-pill btn-ghost btn-sm" disabled={busy} onClick={() => void run(async () => { onChange(await api.adminAiEdit(m.id, { clear_key: true })); toast('Key removed') })}>Remove key</button>}</span>
             <span style={{ display: 'flex', gap: 8 }}><button className="btn btn-pill btn-ghost" onClick={() => setEdit(false)}>Cancel</button><button className="btn btn-pill btn-primary" disabled={busy || !url.trim() || !model.trim()} onClick={() => void save()}>Save</button></span>

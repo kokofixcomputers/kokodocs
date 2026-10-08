@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ComboInput } from '../ui/ComboInput'
 import { Check, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { api, type AiModelEntry, type AiSettings as S } from '../api'
 import { Modal } from '../ui/Modal'
@@ -55,8 +56,7 @@ function ModelForm({ initial, onSaved, onCancel }: { initial?: AiModelEntry; onS
       <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="off" placeholder={hint ? `Saved (${hint}). Leave blank to keep it` : 'sk-…'} value={key} onChange={(e) => setKey(e.target.value)} /></span></label>
       <label className="ai-field"><span>Model</span>
         <span className="ai-model">
-          <span className="field"><input list="ai-models" placeholder="mistral-large-latest" value={model} onChange={(e) => setModel(e.target.value)} spellCheck={false} /></span>
-          <datalist id="ai-models">{models.map((m) => <option key={m} value={m} />)}</datalist>
+          <span className="field"><ComboInput label="Model" options={models} placeholder="mistral-large-latest" value={model} onChange={setModel} /></span>
           <button type="button" className="btn btn-pill btn-ghost" onClick={test} disabled={testing || !url.trim() || !model.trim()}>{testing ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}Test</button>
         </span></label>
       {ok && <p className="ai-ok"><Check size={15} />{ok}</p>}

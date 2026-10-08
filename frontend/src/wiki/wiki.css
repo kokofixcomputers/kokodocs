@@ -9,8 +9,8 @@
 :root[data-theme='dark'] .wk-badge[data-tone='get'] { --bc: #2dd4bf; } :root[data-theme='dark'] .wk-badge[data-tone='post'] { --bc: #7aa7ff; } :root[data-theme='dark'] .wk-badge[data-tone='put'] { --bc: #fbbf24; } :root[data-theme='dark'] .wk-badge[data-tone='patch'] { --bc: #a78bfa; } :root[data-theme='dark'] .wk-badge[data-tone='delete'] { --bc: #f87171; }
 :root[data-theme='dark'] .wk-badge[data-tone='ok'] { --bc: #4ade80; } :root[data-theme='dark'] .wk-badge[data-tone='warn'] { --bc: #fbbf24; } :root[data-theme='dark'] .wk-badge[data-tone='danger'] { --bc: #f87171; } :root[data-theme='dark'] .wk-badge[data-tone='info'] { --bc: #7aa7ff; }
 .koko-prose .wk-badge { margin: 0 1px; cursor: default; } .koko-prose .wk-badge.ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 1px; }
-select.wk-method-select { appearance: none; border: 0; cursor: pointer; padding: 5px 10px; font-size: 12px; } select.wk-method-select:focus-visible { outline: 2px solid var(--accent); }
-select.wk-method-select[data-tone='none'] { --bc: var(--faint); }
+select.wk-method-select, .select-btn.wk-method-select { appearance: none; border: 0; cursor: pointer; padding: 5px 10px; font-size: 12px; height: auto; gap: 4px; } .select-btn.wk-method-select svg { color: inherit; } .wk-method-select:focus-visible { outline: 2px solid var(--accent); }
+.wk-method-select[data-tone='none'] { --bc: var(--faint); }
 
 /* contents */
 .wk-nav { flex: none; width: 0; opacity: 0; overflow: hidden; transition: width .35s var(--ease), opacity .25s, margin .35s var(--ease); }

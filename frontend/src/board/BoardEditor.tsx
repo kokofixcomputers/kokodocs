@@ -9,6 +9,7 @@ import { ShareDialog } from '../editor/ShareDialog'
 import { useTheme } from '../theme'
 import { Avatar } from '../ui/Avatar'
 import { askConfirm } from '../ui/Dialogs'
+import { Select } from '../ui/Select'
 import { useContextMenu, type CtxItem } from '../ui/ContextMenu'
 import { DatePicker } from '../ui/DatePicker'
 import { Logo } from '../ui/Logo'
@@ -414,9 +415,7 @@ function FieldSettings({ model, f, onRemove }: { model: BoardModel; f: F; onRemo
         <div className="bd-range"><label>Fewest characters<input type="number" min={0} value={f.min ?? ''} onChange={(e) => model.updateField(f.id, { min: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) })} /></label>
           <label>Most characters<input type="number" min={0} value={f.max ?? ''} onChange={(e) => model.updateField(f.id, { max: e.target.value === '' ? undefined : Math.max(0, Number(e.target.value)) })} /></label></div>
         <label className="bd-stack">Must look like
-          <select value={f.format ?? ''} onChange={(e) => model.updateField(f.id, { format: (e.target.value || undefined) as TextFormat | undefined })}>
-            <option value="">Anything</option>{FORMATS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-          </select></label>
+          <Select label="Format" value={(f.format ?? '') as TextFormat | ''} options={[{ value: '', label: 'Anything' }, ...FORMATS.map((x) => ({ value: x.id, label: x.label }))]} onChange={(v) => model.updateField(f.id, { format: (v || undefined) as TextFormat | undefined })} /></label>
         {f.format === 'custom' && <label className="bd-stack">Pattern (regular expression)
           <input value={f.pattern ?? ''} placeholder="^[A-Z]{3}-\d{4}$" spellCheck={false} aria-invalid={!!f.pattern && !customRegex(f.pattern)} onChange={(e) => model.updateField(f.id, { pattern: e.target.value || undefined })} />
           {f.pattern && !customRegex(f.pattern) && <span className="bd-bad">Not a valid pattern, so it is ignored.</span>}</label>}

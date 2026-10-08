@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, Copy, Eye, Folder as FolderIcon, Globe, Lock, Mail, Pencil, UserPlus, X } from 'lucide-react'
+import { Check, Copy, Eye, Folder as FolderIcon, Globe, Lock, Mail, Pencil, UserPlus, X } from 'lucide-react'
 import { api, type Folder } from '../api'
 import { Avatar } from '../ui/Avatar'
 import { Modal } from '../ui/Modal'
+import { Select } from '../ui/Select'
 import { toast } from '../ui/Toast'
 
 type R = 'viewer' | 'editor'
 const RoleSelect = ({ value, onChange }: { value: R; onChange: (r: R) => void }) => (
-  <span className="role-select">
-    <select value={value} onChange={(e) => onChange(e.target.value as R)}>
-      <option value="viewer">Can view</option><option value="editor">Can edit</option>
-    </select><ChevronDown size={14} />
-  </span>
+  <Select label="Access" value={value} options={[{ value: 'viewer', label: 'Can view' }, { value: 'editor', label: 'Can edit' }]} onChange={onChange} />
 )
 
 /** Share a whole folder: everything inside it, now and later, including subfolders. */

@@ -4,11 +4,11 @@ import { Popover } from './Popover'
 export interface Option<T extends string> { value: T; label: string; color?: string }
 
 /** Styled dropdown (replaces the browser's native <select>). The menu never steals focus from the editor. */
-export function Select<T extends string>({ value, options, onChange, label, className = '' }: { value: T; options: Option<T>[]; onChange: (v: T) => void; label: string; className?: string }) {
+export function Select<T extends string>({ value, options, onChange, label, className = '', tone }: { value: T; options: Option<T>[]; onChange: (v: T) => void; label: string; className?: string; tone?: string }) {
   const cur = options.find((o) => o.value === value) ?? options[0]
   return (
     <Popover className="select-pop" trigger={({ toggle, open }) => (
-      <button type="button" className={`select-btn ${open ? 'open' : ''} ${className}`} aria-label={label} aria-haspopup="listbox" aria-expanded={open}
+      <button type="button" className={`select-btn ${open ? 'open' : ''} ${className}`} data-tone={tone} aria-label={label} aria-haspopup="listbox" aria-expanded={open}
         onMouseDown={(e) => e.preventDefault()} onClick={toggle}>
         {cur?.color && <i className="dot" style={{ background: cur.color }} />}<span>{cur?.label}</span><ChevronDown size={14} />
       </button>)}>

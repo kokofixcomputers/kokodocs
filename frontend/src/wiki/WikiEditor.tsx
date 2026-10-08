@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Select } from '../ui/Select'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
@@ -448,9 +449,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
           <input ref={titleRef} className="wiki-title" value={entry.title} readOnly={readOnly} placeholder="Untitled page" aria-label="Page title" maxLength={120} onChange={(e) => onPatch({ title: e.target.value })}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); editor.commands.focus('start') } }} />
           {!readOnly ? (
-            <select className="wk-badge wk-method-select wiki-method" data-tone={entry.method ? entry.method.toLowerCase() : 'none'} value={entry.method ?? ''} aria-label="Method badge shown in the contents" onChange={(e) => onPatch({ method: e.target.value || undefined })}>
-              <option value="">No badge</option>{METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>) : entry.method ? <MethodBadge method={entry.method} /> : null}
+            <Select className="wk-badge wk-method-select wiki-method" tone={entry.method ? entry.method.toLowerCase() : 'none'} label="Method badge shown in the contents" value={entry.method ?? ''} options={[{ value: '', label: 'No badge' }, ...METHODS.map((m) => ({ value: m, label: m }))]} onChange={(m) => onPatch({ method: m || undefined })} />) : entry.method ? <MethodBadge method={entry.method} /> : null}
         </div>
         <EditorContent editor={editor} />
         <footer className="wiki-pn">{sibling(prev)}{sibling(next)}</footer>
