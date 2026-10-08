@@ -1,11 +1,13 @@
 """Spelling & grammar. Local rule engine by default; LanguageTool if KOKO_LANGUAGETOOL_URL is set
 (e.g. a self-hosted server, so document text never leaves your infrastructure unless you choose)."""
 import asyncio
+import gzip
 import json
 import os
 import re
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from spellchecker import SpellChecker
 
@@ -13,6 +15,32 @@ from . import dialects
 
 LT_URL = os.environ.get("KOKO_LANGUAGETOOL_URL")
 _spell = SpellChecker()
+WORDS = Path(__file__).parent / "words"
+
+
+def _words(name: str) -> list[str]:
+    try:
+        opener = gzip.open if name.endswith(".gz") else open
+        with opener(WORDS / name, "rt", encoding="utf-8") as f:
+            return f.read().split()
+    except OSError:
+        return []
+
+
+# The built-in dictionary is small (everyday speech), so it also learns a full English word list (SCOWL, the one behind LibreOffice and
+# Firefox) and the vocabulary of software (cspell-dicts), plus a few words of our own and, if the admin has one, KOKO_EXTRA_WORDS (a text
+# file, one word per line). They come from tools/build_words.py and are shipped with the app, so no internet is needed. Words that are only
+# British are kept apart: they are accepted when proofreading in a British-family English, not in American.
+_BASE = set(_spell.word_frequency.dictionary)
+_spell.word_frequency.load_words(_words("en_us.txt.gz") + _words("tech.txt.gz") + _words("extra.txt"))
+if os.environ.get("KOKO_EXTRA_WORDS"):
+    try:
+        _spell.word_frequency.load_words(Path(os.environ["KOKO_EXTRA_WORDS"]).read_text(encoding="utf-8").lower().split())
+    except OSError:
+        pass
+GB_WORDS = frozenset(_words("en_gb.txt.gz"))
+for _w in GB_WORDS - _BASE:   # whatever list a British spelling sneaked in from, American English must not accept it
+    _spell.word_frequency.dictionary.pop(_w, None)
 WORD = re.compile(r"[A-Za-z][A-Za-z'’]*")
 OBJ = "￼"
 
@@ -189,7 +217,7 @@ def local_check(block_id: int, text: str, lang: str = "en-US") -> list[dict]:
         if dia == "gb" and lw0 in _spell and (alt := dialects.american_only(lw0)):
             out.append(_issue(block_id, m.start(), m.end(), "spelling", f"American spelling. In British English it is “{alt}”.", [_case_like(w, alt)]))
             continue
-        if dia != "us" and lw0 in _spell.unknown([lw0]) and dialects.british_ok(lw0, lambda x: x in _spell):
+        if dia != "us" and lw0 in _spell.unknown([lw0]) and (lw0 in GB_WORDS or dialects.british_ok(lw0, lambda x: x in _spell)):
             continue   # a valid British spelling, such as colour or organise
         if w.lower() in _spell.unknown([w.lower()]):
             cands = _spell.candidates(w.lower()) or set()

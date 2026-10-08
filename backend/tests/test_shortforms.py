@@ -17,6 +17,6 @@ ok("everyday abbreviations", spell("Bring pens, paper, etc. and approx. 20 copie
 ok("titles and company endings", spell("Dr. Lee and Prof. Chen of Acme Corp. Ltd. Mrs. Ito, Jr. and Sr.") == [])
 ok("it works in the other English variants too", spell("A 5 km run, 3 ft up.", "en-GB") == [] and spell("A 5 km run, 3 ft up.", "en-CA") == [])
 ok("real misspellings are still caught", spell("This is wrongg and kmm too.") == ["wrongg", "kmm"], spell("This is wrongg and kmm too."))
-ok("a word glued to a number that is not a short form is still caught", spell("It has 5kmx and 9wrongg.") == ["kmx", "wrongg"], spell("It has 5kmx and 9wrongg."))
+ok("a word glued to a number that is not a short form is still caught", spell("It has 5kmq and 9wrongg.") == ["kmq", "wrongg"], spell("It has 5kmx and 9wrongg."))
 print(f"{n - bad} passed, {bad} failed")
 sys.exit(1 if bad else 0)
