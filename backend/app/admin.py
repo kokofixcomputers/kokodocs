@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from . import access
-from . import quota, stt, sttmodels
+from . import ai, quota, stt, sttmodels
 from .db import UPLOAD_DIR, get_db, settings_get, settings_set
 from .authx import redirect_uri
 from .emailauth import email_enabled, send_email, smtp_config
@@ -110,7 +110,18 @@ def settings_view(db, request: Request):
             "google_secret_set": bool(settings_get(db, "google_client_secret")), "public_url": settings_get(db, "public_url"), "default_quota_mb": quota.default_mb(db),
             "smtp_host": settings_get(db, "smtp_host"), "smtp_port": int(settings_get(db, "smtp_port", "587") or 587), "smtp_security": settings_get(db, "smtp_security", "starttls"),
             "smtp_user": settings_get(db, "smtp_user"), "smtp_password_set": bool(settings_get(db, "smtp_password")), "smtp_from": settings_get(db, "smtp_from"),
-            "email_active": email_enabled(db), "redirect_uri": redirect_uri(request, db), "stt": stt_view(db)}
+            "email_active": email_enabled(db), "redirect_uri": redirect_uri(request, db), "stt": stt_view(db), "ai": ai_view(db)}
+
+
+def ai_view(db) -> dict:
+    """The system-wide assistant connection as the admin sees it (never the key): what is set in the dashboard, what the environment provides, and what is in force."""
+    g = lambda k: settings_get(db, k)
+    env = ai.server_default()
+    using = ai.system_provider(db)
+    return {"url": g("ai_sys_url"), "model": g("ai_sys_model"), "key_set": bool(g("ai_sys_key")), "enabled": g("ai_sys_enabled") != "off",
+            "env": {"configured": bool(env), "url": env["base_url"] if env else "", "model": env["model"] if env else ""},
+            "active": {"available": bool(using), "from": using["from"] if using else None, "model": using["model"] if using else None},
+            "people_own": db.execute("SELECT COUNT(*) AS n FROM ai_settings").fetchone()["n"]}
 
 
 def stt_view(db) -> dict:
@@ -136,6 +147,11 @@ class SettingsIn(BaseModel):
     smtp_user: str | None = Field(None, max_length=200)
     smtp_password: str | None = Field(None, max_length=500)
     smtp_from: str | None = Field(None, max_length=200)
+    ai_url: str | None = Field(None, max_length=300)         # the system-wide assistant connection
+    ai_model: str | None = Field(None, max_length=200)
+    ai_key: str | None = Field(None, max_length=500)
+    ai_clear_key: bool | None = None
+    ai_enabled: bool | None = None
     stt_provider: str | None = Field(None, pattern="^(auto|groq|mistral|openai|openai-compatible|local)$")
     stt_model: dict[str, str] | None = None            # provider -> model
     stt_key: dict[str, str] | None = None              # provider -> new API key (never sent back)
@@ -153,7 +169,7 @@ def get_settings(request: Request, admin=Depends(must_admin), db=Depends(get_db)
 
 
 @router.put("/settings")
-def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin), db=Depends(get_db)):
+async def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin), db=Depends(get_db)):
     if b.signup_enabled is not None:
         settings_set(db, "signup_enabled", "1" if b.signup_enabled else "0")
     if b.google_client_id is not None:
@@ -177,6 +193,17 @@ def put_settings(b: SettingsIn, request: Request, admin=Depends(must_admin), db=
         settings_set(db, "smtp_ok", "0")   # must pass a test email again before accounts depend on it
     if b.default_quota_mb is not None:
         settings_set(db, "default_quota_mb", str(b.default_quota_mb))
+    if b.ai_url is not None:
+        u = b.ai_url.strip()
+        settings_set(db, "ai_sys_url", (await ai.check_url(u)) if u else "")
+    if b.ai_model is not None:
+        settings_set(db, "ai_sys_model", b.ai_model.strip())
+    if b.ai_key is not None and b.ai_key.strip():
+        settings_set(db, "ai_sys_key", encrypt_secret(b.ai_key.strip()))
+    if b.ai_clear_key:
+        settings_set(db, "ai_sys_key", "")
+    if b.ai_enabled is not None:
+        settings_set(db, "ai_sys_enabled", "on" if b.ai_enabled else "off")
     if b.stt_provider is not None:
         settings_set(db, "stt_provider", "" if b.stt_provider == "auto" else b.stt_provider)
     for prov, model in (b.stt_model or {}).items():
@@ -331,3 +358,14 @@ def stt_delete_model(repo: str, admin=Depends(must_admin), db=Depends(get_db)):
     if settings_get(db, "stt_model_local") in (r, short):
         settings_set(db, "stt_model_local", ""); db.commit()   # fall back to the default rather than point at nothing
     return {**_models_view(db), "freed": freed}
+
+
+@router.post("/ai/test")
+async def ai_test(admin=Depends(must_admin), db=Depends(get_db)):
+    """Check the system-wide connection by asking the provider for its models."""
+    sysp = ai.system_provider(db)
+    if not sysp:
+        raise HTTPException(409, "No system-wide connection is set up")
+    t0 = time.time()
+    models = await ai.fetch_models(sysp)
+    return {"ok": True, "models": models, "ms": int((time.time() - t0) * 1000), "model_ok": (not sysp.get("model")) or sysp["model"] in models or not models}

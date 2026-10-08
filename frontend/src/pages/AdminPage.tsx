@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, Sparkles, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
 import { api, ApiError, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
@@ -342,6 +342,66 @@ function AccessSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   )
 }
 
+const AI_PRESETS = [
+  { name: 'Mistral', url: 'https://api.mistral.ai/v1', model: 'mistral-large-latest' },
+  { name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o' },
+  { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4' },
+  { name: 'Groq', url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
+  { name: 'Ollama', url: 'http://localhost:11434/v1', model: 'llama3.1' },
+]
+
+/** The system-wide assistant connection: everyone uses it by default; people can still choose their own in their settings. */
+function AssistantSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
+  const ai = s.ai
+  const [url, setUrl] = useState(ai.url)
+  const [model, setModel] = useState(ai.model)
+  const [key, setKey] = useState('')
+  const [models, setModels] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const changed = url.trim() !== ai.url || model.trim() !== ai.model || !!key.trim()
+  const save = async (b: Parameters<typeof api.adminSaveSettings>[0], done = 'Saved') => {
+    setBusy(true); setMsg(null)
+    try { const x = await api.adminSaveSettings(b); apply(x); setKey(''); setUrl(x.ai.url); setModel(x.ai.model); toast(done) } catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
+  }
+  const test = async () => {
+    setBusy(true); setMsg(null)
+    try {
+      const r = await api.adminAiTest(); setModels(r.models)
+      setMsg({ ok: r.model_ok, text: r.model_ok ? `Works: ${r.models.length ? `${r.models.length} models available, ` : ''}answered in ${r.ms} ms.` : `Connected, but the provider doesn't list “${ai.model}”. Pick one from the list.` })
+    } catch (e) { setMsg({ ok: false, text: (e as Error).message }) } finally { setBusy(false) }
+  }
+  const state = !ai.enabled ? 'Not offered' : ai.active.available ? (ai.active.from === 'admin' ? 'Set here' : 'From the server environment') : 'Not set up'
+  return (
+    <div className="ad-stack">
+      <div className="ad-card">
+        <div className="switch-row">
+          <div><b>Offer Koko to everyone</b><span>{ai.active.available ? <>Everyone uses this connection by default, with nothing to set up. <b>{ai.people_own}</b> {ai.people_own === 1 ? 'person has' : 'people have'} saved their own, and anyone can choose theirs in their settings.</> : 'When this is on and a connection is set below, everyone uses it by default. With it off, or no connection, people bring their own provider and key.'}</span></div>
+          <button role="switch" aria-checked={ai.enabled} aria-label="Offer Koko to everyone" className={`toggle ${ai.enabled ? 'on' : ''}`} onClick={() => void save({ ai_enabled: !ai.enabled }, ai.enabled ? 'Koko is no longer offered system-wide' : 'Koko is offered to everyone')} />
+        </div>
+        <p className="ad-state"><i className={ai.active.available ? 'on' : ''} />{state}{ai.active.available && ai.active.model ? <> · model <code>{ai.active.model}</code></> : null}</p>
+      </div>
+      <div className="ad-card ad-form">
+        <h3 style={{ margin: 0 }}>System connection</h3>
+        <p className="muted hint" style={{ margin: 0 }}>Any OpenAI-compatible service. The key is encrypted on the server and never sent to a browser, not even yours.{ai.env.configured && !ai.url ? <> Right now the server's environment provides one (<code>{ai.env.url}</code>); saving here replaces it.</> : null}</p>
+        <div className="ai-presets">{AI_PRESETS.map((p) => <button key={p.name} className={`chip ${url === p.url ? 'on' : ''}`} onClick={() => { setUrl(p.url); setModel(p.model) }}>{p.name}</button>)}</div>
+        <label className="ai-field"><span>Base URL</span><span className="field"><input placeholder="https://api.mistral.ai/v1" value={url} onChange={(e) => setUrl(e.target.value)} spellCheck={false} /></span></label>
+        <label className="ai-field"><span>API key</span><span className="field"><input type="password" autoComplete="new-password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={ai.key_set ? 'Saved. Leave blank to keep it' : 'sk-…'} /></span></label>
+        <label className="ai-field"><span>Model</span>
+          <span className="field"><input list="ai-sys-models" placeholder="mistral-large-latest" value={model} onChange={(e) => setModel(e.target.value)} spellCheck={false} /></span>
+          <datalist id="ai-sys-models">{models.map((m) => <option key={m} value={m} />)}</datalist></label>
+        {msg && <p className={msg.ok ? 'ai-ok' : 'form-error'}>{msg.text}</p>}
+        <div className="modal-actions" style={{ justifyContent: 'flex-start' }}>
+          <button className="btn btn-pill btn-primary" disabled={busy || !changed || !url.trim() || !model.trim()} onClick={() => void save({ ai_url: url.trim(), ai_model: model.trim(), ...(key.trim() ? { ai_key: key.trim() } : {}) }, 'System connection saved')}>Save</button>
+          <button className="btn btn-pill btn-soft" disabled={busy || changed || !ai.active.available} onClick={() => void test()}>{busy ? <span className="spinner sm" style={{ borderTopColor: 'var(--ink)' }} /> : 'Test'}</button>
+          {ai.key_set && <button className="btn btn-pill btn-ghost" disabled={busy} onClick={() => void save({ ai_clear_key: true }, 'Key removed')}>Remove key</button>}
+          {ai.url && <button className="btn btn-pill btn-ghost" disabled={busy} onClick={() => void save({ ai_url: '', ai_model: '', ai_clear_key: true }, 'System connection cleared')}>Clear</button>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function GoogleSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
   const [cid, setCid] = useState(s.google_client_id)
   const [secret, setSecret] = useState('')
@@ -377,6 +437,7 @@ function Overview({ s, go }: { s: AdminSettings | null; go: (id: AdminSection) =
     { id: 'access', label: 'Default storage', value: s.default_quota_mb ? `${s.default_quota_mb} MB per user` : 'Unlimited', ok: true },
     { id: 'email', label: 'Email', value: s.email_active ? 'Active' : 'Off', ok: s.email_active },
     { id: 'google', label: 'Google sign-in', value: s.google_client_id ? 'Configured' : 'Not set up', ok: !!s.google_client_id },
+    { id: 'assistant', label: 'Koko assistant', value: s.ai.active.available ? `${s.ai.active.from === 'admin' ? 'System connection' : 'From environment'}${s.ai.active.model ? `, ${s.ai.active.model}` : ''}` : 'Everyone brings their own', ok: s.ai.active.available },
     { id: 'voice', label: 'Voice typing', value: stt?.active.available ? `${stt.active.provider}, ${stt.active.model}` : 'Off', ok: !!stt?.active.available },
     { id: 'voice', label: 'Live preview', value: stt?.draft && stt.draft_model ? `On (${stt.draft_model})` : 'Off', ok: !!(stt?.draft && stt.draft_model) },
   ] : []
@@ -397,7 +458,7 @@ function Overview({ s, go }: { s: AdminSettings | null; go: (id: AdminSection) =
   )
 }
 
-type AdminSection = 'overview' | 'users' | 'files' | 'access' | 'email' | 'google' | 'voice'
+type AdminSection = 'overview' | 'users' | 'files' | 'access' | 'email' | 'google' | 'voice' | 'assistant'
 const SECTIONS: { id: AdminSection; label: string; icon: React.ReactNode; group: string; blurb: string }[] = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard size={17} />, group: 'Manage', blurb: 'How much is on this server, and how it is set up.' },
   { id: 'users', label: 'Users', icon: <Users size={17} />, group: 'Manage', blurb: 'Accounts, storage limits, admins and two-factor resets.' },
@@ -405,6 +466,7 @@ const SECTIONS: { id: AdminSection; label: string; icon: React.ReactNode; group:
   { id: 'access', label: 'Access & storage', icon: <SlidersHorizontal size={17} />, group: 'Configure', blurb: 'Who can sign up, and how much room each person gets.' },
   { id: 'email', label: 'Email', icon: <Mail size={17} />, group: 'Configure', blurb: 'Confirmation codes, password resets and mention emails.' },
   { id: 'google', label: 'Google sign-in', icon: <KeyRound size={17} />, group: 'Configure', blurb: 'Let people sign in with their Google account.' },
+  { id: 'assistant', label: 'Assistant (Koko)', icon: <Sparkles size={17} />, group: 'Configure', blurb: 'The AI connection everyone uses by default. People can still bring their own.' },
   { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'Configure', blurb: 'The speech provider, live preview, and models kept on this server.' },
 ]
 const fromHash = (): AdminSection => { const h = location.hash.slice(1) as AdminSection; return SECTIONS.some((x) => x.id === h) ? h : 'overview' }
@@ -444,6 +506,8 @@ export function AdminPage() {
           {sec === 'access' && settingsBody((x) => <AccessSection s={x} apply={setS} />)}
           {sec === 'email' && settingsBody((x) => <div className="ad-card ad-form"><EmailSettings s={x} apply={setS} /></div>)}
           {sec === 'google' && settingsBody((x) => <GoogleSection s={x} apply={setS} />)}
+          {sec === 'assistant' && settingsBody((x) => <AssistantSection s={x} apply={setS} />)}
+          {sec === 'assistant' && settingsBody((x) => <AssistantSection s={x} apply={setS} />)}
           {sec === 'voice' && settingsBody((x) => <div className="ad-card ad-form"><VoiceSettings s={x} apply={setS} /></div>)}
         </div>
       </main>

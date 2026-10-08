@@ -13,6 +13,7 @@ import os
 import socket
 import time
 import uuid
+from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -21,7 +22,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import access
-from .db import get_db
+from .db import get_db, settings_get
 from .routes import ctx, must_user
 from .security import RateLimiter, decrypt_secret, encrypt_secret
 
@@ -36,10 +37,23 @@ def allow_private() -> bool:
 
 
 def server_default() -> dict | None:
+    """The connection the server's environment provides (KOKO_AI_URL...), used when the admin hasn't set one in the dashboard."""
     url, key = os.environ.get("KOKO_AI_URL"), os.environ.get("KOKO_AI_KEY")
     if url:
         return {"base_url": url, "api_key": key, "model": os.environ.get("KOKO_AI_MODEL", "")}
     return None
+
+
+def system_provider(db) -> dict | None:
+    """The system-wide connection everyone uses by default: the one the admin set in the dashboard, else the environment's.
+    The admin can switch it off ("Offer to everyone" off), and then people bring their own."""
+    g = lambda k: settings_get(db, k)
+    if g("ai_sys_enabled") == "off":
+        return None
+    if g("ai_sys_url"):
+        return {"base_url": g("ai_sys_url"), "model": g("ai_sys_model"), "api_key": decrypt_secret(g("ai_sys_key")) if g("ai_sys_key") else None, "from": "admin"}
+    d = server_default()
+    return {**d, "from": "environment"} if d else None
 
 
 async def check_url(url: str) -> str:
@@ -64,24 +78,32 @@ async def check_url(url: str) -> str:
 
 
 def user_settings(db, user) -> dict | None:
+    """What this person's assistant talks to. If a system-wide connection exists they use it, unless they have saved their own and chosen
+    it; with no system connection they need their own."""
     row = db.execute("SELECT * FROM ai_settings WHERE user_id = ?", (user["id"],)).fetchone()
-    if row:
+    sysp = system_provider(db)
+    if row and (row["use_own"] or not sysp):
         return {"base_url": row["base_url"], "model": row["model"], "api_key": decrypt_secret(row["key_enc"]), "source": "user"}
-    d = server_default()
-    return {**d, "source": "server"} if d else None
+    return {**sysp, "source": "server"} if sysp else None
 
 
 def public_view(db, user) -> dict:
     row = db.execute("SELECT * FROM ai_settings WHERE user_id = ?", (user["id"],)).fetchone()
-    d = server_default()
+    sysp = system_provider(db)
     key = decrypt_secret(row["key_enc"]) if row else None
+    using = user_settings(db, user)
+    host = (urlparse(sysp["base_url"]).hostname or "") if sysp else ""
     return {
-        "configured": bool(row or d),
-        "source": "user" if row else ("server" if d else None),
-        "base_url": row["base_url"] if row else (d["base_url"] if d else ""),
-        "model": row["model"] if row else (d["model"] if d else ""),
+        "configured": bool(using),
+        "source": using["source"] if using else None,
+        # the person's own saved connection (what the form edits), whether or not it is the one in use
+        "base_url": row["base_url"] if row else "",
+        "model": row["model"] if row else "",
         "key_hint": ("…" + key[-4:]) if key else None,
-        "server_default": bool(d),
+        "own_saved": bool(row),
+        "use_own": bool(using and using["source"] == "user"),
+        "server_default": bool(sysp),
+        "system": {"available": bool(sysp), "model": sysp["model"] if sysp else "", "host": host},
     }
 
 
@@ -104,10 +126,28 @@ async def put_settings(body: SettingsIn, user=Depends(must_user), db=Depends(get
     if body.api_key is not None:
         key_enc = encrypt_secret(body.api_key.strip()) if body.api_key.strip() else None
     db.execute(
-        """INSERT INTO ai_settings (user_id, base_url, model, key_enc, updated_at) VALUES (?,?,?,?,?)
-           ON CONFLICT(user_id) DO UPDATE SET base_url = excluded.base_url, model = excluded.model, key_enc = excluded.key_enc, updated_at = excluded.updated_at""",
+        """INSERT INTO ai_settings (user_id, base_url, model, key_enc, updated_at, use_own) VALUES (?,?,?,?,?,1)
+           ON CONFLICT(user_id) DO UPDATE SET base_url = excluded.base_url, model = excluded.model, key_enc = excluded.key_enc, updated_at = excluded.updated_at, use_own = 1""",
         (user["id"], url, body.model.strip(), key_enc, time.time()),
     )
+    return public_view(db, user)
+
+
+class SourceIn(BaseModel):
+    use: Literal["system", "own"]
+
+
+@router.put("/ai/source")
+def choose_source(body: SourceIn, user=Depends(must_user), db=Depends(get_db)):
+    """Pick between the system-wide connection and your own saved one, without losing either."""
+    if body.use == "own":
+        if not db.execute("SELECT 1 FROM ai_settings WHERE user_id = ?", (user["id"],)).fetchone():
+            raise HTTPException(409, "Save your own connection first")
+        db.execute("UPDATE ai_settings SET use_own = 1 WHERE user_id = ?", (user["id"],))
+    else:
+        if not system_provider(db):
+            raise HTTPException(409, "There is no system-wide connection to use")
+        db.execute("UPDATE ai_settings SET use_own = 0 WHERE user_id = ?", (user["id"],))
     return public_view(db, user)
 
 
@@ -137,11 +177,8 @@ def provider_error(r: httpx.Response, body: bytes = b"") -> str:
     return f"{names.get(r.status_code, f'The provider returned an error ({r.status_code})')}" + (f": {msg[:300]}" if msg else "")
 
 
-@router.get("/ai/models")
-async def list_models(user=Depends(must_user), db=Depends(get_db)):
-    s = user_settings(db, user)
-    if not s:
-        raise HTTPException(409, "Connect an AI provider first")
+async def fetch_models(s: dict) -> list[str]:
+    """Ask a provider which models it offers (also how the connection is tested)."""
     url = await check_url(s["base_url"]) + "/models"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT), follow_redirects=False) as c:
@@ -152,10 +189,17 @@ async def list_models(user=Depends(must_user), db=Depends(get_db)):
         raise HTTPException(502, provider_error(r))
     try:
         data = r.json().get("data") or r.json().get("models") or []
-        ids = sorted({(m.get("id") if isinstance(m, dict) else str(m)) for m in data if m})
+        return sorted({(m.get("id") if isinstance(m, dict) else str(m)) for m in data if m})
     except Exception:
         raise HTTPException(502, "The provider's model list wasn't in the expected format")
-    return {"models": ids}
+
+
+@router.get("/ai/models")
+async def list_models(user=Depends(must_user), db=Depends(get_db)):
+    s = user_settings(db, user)
+    if not s:
+        raise HTTPException(409, "Connect an AI provider first")
+    return {"models": await fetch_models(s)}
 
 
 class ChatIn(BaseModel):

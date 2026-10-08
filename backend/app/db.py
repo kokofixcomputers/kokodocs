@@ -224,6 +224,10 @@ def migrate(db: sqlite3.Connection) -> None:
         if col not in ucols:
             db.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google ON users(google_sub) WHERE google_sub IS NOT NULL")
+    acols = {r["name"] for r in db.execute("PRAGMA table_info(ai_settings)")}
+    if "use_own" not in acols:   # does this person use their own connection (1) or the system-wide one (0)? Existing connections keep being used.
+        db.execute("ALTER TABLE ai_settings ADD COLUMN use_own INTEGER NOT NULL DEFAULT 0")
+        db.execute("UPDATE ai_settings SET use_own = 1")
     if "notify_email" not in ucols:
         db.execute("ALTER TABLE users ADD COLUMN notify_email INTEGER NOT NULL DEFAULT 1")
     if "ai_files" not in ucols:   # may the assistant read this person's other files: off | ask | allow
