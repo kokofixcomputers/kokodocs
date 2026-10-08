@@ -390,3 +390,7 @@ Both use the Workers AI REST API at `api.cloudflare.com` (not AI Gateway). You n
 - **Voice typing:** admin panel, Voice typing, provider "Cloudflare Workers AI": account id, token and model (`@cf/openai/whisper-large-v3-turbo` by default, or `@cf/openai/whisper`, `@cf/openai/whisper-tiny-en`). Without the admin panel, set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in the server environment.
 
 The older OpenAI-compatible address (`.../ai/v1`) still works if you enter it as a custom base URL; it streams, but the preset uses the REST API above.
+
+## Voice typing in boards
+
+Hold the voice typing key (Right Ctrl by default, changeable in Settings) while the cursor is in a text box on a board: a card's title, description or text and link fields, the board title, the filter, or Koko's message box. The words are typed into that box when you let go. With no text box selected, nothing starts, so the key never does something unexpected. While a text box is selected a floating microphone also appears (useful on a phone); it keeps the cursor where it is, and clicking it starts and stops dictation. A viewer who can't edit gets neither.

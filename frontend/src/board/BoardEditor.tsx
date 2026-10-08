@@ -10,6 +10,9 @@ import { useTheme } from '../theme'
 import { Avatar } from '../ui/Avatar'
 import { askConfirm } from '../ui/Dialogs'
 import { Select } from '../ui/Select'
+import { useVoiceTyping } from '../voice/useVoiceTyping'
+import { VoicePill } from '../voice/VoicePill'
+import { VoiceFab } from '../voice/VoiceControl'
 import { useContextMenu, type CtxItem } from '../ui/ContextMenu'
 import { DatePicker } from '../ui/DatePicker'
 import { Logo } from '../ui/Logo'
@@ -82,6 +85,15 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
   const cols = model.columns(), fields = model.fieldList()
 
   useEffect(() => { if (synced && !readOnly) model.ensure() }, [synced, model, readOnly])
+  // voice typing: only while the cursor is in a text box (the title, a card's title or notes, a field, the filter, Koko's message box)
+  const voice = useVoiceTyping({ editor: null, docId: info.id, enabled: !readOnly, fieldsOnly: true })
+  const [inField, setInField] = useState(false)
+  useEffect(() => {
+    const check = () => { const a = document.activeElement; setInField(a instanceof HTMLTextAreaElement || (a instanceof HTMLInputElement && /^(text|search|url)$/.test(a.type))) }
+    const out = () => { setTimeout(check, 0) }
+    document.addEventListener('focusin', check); document.addEventListener('focusout', out)
+    return () => { document.removeEventListener('focusin', check); document.removeEventListener('focusout', out) }
+  }, [])
   useEffect(() => { const f = () => { const t = model.meta.get('title'); if (typeof t === 'string') setTitle(t) }; model.meta.observe(f); f(); return () => model.meta.unobserve(f) }, [model])
   const timer = useRef<number | undefined>(undefined)
   const onTitle = (v: string) => {
@@ -151,6 +163,8 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
       {tab === 'fields' && !readOnly && <FieldsPage model={model} fields={fields} />}
 
       {open && <CardDialog model={model} fields={fields} cols={cols} target={open} readOnly={readOnly} onClose={() => setOpen(null)} docId={info.id} user={user} comments={comments} refreshComments={refreshComments} />}
+      <VoicePill voice={voice} />
+      <VoiceFab voice={voice} editable={!readOnly && (inField || voice.phase !== 'idle')} />
       {share && <ShareDialog info={{ ...info, title }} onClose={() => setShare(false)} />}
       {user && assistant && <aside className="ai-drawer" aria-label="Assistant"><Suspense fallback={null}><AssistantHost docId={info.id} user={user} onClose={() => setAssistant(false)} source={{ kind: 'board', deps: { model, getTitle: () => title, setTitle: onTitle, canEdit: () => !readOnly } }} /></Suspense></aside>}
     </div>

@@ -49,7 +49,8 @@ function stillHeld(e: KeyboardEvent, s: Shortcut) {
   return !((e.key === 'Control' && s.ctrl) || (e.key === 'Alt' && s.alt) || (e.key === 'Shift' && s.shift) || (e.key === 'Meta' && s.meta))
 }
 
-export function useVoiceTyping({ editor, docId, enabled }: { editor: Editor | null; docId: string; enabled: boolean }) {
+/** `fieldsOnly`: for pages with no text editor (boards): dictation starts only while the cursor is in a text box, and goes into it. */
+export function useVoiceTyping({ editor, docId, enabled, fieldsOnly = false }: { editor: Editor | null; docId: string; enabled: boolean; fieldsOnly?: boolean }) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [shortcut, setShortcutState] = useState<Shortcut>(loadShortcut)
   const [available, setAvailable] = useState<boolean | null>(null)
@@ -133,7 +134,8 @@ export function useVoiceTyping({ editor, docId, enabled }: { editor: Editor | nu
     if (available === false) { toast("Voice typing isn't set up on this server yet. An admin needs to add a speech provider (see the README)."); return }
     viaKey.current = fromKey
     const ae = document.activeElement
-    target.current = (ae instanceof HTMLTextAreaElement || (ae instanceof HTMLInputElement && /^(text|search|)$/.test(ae.type))) && !ae.closest('.ProseMirror') && !ae.readOnly ? ae : null
+    target.current = (ae instanceof HTMLTextAreaElement || (ae instanceof HTMLInputElement && /^(text|search|url|)$/.test(ae.type))) && !ae.closest('.ProseMirror') && !ae.readOnly ? ae : null
+    if (fieldsOnly && !target.current) { if (!fromKey) toast('Click into a text box first, then dictate.'); return }   // nowhere to put the words
     setP('listening')
     const r = new Recorder()
     rec.current = r
@@ -146,7 +148,7 @@ export function useVoiceTyping({ editor, docId, enabled }: { editor: Editor | nu
       const name = (e as DOMException).name
       toast(name === 'NotAllowedError' ? 'Microphone access is blocked. Allow it in your browser’s site settings.' : name === 'NotFoundError' ? 'No microphone found.' : 'Could not start the microphone.')
     }
-  }, [enabled, available, stop])
+  }, [enabled, available, stop, fieldsOnly])
 
   // push-to-talk: hold the shortcut, speak, release
   useEffect(() => {
