@@ -495,10 +495,28 @@ class ProofIn(BaseModel):
     language: str = Field("en-US", pattern=r"^[A-Za-z]{2,3}([-_][A-Za-z0-9]{2,8})?$")
 
 
+def same_site(request: Request, db) -> bool:
+    """True when the request comes from one of our own pages: its Origin (or, failing that, Referer) names this site. Browsers always send
+    one on a POST from a page, and a page on another site can't change it. It isn't proof of identity (a script outside a browser can set
+    any header), only a way to stop other websites from using your server's proofreader through their visitors' browsers."""
+    from .authx import base_url   # (imported here: authx imports this module)
+    src = request.headers.get("origin") or request.headers.get("referer") or ""
+    host = urlparse(src).netloc.lower()
+    if not host:
+        return False
+    own = {request.headers.get("host", "").lower(), request.headers.get("x-forwarded-host", "").split(",")[0].strip().lower(),
+           urlparse(base_url(request, db)).netloc.lower()}
+    own |= {urlparse(o.strip()).netloc.lower() for o in os.environ.get("KOKO_CORS", "http://localhost:5173,http://127.0.0.1:5173").split(",")}   # the dev server
+    return host in own - {""}
+
+
 @router.post("/proofread")
-async def proofread(body: ProofIn, user=Depends(must_user)):
-    """Signed-in people only: with a LanguageTool server behind it, each call does real work, and anyone on the internet could otherwise use it."""
-    if not proofread_limiter.allow(f"proof:{user['id']}"):
+async def proofread(body: ProofIn, request: Request, db=Depends(get_db)):
+    """Open to anyone using our pages (people editing through a link have no account), but only from our own origin, and limited per address."""
+    if not same_site(request, db):
+        raise HTTPException(403, "Proofreading is only available from the KokoDocs pages")
+    who = (request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "?"))
+    if not proofread_limiter.allow(f"proof:{who}"):
         raise HTTPException(429, "Slow down: too many proofreading requests. Try again in a minute.")
     return {"issues": await check_blocks([b.model_dump() for b in body.blocks], body.language)}
 
