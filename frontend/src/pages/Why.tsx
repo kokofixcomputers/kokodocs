@@ -4,7 +4,7 @@ import { Cta, MarketingLayout } from '../marketing/Layout'
 import { Phone, Shot } from '../marketing/Shot'
 
 const REASONS = [
-  { icon: ServerCog, title: 'You own the whole thing', text: 'Documents, sheets, slides, forms and wikis live in one SQLite database and one uploads folder on a machine you choose. Back it up, move it, or delete it. Nobody else holds a copy.' },
+  { icon: ServerCog, title: 'You own the whole thing', text: 'Documents, sheets, slides, forms, wikis and boards live in one SQLite database and one uploads folder on a machine you choose. Back it up, move it, or delete it. Nobody else holds a copy.' },
   { icon: Wallet, title: 'No seats, no upsell wall', text: 'There is no licence key, per-person fee or locked tier in the software. Every feature is on for everyone. Your costs are the server and, if you want one, an AI provider.' },
   { icon: Sparkles, title: 'An assistant on your terms', text: 'Connect the model you trust, or none. It reads your files with tools, and every edit waits for your approval. Keys are encrypted at rest and never sent back to the browser.' },
   { icon: Lock, title: 'Private by default', text: 'New files are restricted to you. Sharing is by person, link, password or folder, and roles are enforced on the server. Spelling and grammar run locally unless you say otherwise.' },
@@ -17,7 +17,8 @@ const ROWS: [string, string, string, string][] = [
   ['Cost', 'Free software, you pay for the machine', 'Free with a Google account (storage is shared with Gmail and Photos); paid Workspace plans per person', 'Per person, per month, by tier'],
   ['AI assistant', 'Any OpenAI-compatible model you choose, optional, asks before it edits', 'Gemini, Google’s own model; the fuller features need a paid plan', 'The provider’s model, usually on a higher tier'],
   ['Spelling and grammar', 'Built in and offline, eight English variants', 'Built in, runs in Google’s cloud, many languages', 'Cloud checking'],
-  ['Documents, sheets, slides, forms', 'All five, including wikis, in one app', 'Separate apps (Docs, Sheets, Slides, Forms) that share Drive', 'Often separate products'],
+  ['Documents, sheets, slides, forms', 'All six, including wikis and boards, in one app', 'Separate apps (Docs, Sheets, Slides, Forms) that share Drive', 'Often separate products'],
+  ['Kanban boards and roadmaps', 'A file type of its own: custom and required fields, table, roadmap and calendar views, comments on cards', 'Not a file type in Drive', 'Usually a separate product'],
   ['Voice typing', 'Your pick: Groq, Mistral, OpenAI, any compatible server, or local on your own machine', 'Built in, in Chrome only', 'Varies'],
   ['API and developer docs', 'Wiki pages with request blocks readers can send', 'No request blocks; Google Sites for simple pages', 'Not included'],
   ['Offline edits', 'Merged cleanly when you reconnect, with a notice', 'Offline mode in Chrome, which you turn on first', 'Varies'],

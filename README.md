@@ -187,7 +187,7 @@ The Spelling & grammar panel has a **Language** menu: English (US), UK, Canada, 
 
 ## Public pages
 
-Signed-out visitors see a marketing site: the home page (product tour with a tab for each kind of file, six feature spotlights, phone and dark-mode views, FAQ), `/features` (every feature by area), `/why` (why self-host, plus a side-by-side table) and `/self-host` (run it, systemd, Caddy and nginx snippets, the main settings). The screenshots are real captures of the app in `frontend/public/shots/` (`<name>.jpg` and `<name>-dark.jpg`; the one matching the visitor's theme is shown). To refresh them after the interface changes, replace those files with new captures at the same names.
+Signed-out visitors see a marketing site: the home page (product tour with a tab for each kind of file, six feature spotlights, phone and dark-mode views, FAQ), `/features` (every feature by area), `/why` (why self-host, plus a side-by-side table) and `/self-host` (run it, systemd, Caddy and nginx snippets, the main settings). The screenshots are real captures of the app in `frontend/public/shots/` (including `board` and `board-roadmap` for boards) (`<name>.jpg` and `<name>-dark.jpg`; the one matching the visitor's theme is shown). To refresh them after the interface changes, replace those files with new captures at the same names.
 
 ## Shapes in documents
 

@@ -134,3 +134,5 @@
 .bd-side .bd-comments { border-top: 0; padding-top: 6px; flex: 1; }
 @media (max-width: 860px) { .bd-dialog.two { grid-template-columns: 1fr; } .bd-side { border-left: 0; border-top: 1px solid var(--line); max-height: none; border-radius: 0 0 24px 24px; } }
 .bd-dialog:not(.two) .bd-main { display: contents; }
+
+.bd-bar { z-index: 1; } .bd-road-today { z-index: 0; }   /* the today line runs behind the bars, not through their titles */

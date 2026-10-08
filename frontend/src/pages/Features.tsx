@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { BookOpen, Bot, Mic, Check, ClipboardList, FileText, FolderTree, Presentation, ShieldCheck, Table2, Users } from 'lucide-react'
+import { BookOpen, Bot, Mic, Check, ClipboardList, Kanban, FileText, FolderTree, Presentation, ShieldCheck, Table2, Users } from 'lucide-react'
 import { Cta, MarketingLayout } from '../marketing/Layout'
 import { Frame } from '../marketing/Shot'
 import { MicTest } from '../marketing/MicTest'
@@ -49,6 +49,14 @@ const GROUPS: Group[] = [
     ['Badges and tables', 'GET, POST, Required, Deprecated, Beta and any label of your own, plus starter parameter and response-code tables.'],
     ['Everything else', 'Version history with page-by-page comparison, the assistant with tools for pages, folders and requests, and voice typing.'],
   ] },
+  { id: 'boards', icon: Kanban, name: 'Boards', lead: 'A kanban board with fields you design, seen as columns, a table, a roadmap or a calendar.', shot: 'board', url: 'docs.example.com/d/q3-launch-board', items: [
+    ['Columns and cards', 'Rename, recolour, reorder and delete columns. Drag cards between and within them, with a mouse or by the grip on a phone. A filter box narrows every view.'],
+    ['Fields you design', 'Text, number, date, single select, multi select, checkbox and link. Choose each field’s name, colours and options, and whether it shows on the card.'],
+    ['Required fields and limits', 'Mark a field required and a card can’t be added until it is filled in; cards that miss one are flagged. Set a minimum and maximum for numbers, or an earliest and latest date.'],
+    ['Four views', 'Board, Table (sortable, with a CSV download), Roadmap (bars between a start and an end date you pick, drag to move or resize, zoom by day, week or month) and Calendar.'],
+    ['Comments', 'Every card has its own thread beside it, with @mentions that notify people, and a count on the card. They arrive live over the connection you already have.'],
+    ['Together', 'Live editing with presence, undo and redo, sharing and permissions like every other file. Viewers see everything and can’t change it.'],
+  ] },
   { id: 'assistant', icon: Bot, name: 'Assistant and proofreading', lead: 'Help when you want it, quiet when you do not.', shot: 'assistant', url: 'docs.example.com/d/q3-launch-plan', items: [
     ['Bring your own model', 'Connect any OpenAI-compatible service under Settings. The key is stored encrypted and never returned to the browser.'],
     ['Approval first', 'The assistant reads freely but shows each edit as a card you approve, or approve for the session.'],
@@ -94,7 +102,7 @@ export function Features() {
       <section className="mk-page-head">
         <span className="mk-eyebrow">Features</span>
         <h1>Everything in the box</h1>
-        <p>Five kinds of file, one assistant, and the details that make them feel finished. Jump to a section:</p>
+        <p>Six kinds of file, one assistant, and the details that make them feel finished. Jump to a section:</p>
         <nav className="mk-chips" aria-label="Sections">{GROUPS.map((g) => <a key={g.id} href={`#${g.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(g.id)?.scrollIntoView({ behavior: 'smooth' }) }}><g.icon size={15} />{g.name.split(',')[0].split(' and ')[0]}</a>)}</nav>
       </section>
       {GROUPS.map((g, i) => (

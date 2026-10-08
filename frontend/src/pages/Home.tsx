@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, BookOpen, Bot, Check, ClipboardList, FileDown, FolderTree, History, Keyboard, Languages, ListChecks, Mic, Moon, Presentation, ServerCog, ShieldCheck, Smartphone,
-  Sparkles, SpellCheck, Table2, Tags, Users, FileText, HardDrive, Webhook,
+  Sparkles, SpellCheck, Table2, Tags, Users, FileText, HardDrive, Webhook, Kanban,
 } from 'lucide-react'
 import { Cta, MarketingLayout, useSignup } from '../marketing/Layout'
 import { Frame, Phone, Shot } from '../marketing/Shot'
@@ -14,6 +14,7 @@ const TOOLS = [
   { id: 'slides', icon: Presentation, name: 'Presentations', shot: 'slides', url: 'docs.example.com/d/investor-pitch', title: 'Decks that look designed', text: 'Start from a theme and layout, then make it yours.', bullets: ['Themes, layouts, shapes, tables and charts', 'Speaker notes and a full-screen presenter mode', 'Transitions and your choice of fonts', 'Import and export PowerPoint'], link: '/features#slides' },
   { id: 'forms', icon: ClipboardList, name: 'Forms', shot: 'form', url: 'docs.example.com/d/customer-feedback', title: 'Ask, collect, understand', text: 'Build a form together, share a link, and read the answers as charts.', bullets: ['13 question types, pages, media and file uploads', 'Show-if rules and jumps, with validation on the server too', 'Summary charts, one-by-one view, table and CSV export', 'Accent colour that themes the whole form'], link: '/features#forms' },
   { id: 'wikis', icon: BookOpen, name: 'Wikis', shot: 'wiki', url: 'docs.example.com/d/api-reference', title: 'Documentation people can try', text: 'A sidebar of pages and folders, and request blocks readers can send.', bullets: ['Collapsible contents, drag to reorder', 'Request blocks with a Send button, cURL, JavaScript and Python', 'Badges, variables and parameter tables', 'Version history, assistant and voice typing too'], link: '/features#wikis' },
+  { id: 'boards', icon: Kanban, name: 'Boards', shot: 'board', url: 'docs.example.com/d/q3-launch-board', title: 'Plan work your way', text: 'A kanban board you shape with your own fields, then see as a table, a roadmap or a calendar.', bullets: ['Drag cards between columns, with a finger too', 'Your own fields: select, multi select, date, number, checkbox, link', 'Mark a field required, with limits for numbers and dates', 'Comments and @mentions on every card'], link: '/features#boards' },
 ] as const
 
 const SPOTS = [
@@ -22,6 +23,7 @@ const SPOTS = [
   { icon: History, eyebrow: 'History', shot: 'history', title: 'Nothing gets lost', text: 'Every file keeps its history. Compare any version to the one before it, or to now, and restore with one click.', bullets: ['Automatic and named versions', 'A clear “what changed” view, line by line', 'Restoring keeps a copy of what you replaced', 'A recycle bin that holds deleted files for 30 days'] },
   { icon: SpellCheck, eyebrow: 'Writing', shot: 'proofread', title: 'Proofreading that speaks your English', text: 'Spelling and grammar checks run on your own server. Choose US, UK, Canadian, Australian and other variants, so “colour” is right when it should be.', bullets: ['Eight English variants, with suggestions in your spelling', 'Optional LanguageTool server for deeper grammar rules', 'Right-click menus, a slash menu and keyboard shortcuts'] },
   { icon: Webhook, eyebrow: 'Wikis', shot: 'wiki', title: 'API docs with a Try it button', text: 'Readers can change the address, headers or body and press Send. Their changes stay in their browser, and your docs stay as you wrote them.', bullets: ['Method badges, status and timing, formatted replies', 'Variables for the server address, and private ones for tokens', 'A server fallback for APIs that block browser requests', 'Not tied to one API: it is just an HTTP request you can document'] },
+  { icon: Kanban, eyebrow: 'Boards', shot: 'board-roadmap', title: 'One board, four ways to look at it', text: 'The same cards as columns, a sortable table, a roadmap with bars between dates, or a calendar. Drag a bar to reschedule it.', bullets: ['Pick which date fields start and end each bar', 'Zoom the roadmap by days, weeks or months', 'Download the table as CSV', 'Cards missing a required field are flagged'] },
   { icon: HardDrive, eyebrow: 'Control', shot: 'settings', title: 'Know where every byte is', text: 'See what takes up space, by file and by kind. Identical pictures are stored once, and admins set limits per person.', bullets: ['A colour-coded storage breakdown for you and for each file', 'Duplicate pictures merged automatically', 'Two-factor sign-in, Google sign-in and email confirmation', 'An admin panel for people, files and server settings'] },
 ] as const
 
@@ -37,7 +39,7 @@ const GRID = [
   { icon: ShieldCheck, title: 'Private by default', text: 'Restricted to the people you choose, with roles enforced on the server.' },
 ] as const
 
-const STATS = [['5', 'kinds of file in one place'], ['370+', 'spreadsheet functions'], ['1,950', 'fonts to choose from'], ['8', 'English spelling variants']]
+const STATS = [['6', 'kinds of file in one place'], ['370+', 'spreadsheet functions'], ['1,950', 'fonts to choose from'], ['8', 'English spelling variants']]
 
 const FAQ = [
   ['Is it free?', 'KokoDocs is software you run on your own server, so there is no subscription and no per-person fee. You only pay for the machine it runs on, and for an AI provider if you choose to connect one.'],
@@ -56,7 +58,7 @@ export function Home() {
   return (
     <MarketingLayout>
       <section className="home-hero">
-        <span className="home-pill"><Sparkles size={14} />Documents, sheets, slides, forms, wikis and an AI coworker</span>
+        <span className="home-pill"><Sparkles size={14} />Documents, sheets, slides, forms, wikis, boards and an AI coworker</span>
         <h1>Your whole workspace,<br />on your own terms.</h1>
         <p>A fast, modern home for the things you write, calculate, present and document. Real-time collaboration, an assistant that asks before it edits, and everything you expect from the big names, running on a server you control.</p>
         <Cta>{signup ? 'Create a free account' : 'Sign in'}</Cta>
@@ -71,7 +73,7 @@ export function Home() {
       </section>
 
       <section id="tools" className="mk-sec">
-        <div className="mk-head"><span className="mk-eyebrow">One place for all of it</span><h2>Five tools that feel like one</h2><p className="lead">Same look, same sharing, same history and the same assistant in every one of them.</p></div>
+        <div className="mk-head"><span className="mk-eyebrow">One place for all of it</span><h2>Six tools that feel like one</h2><p className="lead">Same look, same sharing, same history and the same assistant in every one of them.</p></div>
         <div className="mk-tabs" role="tablist">
           {TOOLS.map((x) => <button key={x.id} role="tab" aria-selected={tool === x.id} className={tool === x.id ? 'on' : ''} onClick={() => setTool(x.id)}><x.icon size={17} />{x.name}</button>)}
         </div>
