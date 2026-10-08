@@ -59,6 +59,9 @@ export class BoardModel {
   destroy() { this.doc.off('update', this.bump); this.undo.destroy(); this.listeners.clear() }
   private tx(fn: () => void) { this.doc.transact(fn, 'local') }
 
+  getMeta<T>(k: string, d: T): T { const v = this.meta.get(k); return (v === undefined ? d : v) as T }
+  setMeta(k: string, v: unknown) { this.tx(() => { if (v === undefined || v === '') this.meta.delete(k); else this.meta.set(k, v) }) }
+
   columns(): ({ id: string } & Col)[] { return this.colOrder.toArray().flatMap((id) => { const c = this.cols.get(id); return c ? [{ id, ...c }] : [] }) }
   fieldList(): ({ id: string } & FieldDef)[] { return this.fieldOrder.toArray().flatMap((id) => { const f = this.fields.get(id); return f ? [{ id, ...f }] : [] }) }
   cardsIn(col: string): ({ id: string } & Card)[] {

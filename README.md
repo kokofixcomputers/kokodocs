@@ -243,4 +243,10 @@ To keep iOS's Cut / Copy / Paste callout (drawn above the selection) off the bar
 
 **Custom fields** (the *Fields* tab) are the details every card carries: text, number, date, single select, multi select, checkbox and link. For each field you choose its name, whether it is **required** (a card can't be added until it is filled in, and cards that miss it show a warning chip), whether it shows on the card face, and limits: a number's minimum and maximum, a date's earliest and latest (or *No past dates*), and the options and colours of selects. A new board starts with *Priority* and *Due date*. Cards also have a description, held as plain text.
 
-Code: `frontend/src/board/{model.ts,BoardEditor.tsx,board.css}`; the board is a Yjs doc (`colOrder`/`cols`, `fieldOrder`/`fields`, `cards`). Tests: `backend/tests/test_board.py`. Not yet: a table or roadmap view of the same cards (dates are already stored), version history, and rich-text descriptions.
+Code: `frontend/src/board/{model.ts,BoardEditor.tsx,board.css}`; the board is a Yjs doc (`colOrder`/`cols`, `fieldOrder`/`fields`, `cards`). Tests: `backend/tests/test_board.py`. **Views** (tabs along the top, remembered per browser; all show the same cards and share the *Filter cards* box):
+- **Board**: the kanban columns.
+- **Table**: one row per card with every field, click a header to sort (again to reverse, a third time to clear), *Download CSV*.
+- **Roadmap**: a timeline grouped by column. Pick which date fields are the *Start* and *End* (or one field, so cards are single days); drag a bar to move it and its edges to change the dates; zoom by days, weeks or months. Cards without dates are listed under the timeline. The choice of fields is shared with everyone on the board.
+- **Calendar**: a month grid placing cards on a chosen date field; the **+** on a day adds a card with that date filled in.
+
+Not yet: version history, rich-text descriptions, grouping or colouring the board by a field other than the column.

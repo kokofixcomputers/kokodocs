@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
-import { AlertCircle, ArrowLeft, ArrowRight, Calendar, CheckSquare, ChevronDown, ChevronUp, Cloud, CloudOff, Copy, GripVertical, Hash, Kanban, Link2, LogIn, Moon, MoreHorizontal, Plus, Redo2, Settings2, Share2, Sun, Tags, Trash2, Type, Undo2, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRight, Calendar, CheckSquare, ChevronDown, ChevronUp, Cloud, CloudOff, Copy, GripVertical, Hash, Kanban, CalendarDays, GanttChart, Table2, Link2, LogIn, Moon, MoreHorizontal, Plus, Redo2, Settings2, Share2, Sun, Tags, Trash2, Type, Undo2, X } from 'lucide-react'
 import { api, type ApiError, type DocInfo } from '../api'
 import { useAuth } from '../auth'
 import { KokoProvider } from '../collab'
@@ -17,9 +17,13 @@ import { toast } from '../ui/Toast'
 import { openSettings } from '../ui/settingsStore'
 import { BoardModel, COLORS, isEmpty, problem, TYPE_LABEL, uid, type Card, type FieldDef, type FieldType, type Value } from './model'
 import '../forms/forms.css'
+import { Chip, today, type F } from './shared'
+import { CalendarView } from './CalendarView'
+import { RoadmapView } from './RoadmapView'
+import { TableView } from './TableView'
+import type { OpenTarget } from './views'
 import './board.css'
 
-type F = { id: string } & FieldDef
 type C = { id: string } & Card
 const ICON: Record<FieldType, typeof Type> = { text: Type, number: Hash, date: Calendar, single: ChevronDown, multi: Tags, checkbox: CheckSquare, link: Link2 }
 const FIELD_TYPES = Object.keys(TYPE_LABEL) as FieldType[]
@@ -30,8 +34,9 @@ function guestIdentity() {
   try { sessionStorage.setItem('koko.guest', JSON.stringify(g)) } catch { /* ignore */ }
   return g
 }
-const fmtDate = (s: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m ? new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(+m[1], +m[2] - 1, +m[3])) : s }
-const today = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}` }
+
+type Tab = 'board' | 'table' | 'roadmap' | 'calendar' | 'fields'
+const TABS: { id: Tab; label: string; icon: typeof Kanban }[] = [{ id: 'board', label: 'Board', icon: Kanban }, { id: 'table', label: 'Table', icon: Table2 }, { id: 'roadmap', label: 'Roadmap', icon: GanttChart }, { id: 'calendar', label: 'Calendar', icon: CalendarDays }]
 
 function useVersion(m: BoardModel) { const [v, setV] = useState(0); useEffect(() => m.subscribe(() => setV(m.version)), [m]); return v }
 function useStatus(p: KokoProvider) { const [, f] = useState(0); useEffect(() => p.subscribe(() => f((n) => n + 1)), [p]); return { status: p.status, synced: p.synced } }
@@ -60,9 +65,10 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
   const version = useVersion(model)
   const { status, synced } = useStatus(provider)
   const [title, setTitle] = useState(info.title)
-  const [tab, setTab] = useState<'board' | 'fields'>('board')
+  const [tab, setTabState] = useState<Tab>(() => { try { const t = localStorage.getItem('koko.boardview') as Tab; return TABS.some((x) => x.id === t) ? t : 'board' } catch { return 'board' } })
+  const setTab = (t: Tab) => { setTabState(t); try { localStorage.setItem('koko.boardview', t) } catch { /* ignore */ } }
   const [share, setShare] = useState(false)
-  const [open, setOpen] = useState<{ id: string } | { col: string } | null>(null)
+  const [open, setOpen] = useState<OpenTarget | null>(null)
   const [people, setPeople] = useState<{ id: number; name: string; color: string }[]>([])
   const [filter, setFilter] = useState('')
   void version
@@ -125,12 +131,16 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
         </div>
       </header>
       <nav className="fm-tabs bd-tabs" role="tablist" aria-label="Board sections">
-        <button role="tab" aria-selected={tab === 'board'} className={tab === 'board' ? 'on' : ''} onClick={() => setTab('board')}><Kanban size={16} />Board</button>
-        {!readOnly && <button role="tab" aria-selected={tab === 'fields'} className={tab === 'fields' ? 'on' : ''} onClick={() => setTab('fields')}><Settings2 size={16} />Fields{fields.length ? ` (${fields.length})` : ''}</button>}
-        {tab === 'board' && <input className="bd-filter" type="search" placeholder="Filter cards" aria-label="Filter cards" value={filter} onChange={(e) => setFilter(e.target.value)} />}
+        {TABS.map((t) => <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}><t.icon size={16} /><span className="bd-tab-l">{t.label}</span></button>)}
+        {!readOnly && <button role="tab" aria-selected={tab === 'fields'} className={tab === 'fields' ? 'on' : ''} onClick={() => setTab('fields')}><Settings2 size={16} /><span className="bd-tab-l">Fields{fields.length ? ` (${fields.length})` : ''}</span></button>}
+        {tab !== 'fields' && <input className="bd-filter" type="search" placeholder="Filter cards" aria-label="Filter cards" value={filter} onChange={(e) => setFilter(e.target.value)} />}
       </nav>
 
-      {tab === 'board' ? <Columns model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} /> : <FieldsPage model={model} fields={fields} />}
+      {tab === 'board' && <Columns model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} />}
+      {tab === 'table' && <TableView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} title={title} />}
+      {tab === 'roadmap' && <RoadmapView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} />}
+      {tab === 'calendar' && <CalendarView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} />}
+      {tab === 'fields' && !readOnly && <FieldsPage model={model} fields={fields} />}
 
       {open && <CardDialog model={model} fields={fields} cols={cols} target={open} readOnly={readOnly} onClose={() => setOpen(null)} />}
       {share && <ShareDialog info={{ ...info, title }} onClose={() => setShare(false)} />}
@@ -140,19 +150,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
 
 // ---------- the columns ----------
 
-function Chip({ f, v }: { f: F; v: Value | undefined }) {
-  if (isEmpty(v)) return null
-  if (f.type === 'single' || f.type === 'multi') {
-    const ids = Array.isArray(v) ? v : [String(v)]
-    return <>{ids.map((id) => { const o = f.options?.find((x) => x.id === id); return o ? <span key={id} className="bd-chip" style={{ '--c': o.color } as React.CSSProperties} title={f.name}><i />{o.label}</span> : null })}</>
-  }
-  if (f.type === 'date') return <span className="bd-chip plain" title={f.name}><Calendar size={12} />{fmtDate(String(v))}</span>
-  if (f.type === 'checkbox') return <span className="bd-chip plain" title={f.name}><CheckSquare size={12} />{f.name}</span>
-  if (f.type === 'link') return <span className="bd-chip plain" title={f.name}><Link2 size={12} />{String(v).replace(/^https?:\/\//, '').slice(0, 24)}</span>
-  return <span className="bd-chip plain" title={f.name}>{f.type === 'number' ? `${f.name}: ` : ''}{String(v)}</span>
-}
-
-function Columns({ model, cols, fields, readOnly, filter, onOpen }: { model: BoardModel; cols: ({ id: string; name: string; color: string })[]; fields: F[]; readOnly: boolean; filter: string; onOpen: (t: { id: string } | { col: string }) => void }) {
+function Columns({ model, cols, fields, readOnly, filter, onOpen }: { model: BoardModel; cols: ({ id: string; name: string; color: string })[]; fields: F[]; readOnly: boolean; filter: string; onOpen: (t: OpenTarget) => void }) {
   const [drag, setDrag] = useState<{ id: string; x: number; y: number; title: string; over: string | null; before: string | null } | null>(null)
   const wrap = useRef<HTMLDivElement>(null)
   const q = filter.trim().toLowerCase()
@@ -283,9 +281,9 @@ function FieldInput({ f, value, onChange, error }: { f: F; value: Value | undefi
 }
 
 /** Opens an existing card (every change is saved as you make it) or starts a new one (nothing is saved until the required fields are filled in). */
-function CardDialog({ model, fields, cols, target, readOnly, onClose }: { model: BoardModel; fields: F[]; cols: { id: string; name: string }[]; target: { id: string } | { col: string }; readOnly: boolean; onClose: () => void }) {
+function CardDialog({ model, fields, cols, target, readOnly, onClose }: { model: BoardModel; fields: F[]; cols: { id: string; name: string }[]; target: OpenTarget; readOnly: boolean; onClose: () => void }) {
   const existing = 'id' in target ? model.card(target.id) : null
-  const [draft, setDraft] = useState<{ title: string; desc: string; v: Record<string, Value>; col: string }>(() => ({ title: '', desc: '', v: {}, col: 'col' in target ? target.col : '' }))
+  const [draft, setDraft] = useState<{ title: string; desc: string; v: Record<string, Value>; col: string }>(() => ({ title: '', desc: '', v: 'col' in target ? { ...(target.v ?? {}) } : {}, col: 'col' in target ? target.col : '' }))
   const [tried, setTried] = useState(false)
   const [, bump] = useState(0)
   useEffect(() => model.subscribe(() => bump((n) => n + 1)), [model])
