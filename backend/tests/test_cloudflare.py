@@ -111,4 +111,11 @@ for u, good in [(f"https://api.cloudflare.com/client/v4/accounts/{ACCT}/ai", Tru
     except HTTPException:
         got = False
     check(f"address {u[-30:]} {'accepted' if good else 'refused'}", got == good)
+# the 400 "Type mismatch of '/messages/N/content'": Workers AI takes string (or text-part) content only, never null
+m = ai._cf_message({"role": "assistant", "content": None, "tool_calls": [{"id": "c", "type": "function", "function": {"name": "x", "arguments": "{}"}}]})
+check("null content becomes an empty string, tool calls stay", m["content"] == "" and m["tool_calls"][0]["id"] == "c")
+check("text parts are joined into one string", ai._cf_message({"role": "user", "content": [{"type": "text", "text": "a"}, {"type": "image_url", "image_url": {}}, {"type": "text", "text": "b"}]})["content"] == "a\nb")
+asyncio.run(ai._cloudflare_run(acct, {"model": "@cf/x/openai-ok", "api_key": "tok"}, type("B", (), {"messages": [{"role": "user", "content": "hi"}, {"role": "assistant", "content": None, "tool_calls": []}], "tools": None, "temperature": None})))
+sent = json.loads(SEEN[-1]["body"])
+check("nothing but strings is sent as content", all(isinstance(x["content"], str) for x in sent["messages"]))
 sys.exit(0 if ok else 1)

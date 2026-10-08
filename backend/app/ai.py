@@ -228,10 +228,22 @@ def _cf_tool_calls(raw) -> list[dict]:
     return out
 
 
+def _cf_message(m: dict) -> dict:
+    """Workers AI wants every message's content as plain text: the OpenAI list-of-parts form is flattened, and a missing one becomes ''."""
+    c = m.get("content")
+    if isinstance(c, list):
+        c = "\n".join(str(p.get("text", "")) if isinstance(p, dict) else str(p) for p in c if not isinstance(p, dict) or p.get("type", "text") == "text")
+    elif c is None:
+        c = ""
+    elif not isinstance(c, str):
+        c = json.dumps(c)
+    return {**m, "content": c}
+
+
 async def _cloudflare_run(account_url: str, s: dict, body) -> dict:
     """One chat turn through the Workers AI REST API (.../ai/run/<model>, not AI Gateway). It isn't streamed: the whole answer comes back
     as one JSON, which is passed on in the OpenAI shape the browser already understands."""
-    payload: dict = {"messages": body.messages, "max_tokens": CF_MAX_TOKENS}
+    payload: dict = {"messages": [_cf_message(m) for m in body.messages], "max_tokens": CF_MAX_TOKENS}
     if body.tools:
         payload["tools"] = body.tools
     if body.temperature is not None:
