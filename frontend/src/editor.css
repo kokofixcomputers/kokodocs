@@ -426,3 +426,11 @@ img.emoji { display: inline-block; height: 1.2em; width: 1.2em; vertical-align: 
   html.kb-open .stats-pill { display: none; }
 }
 @media (max-width: 720px) { .wiki-body { order: 1; } .wiki-shell .ed-toolbar-wrap { order: 2; } }
+
+/* Phones: the page only scrolls up and down. Sideways dragging used to slide the sheet off-centre; wide tables still scroll inside their own frame. */
+@media (max-width: 720px), (pointer: coarse) {
+  html, body { overflow-x: hidden; overscroll-behavior-x: none; }
+  .canvas, .wiki-body { overflow-x: hidden; overscroll-behavior-x: none; touch-action: pan-y pinch-zoom; }
+  .canvas .sheet { max-width: 100%; }
+  .canvas .tableWrapper, .wiki-body .tableWrapper { touch-action: pan-x pan-y; }
+}
