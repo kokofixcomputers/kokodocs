@@ -19,6 +19,7 @@ import { toast } from '../ui/Toast'
 import { useContextMenu, type CtxItem } from '../ui/ContextMenu'
 import { openSettings } from '../ui/settingsStore'
 import { baseExtensions } from '../editor/extensions'
+import { ScrollAnchor } from '../editor/ScrollAnchor'
 import { ImageUpload } from '../editor/ResizableImage'
 import { PasteChecklists } from '../editor/PasteChecklists'
 import { SlashCommand, SlashMenu } from '../editor/SlashMenu'
@@ -398,7 +399,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
       },
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
-    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks,
+    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions }, [])

@@ -56,6 +56,7 @@ export const WikiTabs = Node.create({
         return p
       }
       const render = () => {
+        bar.querySelector('input')?.blur()   // finish any rename in progress first: removing a focused box mid-rebuild would run its handler in the middle of this one
         if (active >= current.childCount) active = Math.max(0, current.childCount - 1)
         dom.dataset.active = String(active)
         bar.replaceChildren()

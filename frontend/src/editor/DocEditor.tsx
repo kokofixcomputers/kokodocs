@@ -42,6 +42,7 @@ import { DocContextMenu } from './TextContextMenu'
 import { StatsPill } from './StatsPill'
 import { PasteChecklists } from './PasteChecklists'
 import { baseExtensions } from './extensions'
+import { ScrollAnchor } from './ScrollAnchor'
 import { VersionHistory, VersionPreview, fullLabel } from './VersionHistory'
 import { ShareDialog } from './ShareDialog'
 import { Toolbar } from './Toolbar'
@@ -159,6 +160,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         },
       }),
       Pagination.configure({ getMeta: () => metaRef.current }),
+      ScrollAnchor,
       ProofreadMarks,
       AiFlash,
       FindReplace,

@@ -19,6 +19,7 @@ import { Tooltips } from './ui/Tooltips'
 import { SearchPalette } from './ui/Search'
 import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
+import { KeyboardFit } from './ui/KeyboardFit'
 import './app.css'
 import './editor.css'
 
@@ -61,6 +62,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <SearchPalette />
         <ShortcutsSheet />
         <SyncNotices />
+        <KeyboardFit />
         <SettingsHost />
         <DialogHost />
       </AuthProvider>

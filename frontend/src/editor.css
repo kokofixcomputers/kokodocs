@@ -69,7 +69,7 @@
 .sugg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; } .sugg-pill { border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 600; transition: transform .12s; } .sugg-pill:hover { filter: brightness(1.1); }
 
 /* ── canvas / sheet ── */
-.canvas { flex: 1; min-width: 0; overflow: auto; background: var(--canvas); border-radius: var(--r-lg) var(--r-lg) 0 0; padding: 32px 24px 0; position: relative; scroll-behavior: smooth; }
+.canvas { flex: 1; min-width: 0; overflow: auto; background: var(--canvas); border-radius: var(--r-lg) var(--r-lg) 0 0; padding: 32px 24px 0; position: relative; }
 .sheet { margin: 0 auto; background: var(--sheet); border-radius: 18px; box-shadow: 0 1px 3px rgba(0, 0, 0, .08); position: relative; }
 .canvas-foot { height: 80px; }
 .sync-banner { position: sticky; top: 0; z-index: 5; width: fit-content; margin: -12px auto 12px; display: flex; gap: 8px; align-items: center; padding: 6px 16px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-1); font-size: 13px; color: var(--muted); animation: rise .3s; }
@@ -408,3 +408,6 @@ img.emoji { display: inline-block; height: 1.2em; width: 1.2em; vertical-align: 
 .shape-grid button { height: 58px; border: 0; border-radius: 12px; background: transparent; display: grid; place-items: center; color: inherit; } .shape-grid button:hover { background: var(--hover); }
 .shape-grid svg { width: 44px; height: auto; max-height: 40px; }
 .bb-num { min-width: 18px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; opacity: .9; }
+
+/* phones: while the keyboard is open, the editor fills only what is left above it */
+@media (pointer: coarse) { html.kb-open .editor-shell { height: var(--vv-h); transform: translateY(var(--vv-top, 0px)); } }
