@@ -335,7 +335,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         <div className="ed-right">
           <div className="presence">
             {people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} size={32} ring />)}
-            {people.length > 5 && <span className="more">+{people.length - 5}</span>}
+            {people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}
           </div>
           <DocExportMenu editor={editor} title={title} meta={meta} />
           {!readOnly && (

@@ -108,7 +108,7 @@ function read(el: HTMLElement): { title: string; desc?: string; keys?: string } 
   const visible = (el.textContent ?? '').trim()
   const desc = d || TIPS[norm(title)] || TIPS[norm(visible)]
   // text buttons without a known description already say what they do
-  if (visible && !desc) return null
+  if (visible && !desc && !el.hasAttribute('data-tip')) return null
   return { title: title || visible, desc, keys: m?.[1] }
 }
 

@@ -149,7 +149,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
           {!form.accepting && <span className="fm-closed-chip">Closed</span>}
         </div>
         <div className="ed-right">
-          <div className="presence">{people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} size={32} ring />)}{people.length > 5 && <span className="more">+{people.length - 5}</span>}</div>
+          <div className="presence">{people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} size={32} ring />)}{people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}</div>
           <button className="icon-btn" title="Undo" aria-label="Undo" onClick={() => model.undo.undo()}><Undo2 size={18} /></button>
           <button className="icon-btn" title="Redo" aria-label="Redo" onClick={() => model.undo.redo()}><Redo2 size={18} /></button>
           <button className="icon-btn" title="Copy form link" aria-label="Copy form link" onClick={copyLink}><Copy size={18} /></button>
