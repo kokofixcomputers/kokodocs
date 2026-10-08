@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { viewBottom, viewRight } from '../ui/viewport'
 import { Extension, type Editor, type Range } from '@tiptap/core'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
 import { SHAPE_KINDS } from './shapes'
@@ -74,8 +75,9 @@ export function SlashMenu() {
   useEffect(() => { list.current?.querySelector('.on')?.scrollIntoView({ block: 'nearest' }) })
   if (!live || !live.items.length || !live.rect) return null
   const r = live.rect
-  const below = window.innerHeight - r.bottom > 300
-  const left = Math.max(8, Math.min(r.left, window.innerWidth - 276))
+  const vb = viewBottom()
+  const below = vb - r.bottom > 300
+  const left = Math.max(8, Math.min(r.left, viewRight() - 276))
   return createPortal(
     <div className="slash-menu popover" ref={list} role="listbox" aria-label="Insert"
       style={{ left, ...(below ? { top: r.bottom + 6 } : { bottom: window.innerHeight - r.top + 6 }) }}>

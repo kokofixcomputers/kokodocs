@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core'
-import { Plugin } from '@tiptap/pm/state'
+import { NodeSelection, Plugin } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import { ySyncPluginKey } from 'y-prosemirror'
 
@@ -43,7 +43,14 @@ export const ScrollAnchor = Extension.create({
       view(v) {
         view = v
         return {
-          update() {   // runs right after the redraw: if that block moved, scroll by the same amount
+          update(v, prev) {
+            // on a phone, a tapped picture or shape is brought into the visible part above the keyboard so its menu can be seen and used
+            const sel = v.state.selection
+            if (sel instanceof NodeSelection && !prev.selection.eq(sel) && matchMedia('(max-width: 720px)').matches) {
+              const dom = v.nodeDOM(sel.from)
+              if (dom instanceof HTMLElement) requestAnimationFrame(() => dom.scrollIntoView({ block: 'center', inline: 'nearest' }))
+            }
+            // runs right after the redraw: if that block moved, scroll by the same amount
             const a = anchor; anchor = null
             if (!a || !a.el.isConnected) return
             const delta = a.el.getBoundingClientRect().top - a.top

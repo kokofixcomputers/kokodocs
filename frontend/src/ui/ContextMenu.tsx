@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Ban, Check } from 'lucide-react'
+import { viewBottom, viewRight } from './viewport'
 
 export type CtxItem =
   | { label: string; icon?: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; hint?: string; checked?: boolean }
@@ -62,7 +63,7 @@ function ContextMenuView({ open, onClose }: { open: Open; onClose: () => void })
 
   useLayoutEffect(() => {   // keep the whole menu on screen: flip to the other side of the pointer when it would run off an edge
     const el = box.current; if (!el) return
-    const w = el.offsetWidth, h = el.offsetHeight, vw = window.innerWidth, vh = window.innerHeight
+    const w = el.offsetWidth, h = el.offsetHeight, vw = viewRight(), vh = viewBottom()
     let left = open.x, top = open.y
     if (left + w > vw - 8) left = Math.max(8, open.x - w)
     if (top + h > vh - 8) top = Math.max(8, open.y - h)

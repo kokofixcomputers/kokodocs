@@ -35,7 +35,6 @@ import { ImageUpload } from './ResizableImage'
 import { DocExportMenu } from '../export/ExportMenu'
 import { useVoiceTyping } from '../voice/useVoiceTyping'
 import { VoicePill } from '../voice/VoicePill'
-import { SizePill } from './SizePill'
 import { VoiceFab } from '../voice/VoiceControl'
 import { LinkHover } from './LinkHover'
 import { DocContextMenu } from './TextContextMenu'
@@ -407,7 +406,6 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       <ProofMenu editor={editor} state={proof} />
       {editor && !preview && <DocContextMenu editor={editor} issues={proof.issues} recheck={proof.recheck} ignore={proof.ignore} onComment={user ? startComment : undefined} onFind={() => setFindOpen((o) => ({ replace: o?.replace ?? false, n: (o?.n ?? 0) + 1 }))} />}
       <VoicePill voice={voice} />
-      {narrow && editor && <SizePill editor={editor} />}
       <VoiceFab voice={voice} editable={!readOnly && !preview} />
       {editor && !preview && <LinkHover editor={editor} />}
       <SlashMenu />

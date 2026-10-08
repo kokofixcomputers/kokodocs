@@ -3,11 +3,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, ChevronDown, Code, Highlighter, ImagePlus, Italic,
-  FileCog, Search, Info, Link2, List, ListChecks, IndentDecrease, IndentIncrease, ListOrdered, Minus, PanelTop, Paintbrush, Plus, Printer, Quote, Redo2, RemoveFormatting, Strikethrough,
+  FileCog, Search, Info, Link2, List, ListChecks, KeyboardOff, IndentDecrease, IndentIncrease, ListOrdered, Minus, PanelTop, Paintbrush, Plus, Printer, Quote, Redo2, RemoveFormatting, Strikethrough,
   Subscript, Superscript, Table2, Underline, Undo2,
 } from 'lucide-react'
 import { DEFAULT_FONT } from '../fonts'
 import { ShapeButton } from './ShapePicker'
+import { useKeyboardOpen } from '../ui/KeyboardFit'
 import { Popover } from '../ui/Popover'
 import { VoiceControl } from '../voice/VoiceControl'
 import type { Voice } from '../voice/useVoiceTyping'
@@ -48,8 +49,12 @@ function TablePicker({ onPick }: { onPick: (r: number, c: number) => void }) {
   )
 }
 
+/** Pressing the bar must not take focus from the page: on a phone that would close the keyboard. Text boxes inside menus still work. */
+const keepFocus = (e: React.SyntheticEvent) => { if (!(e.target as HTMLElement).closest('input, textarea, select')) e.preventDefault() }
+
 export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, voice, extras }: { extras?: React.ReactNode; editor: Editor; onImage: (f: File) => void; onHeaderFooter?: () => void; onPageSetup?: () => void; onFind?: () => void; voice?: Voice }) {
   const file = useRef<HTMLInputElement>(null)
+  const kbOpen = useKeyboardOpen()
   const painter = useFormatPainter(editor)
   const ts = editor.getAttributes('textStyle')
   const headingLevel = (editor.getAttributes('heading').level as number | undefined) ?? 0
@@ -67,7 +72,8 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
   }
 
   return (
-    <div className={`toolbar ${can ? '' : 'readonly'}`}>
+    <div className={`toolbar ${can ? '' : 'readonly'}`} onPointerDown={keepFocus} onMouseDown={keepFocus}>
+      {kbOpen && can && <div className="tb-group kb-hide"><TBtn icon={<KeyboardOff size={17} />} label="Hide keyboard" onClick={() => { (document.activeElement as HTMLElement | null)?.blur() }} /></div>}
       <div className="tb-group">
         <TBtn icon={<Undo2 size={17} />} label="Undo" onClick={() => (editor.commands as any).undo()} disabled={!can} />
         <TBtn icon={<Redo2 size={17} />} label="Redo" onClick={() => (editor.commands as any).redo()} disabled={!can} />

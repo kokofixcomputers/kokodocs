@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { viewBottom, viewRight } from './viewport'
 
 interface Props {
   trigger: (api: { open: boolean; toggle: () => void }) => ReactNode
@@ -25,10 +26,12 @@ export function Popover({ trigger, children, align = 'start', className = '', on
       const a = anchor.current.getBoundingClientRect()
       const p = panel.current.getBoundingClientRect()
       let left = align === 'end' ? a.right - p.width : a.left
-      left = Math.max(8, Math.min(left, window.innerWidth - p.width - 8))
+      const vr = viewRight(), vb = viewBottom()
+      left = Math.max(8, Math.min(left, vr - p.width - 8))
       let top = a.bottom + 8
-      if (top + p.height > window.innerHeight - 8) top = Math.max(8, Math.min(a.top - p.height - 8, window.innerHeight - p.height - 8))
-      if (top + p.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - p.height - 8)
+      const bar = anchor.current.closest('.ed-toolbar-wrap')?.getBoundingClientRect()   // from a toolbar at the bottom, clear the whole bar, not just the button
+      if (top + p.height > vb - 8) top = Math.max(8, Math.min((bar ? bar.top : a.top) - p.height - 8, vb - p.height - 8))   // no room below (a bottom toolbar, or the keyboard): open upwards
+      if (top + p.height > vb - 8) top = Math.max(8, vb - p.height - 8)
       setPos((cur) => (cur && cur.top === top && cur.left === left ? cur : { top, left }))
     }
     place()

@@ -1,3 +1,4 @@
+import { viewBottom, viewRight } from '../ui/viewport'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
@@ -47,9 +48,9 @@ export function LinkHover({ editor }: { editor: Editor }) {
     if (!hit || !pill.current) { setPos(null); return }
     const p = pill.current.getBoundingClientRect(), r = hit.rect
     let left = r.left + r.width / 2 - p.width / 2
-    left = Math.max(8, Math.min(left, window.innerWidth - p.width - 8))
+    left = Math.max(8, Math.min(left, viewRight() - p.width - 8))
     let top = r.bottom + 8
-    if (top + p.height > window.innerHeight - 8) top = Math.max(8, r.top - p.height - 8)
+    if (top + p.height > viewBottom() - 8) top = Math.max(8, r.top - p.height - 8)
     setPos((c) => (c && c.left === left && c.top === top ? c : { left, top }))
   }, [hit, editing])
 

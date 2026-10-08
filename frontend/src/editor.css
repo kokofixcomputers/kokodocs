@@ -411,3 +411,18 @@ img.emoji { display: inline-block; height: 1.2em; width: 1.2em; vertical-align: 
 
 /* phones: while the keyboard is open, the editor fills only what is left above it */
 @media (pointer: coarse) { html.kb-open .editor-shell { height: var(--vv-h); transform: translateY(var(--vv-top, 0px)); } }
+
+/* phones: the formatting bar floats at the very bottom, right above the keyboard when it is open, and never takes focus from the page */
+@media (max-width: 720px) {
+  .ed-top { order: 0; } .ed-body { order: 1; } .ed-toolbar-wrap { order: 2; padding: 6px 8px calc(8px + env(safe-area-inset-bottom)); position: relative; z-index: 6; }
+  html.kb-open .ed-toolbar-wrap { padding-bottom: 6px; }
+  .ed-toolbar-wrap .toolbar { border-radius: 999px; box-shadow: 0 6px 22px rgba(0, 0, 0, .22); touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+  .toolbar > .tb-group.kb-hide { order: 0; }
+  html.kb-open .ed-right { display: none; }                  /* room for the page while typing: the actions come back when the keyboard closes */
+  html.kb-open .ed-top { padding-bottom: 6px; }
+  .voice-fab { bottom: calc(86px + var(--kb, 0px) + env(safe-area-inset-bottom)); }
+  .voice-pill { bottom: calc(86px + var(--kb, 0px) + env(safe-area-inset-bottom)); }
+  .stats-pill { bottom: calc(150px + var(--kb, 0px) + env(safe-area-inset-bottom)); }
+  html.kb-open .stats-pill { display: none; }
+}
+@media (max-width: 720px) { .wiki-body { order: 1; } .wiki-shell .ed-toolbar-wrap { order: 2; } }
