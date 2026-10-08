@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, Sparkles, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
-import { api, ApiError, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
+import { api, ApiError, type AiAdmin, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
 import { askConfirm, askText } from '../ui/Dialogs'
@@ -311,10 +311,20 @@ function VoiceSettings({ s, apply }: { s: AdminSettings; apply: (x: AdminSetting
   )
 }
 
+const NO_AI: AiAdmin = { url: '', model: '', key_set: false, enabled: true, env: { configured: false, url: '', model: '' }, active: { available: false, from: null, model: null }, people_own: 0 }
+
+/** The page can be newer than the server it talks to (the site files updated, the backend not yet, or not restarted). Fill in whatever an
+ *  older server leaves out so nothing crashes, and say that the server is behind. */
+function normalise(x: AdminSettings): { s: AdminSettings; behind: boolean } {
+  const behind = !x.ai || !x.stt || x.stt.loaded === undefined || x.stt.draft === undefined
+  return { behind, s: { ...x, ai: x.ai ?? NO_AI, stt: Object.assign({ draft: false, draft_model: null, loaded: [], idle_unload: false, idle_minutes: 3 }, x.stt ?? {}) as AdminSettings['stt'] } }
+}
+
 function useAdminSettings() {
-  const [s, setS] = useState<AdminSettings | null>(null)
-  useEffect(() => { api.adminSettings().then(setS).catch((e) => toast(e.message)) }, [])
-  return [s, setS] as const
+  const [state, setState] = useState<{ s: AdminSettings; behind: boolean } | null>(null)
+  useEffect(() => { api.adminSettings().then((x) => setState(normalise(x))).catch((e) => toast(e.message)) }, [])
+  const set = (x: AdminSettings) => setState(normalise(x))
+  return [state?.s ?? null, set, !!state?.behind] as const
 }
 
 function AccessSection({ s, apply }: { s: AdminSettings; apply: (x: AdminSettings) => void }) {
@@ -476,7 +486,7 @@ export function AdminPage() {
   const [sec, setSec] = useState<AdminSection>(fromHash)
   const [mobileList, setMobileList] = useState(() => !location.hash)
   const [owner, setOwner] = useState<AdminUser | null>(null)
-  const [s, setS] = useAdminSettings()
+  const [s, setS, behind] = useAdminSettings()
   useEffect(() => { const f = () => { setSec(fromHash()); setMobileList(!location.hash) }; window.addEventListener('hashchange', f); return () => window.removeEventListener('hashchange', f) }, [])
   if (!user?.is_admin) return <div className="splash"><p>Admins only.</p><Link to="/" className="btn btn-pill btn-ghost">Back to documents</Link></div>
   const open = (id: AdminSection) => { history.replaceState(null, '', `#${id}`); setSec(id); setMobileList(false); if (id !== 'files') setOwner(null) }
@@ -500,6 +510,7 @@ export function AdminPage() {
         <div className="ad-main-inner">
           <button className="ad-mback" onClick={() => setMobileList(true)}><ChevronLeft size={18} />Admin</button>
           <header className="ad-head"><h1>{cur.label}</h1><p>{cur.blurb}</p></header>
+          {behind && <div className="ad-warn" role="alert"><b>The server is older than this page.</b> It doesn't know about some newer settings (such as the assistant connection or live voice preview). Update the server files (the <code>backend</code> folder, not only the site) and restart it. Until then those settings show as empty and can't be saved.</div>}
           {sec === 'overview' && <Overview s={s} go={open} />}
           {sec === 'users' && <UsersTab onFiles={(u) => { setOwner(u); history.replaceState(null, '', '#files'); setSec('files') }} />}
           {sec === 'files' && <FilesTab owner={owner} clearOwner={() => setOwner(null)} />}

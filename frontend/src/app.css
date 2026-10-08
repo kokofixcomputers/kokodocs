@@ -545,3 +545,5 @@ a.brand { color: var(--ink); text-decoration: none; }
 .ai-source span { display: flex; flex-direction: column; gap: 2px; } .ai-source em { font-style: normal; font-size: 12.5px; color: var(--muted); } .ai-source code { font-size: 12px; }
 
 .ad-state { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 14px; } .ad-state i { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); } .ad-state i.on { background: #22c55e; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 22%, transparent); }
+
+.ad-warn { margin: 0 0 20px; padding: 12px 16px; border-radius: var(--r); background: color-mix(in srgb, #f59e0b 14%, var(--surface)); border: 1px solid color-mix(in srgb, #f59e0b 45%, var(--line)); font-size: 14px; line-height: 1.45; } .ad-warn code { font-size: 12.5px; }
