@@ -171,7 +171,7 @@ def list_docs(user=Depends(must_user), db=Depends(get_db)):
 class CreateDoc(BaseModel):
     title: str | None = Field(None, max_length=200)
     folder_id: str | None = None
-    kind: Literal["doc", "sheet", "slides", "form", "wiki"] = "doc"
+    kind: Literal["doc", "sheet", "slides", "form", "wiki", "board"] = "doc"
 
 
 @router.post("/docs")
@@ -183,7 +183,7 @@ def create_doc(body: CreateDoc, user=Depends(must_user), db=Depends(get_db)):
         folder = None
     db.execute(
         "INSERT INTO documents (id, owner_id, title, folder_id, kind, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-        (did, user["id"], (body.title or "").strip() or ({"sheet": "Untitled spreadsheet", "slides": "Untitled presentation", "form": "Untitled form", "wiki": "Untitled wiki"}.get(body.kind, "Untitled document")), folder, body.kind, now, now),
+        (did, user["id"], (body.title or "").strip() or ({"sheet": "Untitled spreadsheet", "slides": "Untitled presentation", "form": "Untitled form", "wiki": "Untitled wiki", "board": "Untitled board"}.get(body.kind, "Untitled document")), folder, body.kind, now, now),
     )
     return doc_summary(db.execute("SELECT * FROM documents WHERE id = ?", (did,)).fetchone(), "owner", user["name"])
 

@@ -51,6 +51,14 @@ def extract_text(blob: bytes | None, kind: str) -> str:
             desc = d.get("meta", type=Map).get("description")
             if isinstance(desc, str):
                 parts.append(desc)
+        elif kind == "board":
+            for col in d.get("cols", type=Map).values():
+                if isinstance(col, dict) and col.get("name"):
+                    parts.append(str(col["name"]))
+            for card in d.get("cards", type=Map).values():
+                if isinstance(card, dict):
+                    parts += [str(card.get(k)) for k in ("title", "desc") if card.get(k)]
+                    parts += [str(v) for v in (card.get("v") or {}).values() if isinstance(v, str)]
         elif kind == "wiki":
             for pid, ent in d.get("tree", type=Map).items():
                 if isinstance(ent, dict) and ent.get("title"):

@@ -13,7 +13,7 @@ export interface Storage { used: number; limit: number; documents: number; versi
 export interface StorageItem { id: string; title: string; kind: DocKind; trashed: boolean; text: number; versions: number; images: number; files: number; total: number }
 export interface StorageItems { items: StorageItem[]; unattached_images: number }
 export interface AdminStats { users: number; documents: number; spreadsheets: number; trashed: number; comments: number; versions: number; upload_bytes: number }
-export type DocKind = 'doc' | 'sheet' | 'slides' | 'form' | 'wiki'
+export type DocKind = 'doc' | 'sheet' | 'slides' | 'form' | 'wiki' | 'board'
 export type Role = 'owner' | 'manager' | 'editor' | 'viewer'
 export type LinkAccess = 'restricted' | 'anyone' | 'password'
 
