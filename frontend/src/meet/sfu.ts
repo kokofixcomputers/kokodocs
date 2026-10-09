@@ -213,7 +213,15 @@ export class SfuMedia extends Emitter implements Media {
     return { audio: p.audio, video: p.video, screen: p.screen, stream: r?.stream ?? null, screenStream: r?.screenStream ?? null, net, path: null }
   }
 
-  problem() { return this.error }
+  /** what is wrong right now, in words: the service's own error, else the state of the one connection, else what was (not) received */
+  problem() {
+    if (this.error) return this.error
+    const pc = this.pc
+    if (pc.connectionState !== 'connected') return `the connection to the call service is "${pc.connectionState}" (network "${pc.iceConnectionState}"), so nothing can be sent or received. A firewall or VPN may be blocking its UDP traffic`
+    const got = [...this.remotes.entries()].filter(([, r]) => !r.stream && !r.screenStream).map(([id, r]) => `${this.ctl.peers.get(id)?.name ?? id} (subscribed to ${this.pulled(id)} tracks)`)
+    return got.length ? `connected, but no audio or video arrived for ${got.join(', ')}` : ''
+  }
+  private pulled(id: string) { return [...this.byMid.values()].filter((m) => m.peer === id).length }
 
   level(id: string): number | null {
     const rx = this.remotes.get(id)?.mids.mic?.receiver
@@ -226,7 +234,9 @@ export class SfuMedia extends Emitter implements Media {
     if (this.error) out.push(`Last error: ${this.error}`)
     const stats = await this.pc.getStats().catch(() => null)
     stats?.forEach((s: any) => { if (s.type === 'transport' && s.selectedCandidatePairId) { const p = (stats as any).get(s.selectedCandidatePairId); if (p) out.push(`Selected path: ${p.currentRoundTripTime ? Math.round(p.currentRoundTripTime * 1000) + ' ms' : ''}, sent ${p.bytesSent ?? 0} B, received ${p.bytesReceived ?? 0} B`) } })
+    out.push(`Transceivers: ${pc_summary(this.pc)}`, `Signalling state: ${this.pc.signalingState}`, `Connection lines assigned to people: ${[...this.byMid.entries()].map(([m, v]) => `${m}=${names[v.peer] ?? v.peer}/${v.kind}`).join(', ') || 'none'}`)
     for (const [id, r] of this.remotes) out.push(`${names[id] ?? id}: session ${r.sid}, ${Object.keys(r.tracks).join(', ') || 'no tracks yet'}`)
+    const p = this.problem(); if (p) out.push(`Problem: ${p}`)
     return out.join('\n')
   }
 
@@ -286,4 +296,8 @@ export class SfuMedia extends Emitter implements Media {
     Object.values(this.ph).forEach((t) => t.stop())
     this.rebuild()
   }
+}
+
+function pc_summary(pc: RTCPeerConnection) {
+  return pc.getTransceivers().map((t) => `${t.mid ?? '-'}:${t.direction}/${t.currentDirection ?? '-'} ${t.receiver.track?.kind ?? ''}${t.receiver.track?.muted ? ' muted' : ''}`).join(' | ')
 }
