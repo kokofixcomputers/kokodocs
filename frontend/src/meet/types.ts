@@ -110,6 +110,8 @@ export interface Call {
   hand(up: boolean): void
   /** Try the connection to this person again. */
   retryPeer(id: string): void
+  /** A plain-text account of the connections and devices, to copy and send to whoever is helping. */
+  report(): Promise<string>
   /** How loud this person is right now (0 to 1), or null if the call can't tell. */
   level(id: string): number | null
   lowerHand(id: string | 'all'): void

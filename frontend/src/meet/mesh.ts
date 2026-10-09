@@ -106,6 +106,31 @@ export class MeshMedia extends Emitter implements Media {
     }, STUCK_MS)
   }
 
+  async report(names: Record<string, string>): Promise<string> {
+    const track = (t: MediaStreamTrack | null) => (t ? `${t.readyState}${t.muted ? ', muted' : ''}${t.enabled ? '' : ', disabled'}, ${t.label || 'unnamed device'}${t.kind === 'video' ? `, ${t.getSettings().width ?? '?'}x${t.getSettings().height ?? '?'}` : ''}` : 'off')
+    const out = [`Relay servers offered: ${this.ice.length ? this.ice.map((s) => [s.urls].flat().join(' ')).join(' | ') : 'none'}`, `Your microphone: ${track(this.audio)}`, `Your camera: ${track(this.video)}`, '']
+    for (const [id, l] of this.links) {
+      const stats = await l.pc.getStats().catch(() => null)
+      let local = '', remote = '', inA = 0, inV = 0, outA = 0, outV = 0, energy = 0
+      if (stats) {
+        const byId = new Map<string, any>()
+        stats.forEach((r) => byId.set(r.id, r))
+        const sel = [...byId.values()].find((r) => r.type === 'transport' && r.selectedCandidatePairId)
+        const pair = sel ? byId.get(sel.selectedCandidatePairId) : [...byId.values()].find((r) => r.type === 'candidate-pair' && r.state === 'succeeded')
+        if (pair) { const a = byId.get(pair.localCandidateId), b = byId.get(pair.remoteCandidateId); local = a ? `${a.candidateType}/${a.protocol}` : '?'; remote = b ? `${b.candidateType}/${b.protocol}` : '?' }
+        stats.forEach((r: any) => {
+          if (r.type === 'inbound-rtp') { if (r.kind === 'audio') { inA += r.bytesReceived; energy += r.totalAudioEnergy ?? 0 } else inV += r.bytesReceived }
+          if (r.type === 'outbound-rtp') { if (r.kind === 'audio') outA += r.bytesSent; else outV += r.bytesSent }
+        })
+      }
+      const kb = (n: number) => `${Math.round(n / 1000)} kB`
+      out.push(`${names[id] ?? id} (${l.initiator ? 'you called them' : 'they called you'}): ${l.pc.connectionState}, ice ${l.pc.iceConnectionState}, path ${local ? `${local} to ${remote}` : 'none yet'}, verdict ${this.net(id, l)}`)
+      out.push(`   they send you: audio ${kb(inA)} (energy ${energy.toFixed(2)}), video ${kb(inV)}   you send them: audio ${kb(outA)}, video ${kb(outV)}`)
+    }
+    for (const id of this.ctl.peers.keys()) if (!this.links.has(id)) out.push(`${names[id] ?? id}: no connection started (${this.waiting(id)})`)
+    return out.join('\n')
+  }
+
   /** The loudness of what the other person's microphone is sending, from the audio levels carried in the call itself. (Feeding a remote call into the browser's audio analysis does not work in Chrome.) */
   level(peerId: string): number | null {
     const l = this.links.get(peerId)

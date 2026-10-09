@@ -6,6 +6,7 @@ import { Popover } from '../ui/Popover'
 import { askConfirm } from '../ui/Dialogs'
 import { toast } from '../ui/Toast'
 import { ConsentModal } from './Consent'
+import { ReportDialog } from './ReportDialog'
 import { useAuth } from '../auth'
 import { DevicePicker } from './Devices'
 import { handsPipPref, setHandsPipPref, useHandsPip } from './HandsPip'
@@ -71,7 +72,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
   const [layout, setLayout] = useState<'gallery' | 'speaker'>('gallery')
   const [hideSelf, setHideSelf] = useState(false)
   const [showCaps, setShowCaps] = useState(true)
-  const [modal, setModal] = useState<null | 'settings' | 'keys' | 'devices' | 'record'>(null)
+  const [modal, setModal] = useState<null | 'settings' | 'keys' | 'devices' | 'record' | 'report'>(null)
   const [reask, setReask] = useState(false)
   const [permsFor, setPermsFor] = useState<Peer | null>(null)
   const [picker, setPicker] = useState<null | 'collab' | 'present'>(null)
@@ -209,6 +210,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
           <button onClick={go(() => { setHandsPipPref(!pipPref); setPipPref(!pipPref); toast(!pipPref ? 'Raised hands will pop out when you switch away. Reload the meeting to apply.' : 'Raised hands will stay in the meeting.') })}><Hand size={17} />{pipPref ? 'Stop popping out when I switch away' : 'Pop out when I switch away'}</button>
         </>)}
         <div className="menu-sep" />
+        <button onClick={go(() => setModal('report'))}><Info size={17} />Connection details</button>
         <button onClick={go(() => void copy())}><Info size={17} />Copy the invite</button>
         <button onClick={go(() => setModal('keys'))}><Keyboard size={17} />Keyboard shortcuts</button>
       </div>)
@@ -295,6 +297,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
       </footer>
 
       {pip.node}
+      {modal === 'report' && <ReportDialog call={call} onClose={() => setModal(null)} />}
       {picker && <SharePicker call={call} mode={picker} onClose={() => setPicker(null)} />}
       {permsFor && <PersonPerms call={call} peer={permsFor} onClose={() => setPermsFor(null)} />}
       {modal === 'settings' && <MeetingSettings code={code} call={call} onClose={() => setModal(null)} />}

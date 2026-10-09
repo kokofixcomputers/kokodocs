@@ -142,6 +142,16 @@ export class Session extends Emitter implements Call {
   // ---- what the person does
   retryPeer(id: string) { this.media?.retry?.(id) }
   level(id: string): number | null { return this.media?.level?.(id) ?? null }
+  async report(): Promise<string> {
+    const c = this.ctl, names = Object.fromEntries([...c.peers.values()].map((p) => [p.id, p.name]))
+    const head = [`KokoDocs meeting report, ${new Date().toISOString()}`, `Browser: ${navigator.userAgent}`, `Page: ${location.host}, secure ${window.isSecureContext}`,
+      `Meeting: ${this.code}, you are ${this.ticket.name}${c.me.owner ? ' (host)' : c.me.cohost ? ' (co-host)' : ''}, control channel ${c.status}, ${c.peers.size + 1} people`,
+      `What you may do: ${Object.entries(c.perms).map(([k, v]) => `${k} ${v ? 'yes' : 'NO'}`).join(', ')}`,
+      `Meeting defaults: unmute ${c.settings.unmute}, camera ${c.settings.camera}, mute on entry ${c.settings.mute_on_entry}, camera off on entry ${c.settings.cam_off_on_entry}`,
+      `What the others say about themselves: ${[...c.peers.values()].map((p) => `${p.name} mic ${p.audio ? 'on' : 'off'} camera ${p.video ? 'on' : 'off'}`).join('; ') || 'nobody else'}`, '']
+    const body = this.media?.report ? await this.media.report(names) : this.media ? '(this call provider has no detailed report)' : 'Audio and video have not started.'
+    return [...head, body].join('\n')
+  }
   async setMic(on: boolean) {
     if (on && !this.ctl.perms.mic) { this.notice("You can't unmute yourself in this meeting. Raise your hand to ask."); return }
     await this.media?.setMic(on)
