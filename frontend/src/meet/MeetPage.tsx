@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Clock, LockOpen, Mic, MicOff, Settings2, Video, VideoOff } from 'lucide-react'
+import { ArrowLeft, Clock, LockOpen, Mic, MicOff, Settings2, Video, VideoOff } from 'lucide-react'
 import { api, ApiError, type MeetInfo } from '../api'
 import { useAuth } from '../auth'
 import { Modal } from '../ui/Modal'
 import { toast } from '../ui/Toast'
+import { Logo } from '../ui/Logo'
 import { DevicePicker } from './Devices'
 import { InCall } from './InCall'
 import { Session } from './session'
@@ -17,8 +18,22 @@ export { parseMeetCode } from './util'
 const NAME_KEY = 'koko.meetname'
 const readName = () => { try { return localStorage.getItem(NAME_KEY) ?? '' } catch { return '' } }
 
+/** The page around everything before the call: a bar with the KokoDocs name and a way back, then the content. */
 function Shell({ children }: { children: React.ReactNode }) {
-  return <div className="meet-shell">{children}</div>
+  const nav = useNavigate()
+  const { user } = useAuth()
+  const back = () => { if (window.history.length > 1) nav(-1); else nav('/') }
+  return (
+    <div className="meet-page">
+      <header className="meet-site">
+        <button className="btn btn-ghost btn-pill btn-sm" onClick={back} aria-label="Go back"><ArrowLeft size={15} />Back</button>
+        <Link to="/" className="brand" aria-label="KokoDocs home"><Logo size={28} /><span>KokoDocs</span></Link>
+        <span className="grow" />
+        {!user && <Link to="/login" className="btn btn-soft btn-pill btn-sm">Sign in</Link>}
+      </header>
+      <div className="meet-shell">{children}</div>
+    </div>
+  )
 }
 
 function Notice({ title, text, children }: { title: string; text?: string; children?: React.ReactNode }) {
