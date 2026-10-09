@@ -506,8 +506,8 @@ An Electron window around your server with a custom title bar (traffic lights in
 ```bash
 cd desktop
 npm install
-npm start -- --server=https://docs.example.com    # or set KOKO_URL; otherwise it asks on first launch
+npm start
 npm run dist                                       # dmg / exe / AppImage in desktop/dist
 ```
 
-The address is remembered (File → Change server… to switch). Open it once while connected; after that it starts and works without a connection.
+The app is built for docs.kokodev.cc and the address can't be changed (change `SERVER` in `desktop/main.js` to build it for your own server; an unpackaged run can use `KOKO_DEV_URL` for testing). The first launch shows a short welcome walkthrough. Open it once while connected; after that it starts and works without a connection.

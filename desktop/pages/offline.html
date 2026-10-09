@@ -11,5 +11,5 @@ code{color:var(--muted);font-size:13px}
 </style></head><body><div class="drag"></div>
 <div class="card"><h1>Can’t reach KokoDocs</h1>
 <p>Open the app once while connected and it keeps a copy of everything on this computer, so it works offline from then on.</p>
-<code id="w"></code><div class="row"><button onclick="kokoSetup.retry()">Try again</button><button class="o" onclick="location='setup.html'">Change server</button></div></div>
+<code id="w"></code><div class="row"><button onclick="kokoSetup.retry()">Try again</button></div></div>
 <script>const q=new URLSearchParams(location.search);document.getElementById('w').textContent=(q.get('server')||'')+(q.get('why')?'  ·  '+q.get('why'):'')</script></body></html>

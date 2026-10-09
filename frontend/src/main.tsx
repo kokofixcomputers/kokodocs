@@ -23,7 +23,7 @@ import { SearchPalette } from './ui/Search'
 import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
 import { NetPill } from './ui/NetStatus'
-import { DesktopBar, installDesktop } from './ui/DesktopBar'
+import { DesktopBar, installDesktop, isDesktop } from './ui/DesktopBar'
 import { KeyboardFit } from './ui/KeyboardFit'
 import { UpdateNotice } from './ui/UpdateNotice'
 import { DecryptingPage } from './zk/Decrypting'
@@ -41,6 +41,7 @@ installZkImages()   // pictures in encrypted documents are decrypted here, as th
 function Root() {
   const { user, loading } = useAuth()
   if (loading) return <div className="splash"><span className="spinner" /></div>
+  if (!user && isDesktop()) return <Navigate to="/login" replace />   // the desktop app has no marketing page: it opens on sign-in
   return user ? <Dashboard /> : <Home />
 }
 

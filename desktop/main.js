@@ -10,13 +10,10 @@ const cfgFile = () => path.join(app.getPath('userData'), 'config.json')
 const readCfg = () => { try { return JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) } catch { return {} } }
 const writeCfg = (c) => { fs.mkdirSync(path.dirname(cfgFile()), { recursive: true }); fs.writeFileSync(cfgFile(), JSON.stringify(c)) }
 
-const arg = (n) => process.argv.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3)
-const normalize = (u) => {
-  let s = String(u || '').trim(); if (!s) return null
-  if (!/^https?:\/\//i.test(s)) s = (/^(localhost|127\.|\[::1\])/.test(s) ? 'http://' : 'https://') + s
-  try { const x = new URL(s); return x.origin } catch { return null }
-}
-let server = normalize(process.env.KOKO_URL || arg('server')) || normalize(readCfg().server)
+// The server is fixed: this app is for docs.kokodev.cc and can't be pointed anywhere else.
+// (Only an unpackaged development run can use KOKO_DEV_URL, to test against a local server.)
+const SERVER = 'https://docs.kokodev.cc'
+const server = (!app.isPackaged && process.env.KOKO_DEV_URL) || SERVER
 let win = null
 
 const themeBar = () => ({ color: nativeTheme.shouldUseDarkColors ? '#1b1b1f' : '#ffffff', symbolColor: nativeTheme.shouldUseDarkColors ? '#e6e6ea' : '#1a1a1e', height: BAR })
@@ -37,31 +34,31 @@ function createWindow() {
   win.on('leave-full-screen', () => win?.webContents.send('desktop:fullscreen', false))
   win.webContents.on('did-finish-load', () => win?.webContents.send('desktop:fullscreen', win.isFullScreen()))
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (server && new URL(url).origin === server) return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, titleBarStyle: 'default' } }   // the app's own pop-out windows
+    if (new URL(url).origin === server) return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, titleBarStyle: 'default' } }   // the app's own pop-out windows
     if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
   win.webContents.on('will-navigate', (e, url) => {
     if (url.startsWith('file:')) return
-    if (!server || new URL(url).origin !== server) { e.preventDefault(); if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url) }
+    if (new URL(url).origin !== server) { e.preventDefault(); if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url) }
   })
   // the page couldn't be loaded at all (first launch without a connection, wrong address, server down)
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => {
     if (!isMain || code === -3 /* aborted */) return
-    void win.loadFile(path.join(__dirname, 'pages', 'offline.html'), { query: { server: server || '', why: desc } })
+    void win.loadFile(path.join(__dirname, 'pages', 'offline.html'), { query: { server, why: desc } })
   })
   load()
 }
 
 function load() {
   if (!win) return
-  if (!server) void win.loadFile(path.join(__dirname, 'pages', 'setup.html'))
+  if (!readCfg().onboarded) void win.loadFile(path.join(__dirname, 'pages', 'setup.html'))   // first launch: the walkthrough
   else void win.loadURL(server)
 }
 
 function secure() {
   const allowed = new Set(['media', 'clipboard-read', 'clipboard-sanitized-write', 'notifications', 'fullscreen', 'display-capture', 'mediaKeySystem', 'speaker-selection', 'window-management'])
-  const ok = (wc, perm) => allowed.has(perm) && wc && (wc.getURL().startsWith('file:') || (server && wc.getURL().startsWith(server)))
+  const ok = (wc, perm) => allowed.has(perm) && wc && (wc.getURL().startsWith('file:') || wc.getURL().startsWith(server))
   session.defaultSession.setPermissionRequestHandler((wc, perm, cb) => cb(!!ok(wc, perm)))
   session.defaultSession.setPermissionCheckHandler((wc, perm) => !!ok(wc, perm))
   // screen sharing in meetings: the system's own picker where there is one, otherwise a menu of screens and windows
@@ -85,7 +82,6 @@ function buildMenu() {
     ...(isMac ? [{ role: 'appMenu' }] : []),
     { label: 'File', submenu: [
       { label: 'Search…', click: () => win?.webContents.executeJavaScript("window.dispatchEvent(new Event('koko:search'))") },   // (Cmd/Ctrl+K itself is handled by the page)
-      { label: 'Change server…', click: () => { server = null; load() } },
       { type: 'separator' }, isMac ? { role: 'close' } : { role: 'quit' },
     ] },
     { role: 'editMenu' },
@@ -103,18 +99,7 @@ function buildMenu() {
 }
 
 ipcMain.on('desktop:version', (e) => { e.returnValue = app.getVersion() })
-ipcMain.handle('setup:current', () => server || '')
-ipcMain.handle('setup:save', async (_e, input) => {
-  const u = normalize(input)
-  if (!u) return { ok: false, error: 'That doesn’t look like an address.' }
-  try {
-    const c = new AbortController(); const t = setTimeout(() => c.abort(), 8000)
-    const r = await fetch(`${u}/api/ping`, { signal: c.signal }); clearTimeout(t)
-    if (!r.ok || !(await r.json()).ok) throw new Error('not kokodocs')
-  } catch { return { ok: false, error: 'Couldn’t reach KokoDocs there. Check the address and your connection.' } }
-  server = u; writeCfg({ server }); load()
-  return { ok: true }
-})
+ipcMain.handle('setup:finish', () => { writeCfg({ ...readCfg(), onboarded: true }); load() })
 ipcMain.handle('setup:retry', () => { load() })
 
 if (!app.requestSingleInstanceLock()) app.quit()

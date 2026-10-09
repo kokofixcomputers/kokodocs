@@ -7,11 +7,10 @@ contextBridge.exposeInMainWorld('kokoDesktop', {
   fullscreen: (cb) => ipcRenderer.on('desktop:fullscreen', (_e, on) => cb(!!on)),
 })
 
-// the local setup and offline pages (not the website) can also choose the server
+// the local welcome and offline pages (not the website) can finish the walkthrough and retry
 if (location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('kokoSetup', {
-    current: () => ipcRenderer.invoke('setup:current'),
-    save: (url) => ipcRenderer.invoke('setup:save', url),
+    finish: () => ipcRenderer.invoke('setup:finish'),
     retry: () => ipcRenderer.invoke('setup:retry'),
   })
 }
