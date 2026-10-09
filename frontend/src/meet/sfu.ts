@@ -19,6 +19,9 @@ const STUCK_MS = 15000
 
 /** Metered's server refuses a description that repeats an `a=msid:` line (Safari writes some twice). Only the copy that is sent is changed: a repeat inside one
  *  media section, or the same line in a later section, is dropped. */
+/** a description from the call service, with repeated `a=msid:` lines removed (browsers refuse to read it otherwise) */
+function remote(d: RTCSessionDescriptionInit): RTCSessionDescriptionInit { return { type: d.type, sdp: d.sdp ? tidy(d.sdp) : d.sdp }  }
+
 export function tidy(sdp: string): string {
   const out: string[] = []
   const before = new Set<string>()   // lines of earlier media sections
@@ -128,7 +131,7 @@ export class SfuMedia extends Emitter implements Media {
       await pc.setLocalDescription(await pc.createOffer())
       const first = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: tidy(pc.localDescription!.sdp) } })
       this.sid = first.sessionId
-      await pc.setRemoteDescription(first.sessionDescription)
+      await pc.setRemoteDescription(remote(first.sessionDescription))
       for (const t of pc.getTransceivers()) if (t.mid) this.known.add(t.mid)
       at('adding your tracks')
       addSlots()
@@ -139,7 +142,7 @@ export class SfuMedia extends Emitter implements Media {
         op: 'publish', sessionDescription: { type: 'offer', sdp: tidy(pc.localDescription!.sdp) },
         tracks: this.slots.map((t, i) => ({ trackId: t.sender.track?.id, mid: t.mid, customTrackName: NAMES[i] })),
       })
-      await pc.setRemoteDescription(r.sessionDescription)
+      await pc.setRemoteDescription(remote(r.sessionDescription))
       this.known.clear()   // (mids are counted per connection: the receiving one starts fresh)
       at('opening the receiving session')
       const rx = this.rx = new RTCPeerConnection({ iceServers: this.ice, bundlePolicy: 'max-bundle' })
@@ -148,7 +151,7 @@ export class SfuMedia extends Emitter implements Media {
       await rx.setLocalDescription(await rx.createOffer())
       const second = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: tidy(rx.localDescription!.sdp) } })
       this.rxSid = second.sessionId
-      await rx.setRemoteDescription(second.sessionDescription)
+      await rx.setRemoteDescription(remote(second.sessionDescription))
       for (const t of rx.getTransceivers()) if (t.mid) this.known.add(t.mid)
     } else {
       at('creating the session')
@@ -160,7 +163,7 @@ export class SfuMedia extends Emitter implements Media {
         sessionDescription: { type: 'offer', sdp: tidy(pc.localDescription!.sdp) },
         tracks: this.slots.map((t, i) => ({ location: 'local', mid: t.mid, trackName: NAMES[i] })),
       })
-      await pc.setRemoteDescription(r.sessionDescription)
+      await pc.setRemoteDescription(remote(r.sessionDescription))
     }
     this.ready()
     this.announce(this.restarts.length ? [...this.ctl.peers.keys()] : this.ctl.welcomePeers, false)
@@ -263,7 +266,7 @@ export class SfuMedia extends Emitter implements Media {
               }
               if (r && r.sessionDescription && r.immediateRenegotiationRequired !== false) {
                 this.expect = { peer, kind }
-                try { await this.rx.setRemoteDescription(r.sessionDescription) } finally { this.expect = null }
+                try { await this.rx.setRemoteDescription(remote(r.sessionDescription)) } finally { this.expect = null }
                 await this.rx.setLocalDescription(await this.rx.createAnswer())
                 await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: tidy(this.rx.localDescription!.sdp) } })
               }
@@ -277,7 +280,7 @@ export class SfuMedia extends Emitter implements Media {
             this.code, this.jt, `${this.rxSid}/tracks`, 'POST', { tracks: NAMES.map((n) => ({ location: 'remote', sessionId: sid, trackName: n })) })
           for (const t of r.tracks ?? []) if (t.mid && !t.errorCode && NAMES.includes(t.trackName as Kind)) this.byMid.set(t.mid, { peer, kind: t.trackName as Kind })
           if (r.requiresImmediateRenegotiation && r.sessionDescription) {
-            await this.rx.setRemoteDescription(r.sessionDescription)
+            await this.rx.setRemoteDescription(remote(r.sessionDescription))
             await this.rx.setLocalDescription(await this.rx.createAnswer())
             await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: tidy(this.rx.localDescription!.sdp) } })
           }
