@@ -17,22 +17,27 @@ interface Remote { sid: string; tracks: Partial<Record<Kind, MediaStreamTrack>>;
 
 const STUCK_MS = 15000
 
-/** Metered's server refuses a description that repeats an `a=msid:` line (Safari writes some twice). Only the copy that is sent is changed: a repeat inside one
- *  media section, or the same line in a later section, is dropped. */
-/** a description from the call service, with repeated `a=msid:` lines removed (browsers refuse to read it otherwise) */
-function remote(d: RTCSessionDescriptionInit): RTCSessionDescriptionInit { return { type: d.type, sdp: d.sdp ? tidy(d.sdp) : d.sdp }  }
-
+/** Browsers and Metered's server both refuse a description that has a repeated `a=msid:` line, and Safari and Metered write some. This keeps one `a=msid:` per
+ *  media section (the first), and drops one whose track already appeared in an earlier section. Only the copy that is read or sent is changed. */
 export function tidy(sdp: string): string {
   const out: string[] = []
-  const before = new Set<string>()   // lines of earlier media sections
-  let mine = new Set<string>()
+  const tracks = new Set<string>()   // tracks of earlier media sections
+  let mine: string | null = null, mineTrack = ''
+  const close = () => { if (mineTrack) tracks.add(mineTrack); mine = null; mineTrack = '' }
   for (const l of sdp.split(/\r?\n/)) {
-    if (l.startsWith('m=')) { mine.forEach((x) => before.add(x)); mine = new Set() }
-    if (l.startsWith('a=msid:')) { if (mine.has(l) || before.has(l)) continue; mine.add(l) }
+    if (l.startsWith('m=')) close()
+    if (l.startsWith('a=msid:')) {
+      const track = l.slice(7).trim().split(/\s+/)[1] ?? l
+      if (mine !== null || tracks.has(track)) continue
+      mine = l; mineTrack = track
+    }
     out.push(l)
   }
   return out.join('\r\n')
 }
+
+/** a description from the call service, cleaned the same way before the browser reads it */
+function remote(d: RTCSessionDescriptionInit): RTCSessionDescriptionInit { return { type: d.type, sdp: d.sdp ? tidy(d.sdp) : d.sdp } }
 
 function silence(): MediaStreamTrack {
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
@@ -187,7 +192,7 @@ export class SfuMedia extends Emitter implements Media {
       window.clearTimeout(this.downTimer)
       if (c !== this.pc && c !== this.rx) return
       if (c.connectionState === 'failed') void this.restart()
-      else if (c.connectionState === 'disconnected') this.downTimer = window.setTimeout(() => { if (c.connectionState !== 'connected') void this.restart() }, 6000)
+      else if (c.connectionState === 'disconnected') this.downTimer = window.setTimeout(() => { if (c.connectionState !== 'connected') void this.restart() }, 15000)   // a short blip often heals by itself
     }
   }
 
@@ -315,11 +320,18 @@ export class SfuMedia extends Emitter implements Media {
   }
 
   /** what is wrong right now, in words: the service's own error, else the state of the one connection, else what was (not) received */
+  private lastNote = new Map<string, number>()
+  protected notice(m: string) {   // the same message again within half a minute isn't repeated
+    const now = Date.now()
+    if (now - (this.lastNote.get(m) ?? 0) < 30_000) return
+    this.lastNote.set(m, now); super.notice(m)
+  }
+
   problem() {
     if (this.error) return this.error
     const pc = this.pc
     for (const [n, c] of [['sending', pc], ['receiving', this.rx]] as const) if (c.connectionState !== 'connected') return `the ${n} connection to the call service is "${c.connectionState}" (network "${c.iceConnectionState}"), so nothing can be sent or received. A firewall or VPN may be blocking its UDP traffic`
-    const got = [...this.remotes.entries()].filter(([, r]) => !r.stream && !r.screenStream).map(([id, r]) => `${this.ctl.peers.get(id)?.name ?? id} (subscribed to ${this.pulled(id)} tracks)`)
+    const got = [...this.remotes.entries()].filter(([, r]) => !r.stream && !r.screenStream && Date.now() - r.since > 10_000).map(([id, r]) => `${this.ctl.peers.get(id)?.name ?? id} (subscribed to ${this.pulled(id)} tracks)`)
     return got.length ? `connected, but no audio or video arrived for ${got.join(', ')}` : ''
   }
   private pulled(id: string) { return [...this.byMid.values()].filter((m) => m.peer === id).length }
