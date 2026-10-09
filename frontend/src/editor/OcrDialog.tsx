@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { Cpu, ImagePlus, Sparkles } from 'lucide-react'
-import { api, type AiSettings } from '../api'
+import { api, type AiSettings, type OcrConfig } from '../api'
 import { Modal } from '../ui/Modal'
 import { Select } from '../ui/Select'
 import { toast } from '../ui/Toast'
-import { LANGS, describe, loadPrefs, prepare, savePrefs, type OcrPrefs } from '../ocr/ocr'
+import { LANGS, describe, hasPrefs, loadPrefs, prepare, savePrefs, type OcrPrefs } from '../ocr/ocr'
 import { findPage, flatten, type Pt } from '../ocr/page'
 import { openPhoto, readPhoto, type Photo } from '../ocr/read'
 import { docKeyOf } from '../zk/session'
@@ -45,6 +45,7 @@ function CropStep({ photo, quad, onQuad }: { photo: Photo; quad: Pt[]; onQuad: (
 export function OcrDialog({ editor, docId, onClose }: { editor: Editor; docId: string; onClose: () => void }) {
   const [prefs, setPrefs] = useState<OcrPrefs>(loadPrefs)
   const [ai, setAi] = useState<AiSettings | null>(null)
+  const [cfg, setCfg] = useState<OcrConfig | null>(null)   // the administrator's choices
   const [busy, setBusy] = useState(false)
   const [what, setWhat] = useState('')
   const [err, setErr] = useState('')
@@ -53,10 +54,12 @@ export function OcrDialog({ editor, docId, onClose }: { editor: Editor; docId: s
   const [quad, setQuad] = useState<Pt[] | null>(null)
   const pick = useRef<HTMLInputElement>(null)
   useEffect(() => { api.aiSettings().then(setAi).catch(() => setAi({ configured: false, models: [], selected: null })) }, [])
+  useEffect(() => { api.ocrConfig().then((c) => { setCfg(c); if (!hasPrefs() && c.default && (c.default === 'local' || c.available)) setPrefs((p) => ({ ...p, via: c.default as 'local' | 'ai' })) }).catch(() => {}) }, [])
   const set = (p: Partial<OcrPrefs>) => setPrefs((c) => { const n = { ...c, ...p }; savePrefs(n); return n })
   const models = ai?.models ?? []
-  const model = models.find((m) => m.id === prefs.model) ?? models.find((m) => m.id === ai?.selected) ?? models[0]
-  const canAi = !!ai?.configured
+  const locked = !!cfg?.locked && !!cfg.model
+  const model = locked ? models.find((m) => m.id === cfg!.model!.id) ?? { id: cfg!.model!.id, label: cfg!.model!.label, model: cfg!.model!.model } : models.find((m) => m.id === prefs.model) ?? models.find((m) => m.id === cfg?.model?.id) ?? models.find((m) => m.id === ai?.selected) ?? models[0]
+  const canAi = !!ai?.configured || !!cfg?.available
 
   const read = async (ph: Photo, q: Pt[] | null) => {
     setErr(''); setBusy(true)
@@ -121,6 +124,7 @@ export function OcrDialog({ editor, docId, onClose }: { editor: Editor; docId: s
           </div>
           {prefs.via === 'local'
             ? <div className="ocr-opt"><span>Language of the page</span><Select label="Language of the page" value={prefs.lang} onChange={(lang) => set({ lang })} options={LANGS.map((l) => ({ value: l.id, label: l.label }))} /></div>
+            : locked ? <div className="ocr-opt"><span>Read by</span><b style={{ color: 'var(--ink)' }}>{model?.label}</b></div>
             : model && <div className="ocr-opt"><span>Model</span><Select label="Model that reads the page" value={model.id} onChange={(id) => set({ model: id })} options={models.map((m) => ({ value: m.id, label: `${m.label}${m.model && m.model !== m.label ? ` (${m.model})` : ''}` }))} /></div>}
           <label className="zk-check"><input type="checkbox" checked={prefs.crop} disabled={busy} onChange={(e) => set({ crop: e.target.checked })} /> Let me adjust the page's edges first</label>
           {busy ? (

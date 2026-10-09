@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { OcrAdminSection } from './OcrAdmin'
 import { ComboInput } from '../ui/ComboInput'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Pencil, Plus, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, Search, Sparkles, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus, ChevronLeft, ChevronRight, Copy, Files, HardDrive, ExternalLink, FileText, Download, KeyRound, LayoutDashboard, Mail, Mic, ScanText, Search, Sparkles, ShieldCheck, ShieldOff, SlidersHorizontal, Table2, Trash2, UserX, UserCheck, Users } from 'lucide-react'
 import { api, ApiError, type AiAdmin, type AiAdminModel, type SsoAdmin, type SsoProvider, type SttModel, type SttModels, type AdminFile, type AdminSettings, type AdminStats, type AdminUser, type SttProvider } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
@@ -572,7 +573,7 @@ function Overview({ s, go }: { s: AdminSettings | null; go: (id: AdminSection) =
   )
 }
 
-type AdminSection = 'overview' | 'users' | 'files' | 'access' | 'email' | 'sso' | 'voice' | 'assistant'
+type AdminSection = 'overview' | 'users' | 'files' | 'access' | 'email' | 'sso' | 'voice' | 'assistant' | 'ocr'
 const SECTIONS: { id: AdminSection; label: string; icon: React.ReactNode; group: string; blurb: string }[] = [
   { id: 'overview', label: 'Overview', icon: <LayoutDashboard size={17} />, group: 'Manage', blurb: 'How much is on this server, and how it is set up.' },
   { id: 'users', label: 'Users', icon: <Users size={17} />, group: 'Manage', blurb: 'Accounts, storage limits, admins and two-factor resets.' },
@@ -581,6 +582,7 @@ const SECTIONS: { id: AdminSection; label: string; icon: React.ReactNode; group:
   { id: 'email', label: 'Email', icon: <Mail size={17} />, group: 'Configure', blurb: 'Confirmation codes, password resets and mention emails.' },
   { id: 'sso', label: 'Single sign-on', icon: <KeyRound size={17} />, group: 'Configure', blurb: 'Let people sign in with Google, GitHub or any OAuth 2.0 / OpenID Connect provider.' },
   { id: 'assistant', label: 'Assistant (Koko)', icon: <Sparkles size={17} />, group: 'Configure', blurb: 'The models Koko offers everyone. People can pick between them, and add their own.' },
+  { id: 'ocr', label: 'Scan a page', icon: <ScanText size={17} />, group: 'Configure', blurb: 'The vision model that reads photos of pages, and what it is told.' },
   { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'Configure', blurb: 'The speech provider, live preview, and models kept on this server.' },
 ]
 const fromHash = (): AdminSection => { const raw = location.hash.slice(1); const h = (raw === 'google' ? 'sso' : raw) as AdminSection; /* (#google was this section's old name) */ return SECTIONS.some((x) => x.id === h) ? h : 'overview' }
@@ -622,6 +624,7 @@ export function AdminPage() {
           {sec === 'email' && settingsBody((x) => <div className="ad-card ad-form"><EmailSettings s={x} apply={setS} /></div>)}
           {sec === 'sso' && settingsBody((x) => <SsoSection s={x} apply={setS} />)}
           {sec === 'assistant' && <AssistantSection />}
+          {sec === 'ocr' && <OcrAdminSection />}
           {sec === 'voice' && settingsBody((x) => <div className="ad-card ad-form"><VoiceSettings s={x} apply={setS} /></div>)}
         </div>
       </main>

@@ -67,6 +67,8 @@ export interface MentionSkip { email: string; reason: 'not_shared' }
 export interface Comment { anchor: Record<string, unknown> | null; id: string; parent_id: string | null; body: string; quote: string; resolved: boolean; created_at: number; user_id: string; author: string; mentions: string[] }
 export interface FormFileRef { id: string; name: string; size: number }
 export interface FormResponse { id: string; created_at: number; name: string | null; email: string | null; answers: Record<string, string | string[] | FormFileRef> }
+export interface OcrConfig { available: boolean; model: { id: string; label: string; model: string } | null; locked: boolean; default: '' | 'local' | 'ai' }
+export interface OcrAdmin { model_id: string; prompt: string; default_prompt: string; lock: boolean; default: '' | 'local' | 'ai'; models: { id: string; label: string; model: string; host: string }[] }
 export interface AiConversationInfo { id: string; title: string; created_at: number; updated_at: number }
 
 export class ApiError extends Error {
@@ -307,6 +309,10 @@ export const api = {
     fd.append('file', wav, 'speech.wav')
     return (await request<{ text: string }>(`/api/docs/${id}/transcribe/draft`, { method: 'POST', body: fd, signal }, id)).text
   },
+  ocrConfig: () => request<OcrConfig>('/api/ocr/config'),
+  adminOcr: () => request<OcrAdmin>('/api/admin/ocr'),
+  adminOcrSave: (b: Partial<{ model_id: string; prompt: string; lock: boolean; default: string }>) => request<OcrAdmin>('/api/admin/ocr', { method: 'PUT', ...json(b) }),
+  adminOcrTest: async (file: Blob) => { const fd = new FormData(); fd.append('file', file, 'test.jpg'); return request<{ text: string; model: string; ms: number }>('/api/admin/ocr/test', { method: 'POST', body: fd }) },
   /** Read the text in a photo with the chosen AI model (it has to be one that can see pictures). */
   ocr: async (file: Blob, modelId?: string) => {
     const fd = new FormData(); fd.append('file', file, 'page.jpg'); if (modelId) fd.append('model_id', modelId)

@@ -17,6 +17,8 @@ export function loadPrefs(): OcrPrefs {
   try { const p = JSON.parse(localStorage.getItem(KEY) ?? 'null'); if (p && (p.via === 'local' || p.via === 'ai')) return { via: p.via, lang: p.lang || 'eng', model: p.model || '', crop: !!p.crop } } catch { /* defaults */ }
   return { via: 'local', lang: 'eng', model: '', crop: false }
 }
+/** Has this person ever chosen a way to read? (If not, the administrator's default applies.) */
+export const hasPrefs = () => { try { return localStorage.getItem(KEY) !== null } catch { return true } }
 export const savePrefs = (p: OcrPrefs) => { try { localStorage.setItem(KEY, JSON.stringify(p)) } catch { /* not remembered */ } }
 
 /** A photo made ready to read: upright (phones store photos sideways with a flag), no bigger than needed, as a JPEG. `clean` also boosts contrast. */

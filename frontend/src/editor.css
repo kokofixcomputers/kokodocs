@@ -488,3 +488,6 @@ img.emoji.emoji-failed { width: auto; height: auto; font-size: 1em; color: inher
 .ocr-shade { fill: rgba(0, 0, 0, .5); } .ocr-quad { fill: none; stroke: var(--accent, #6366f1); stroke-linejoin: round; }
 .ocr-handle { fill: #fff; stroke: var(--accent, #6366f1); stroke-width: 4; cursor: grab; touch-action: none; } .ocr-handle:active { cursor: grabbing; }
 .ocr-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.ocr-prompt { font-weight: 400; width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; line-height: 1.5; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); resize: vertical; }
+.ocr-try { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 5%, var(--surface)); max-height: 340px; overflow: auto; }

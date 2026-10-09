@@ -442,6 +442,8 @@ In a document or wiki, the toolbar's **Scan a page** button lets you choose a ph
 
 How good is the on-device reader? On synthetic phone-style photos (a page on a desk, shaded, tilted, blurred, low resolution) the classic reader made 18% to 73% character errors on the harder ones, and this one 0% to 2%. Clean, well-lit pages were read perfectly by both. Real handwriting is not something it is built for: use the AI provider.
 
+**Admin: choose the vision model and what it is told.** Admin → **Scan a page** picks one of the models offered to everyone (it must be able to see pictures) and the instruction sent with every picture. The standard instruction tells it to reply with only the text shown, no introduction or description, Markdown only for real structure, and `NO_TEXT` if there is none; edit it freely or reset it. **Everyone uses this model** hides the model picker so Scan a page always uses the admin's model; **What Scan a page starts with** sets the default way (device or model) for people who haven't chosen yet. **Try it on a picture** runs the current settings on an image and shows the reply, the model and the time. API: `GET/PUT /api/admin/ocr`, `POST /api/admin/ocr/test`, `GET /api/ocr/config`.
+
 In an encrypted document the on-device choice just works. The AI provider choice asks first (once per session), since it sends the picture through the server.
 
 The readers' files live in `frontend/public/ocr` (copied by `npm run build` from `node_modules` and from `frontend/ocr-models`, which holds the two reading models and their alphabets and explains a trap: the alphabet files must have no trailing newline). It's about 50 MB on disk. Server test: `backend/tests/test_ocr.py`.
