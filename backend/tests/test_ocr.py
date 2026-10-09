@@ -55,7 +55,7 @@ call('POST', '/api/admin/ai/models', {'label': 'CF', 'base_url': 'https://api.cl
 _, lst = call('GET', '/api/ai/settings', None, U)
 cf = [x['id'] for x in lst['models'] if x['model'] == '@cf/x'][0]
 s, r = mp('/api/ocr', U, png_, {'model_id': cf})
-ok('a Cloudflare chat connection is refused for pictures', s == 422, s, r)
+ok('a Cloudflare connection is no longer refused for pictures', 'can\'t read pictures' not in json.dumps(r), s, r)
 
 # the administrator chooses the model and the instruction
 ok('people can\'t open the admin settings', call('GET', '/api/admin/ocr', None, U)[0] == 403)

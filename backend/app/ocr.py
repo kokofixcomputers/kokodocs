@@ -51,9 +51,9 @@ def clean(text: str) -> str:
 
 async def run_model(s: dict, data: bytes, ext: str, prompt: str) -> str:
     """Send one picture to one model with the instruction and return the text."""
-    if CF_NATIVE.match(s["base_url"].strip().rstrip("/")):
-        raise HTTPException(422, "This Cloudflare connection can't read pictures. Choose another model.")
-    base = await check_url(s["base_url"])
+    cf = CF_NATIVE.match(s["base_url"].strip().rstrip("/"))
+    # Workers AI vision models take pictures on Cloudflare's OpenAI-compatible endpoint (same token; not AI Gateway)
+    base = await check_url(f"{s['base_url'].strip().rstrip('/')}/v1" if cf else s["base_url"])
     url = f"data:{MIME[ext]};base64,{base64.b64encode(data).decode()}"
     dedicated = (urlparse(base).hostname == "api.mistral.ai") and "ocr" in s["model"].lower()   # Mistral's own OCR model has its own endpoint
     try:
