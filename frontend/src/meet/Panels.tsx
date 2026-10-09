@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { BarChart3, Check, Crown, Hand, MessageSquare, MicOff, MoreHorizontal, Plus, Send, Star, Trash2, UserCheck, UserX, X } from 'lucide-react'
+import { BarChart3, Check, Crown, Hand, MessageSquare, Mic, MicOff, MoreHorizontal, Pin, Plus, Send, Star, Trash2, UserCheck, UserX, VideoOff, X } from 'lucide-react'
 import { Popover } from '../ui/Popover'
+import { useContextMenu, type CtxItem } from '../ui/ContextMenu'
 import { Select } from '../ui/Select'
 import { askConfirm } from '../ui/Dialogs'
 import { hue, initials } from './util'
@@ -45,23 +46,34 @@ export function ChatPanel({ call, peers, to, setTo }: { call: Call; peers: Peer[
 
 // ───────────────────────────── people
 
-function PersonMenu({ call, p, onMessage, close }: { call: Call; p: Peer; onMessage: (id: string) => void; close: () => void }) {
+/** Everything that can be done to one person, for right-click on a tile or a row, and for the "..." button. Managers get the moderation actions. */
+export function personItems(call: Call, p: Peer, o: { onMessage: (id: string) => void; pin?: { pinned: boolean; toggle: () => void } }): CtxItem[] {
   const me = call.me()
-  const go = (f: () => void) => () => { close(); f() }
+  const items: CtxItem[] = []
+  if (o.pin) items.push({ label: o.pin.pinned ? 'Unpin' : 'Pin to the main view', icon: <Pin size={16} />, onClick: o.pin.toggle })
+  if (p.self) return items
+  items.push({ label: 'Message privately', icon: <MessageSquare size={16} />, onClick: () => o.onMessage(p.id) })
+  if (me.manager && !(p.host && !me.owner)) {
+    items.push({ sep: true })
+    items.push(p.audio ? { label: 'Mute', icon: <MicOff size={16} />, onClick: () => call.mute(p.id) } : { label: 'Ask to unmute', icon: <Mic size={16} />, onClick: () => call.askUnmute(p.id) })
+    if (p.video) items.push({ label: 'Turn off camera', icon: <VideoOff size={16} />, onClick: () => call.camOff(p.id) })
+    if (p.hand > 0) items.push({ label: 'Lower hand', icon: <Hand size={16} />, onClick: () => call.lowerHand(p.id) })
+    items.push({ label: call.spotlight() === p.id ? 'Remove spotlight' : 'Spotlight for everyone', icon: <Star size={16} />, onClick: () => call.spotlightTo(call.spotlight() === p.id ? null : p.id) })
+    if (me.owner && !p.host) items.push({ label: p.cohost ? 'Remove co-host' : 'Make co-host', icon: <Crown size={16} />, onClick: () => call.cohost(p.id, !p.cohost) })
+    if (!p.host && (!p.manager || me.owner)) {
+      items.push({ sep: true })
+      items.push({ label: 'Remove', icon: <UserX size={16} />, danger: true, onClick: () => void askConfirm({ title: `Remove ${p.name}?`, text: 'They are disconnected and can rejoin with the link.', label: 'Remove', danger: true }).then((y) => y && call.kick(p.id)) })
+      items.push({ label: 'Remove and block', icon: <UserX size={16} />, danger: true, onClick: () => void askConfirm({ title: `Remove and block ${p.name}?`, text: "They can't come back to this meeting session.", label: 'Remove and block', danger: true }).then((y) => y && call.kick(p.id, true)) })
+    }
+  }
+  return items
+}
+
+function ItemsMenu({ items, close }: { items: CtxItem[]; close: () => void }) {
   return (
     <div className="menu wide">
-      <button onClick={go(() => onMessage(p.id))}><MessageSquare size={16} />Message privately</button>
-      {me.manager && <>
-        {p.audio ? <button onClick={go(() => call.mute(p.id))}><MicOff size={16} />Mute</button> : <button onClick={go(() => call.askUnmute(p.id))}><MicOff size={16} />Ask to unmute</button>}
-        {p.hand > 0 && <button onClick={go(() => call.lowerHand(p.id))}><Hand size={16} />Lower hand</button>}
-        <button onClick={go(() => call.spotlightTo(call.spotlight() === p.id ? null : p.id))}><Star size={16} />{call.spotlight() === p.id ? 'Remove spotlight' : 'Spotlight for everyone'}</button>
-        {me.owner && !p.host && <button onClick={go(() => call.cohost(p.id, !p.cohost))}><Crown size={16} />{p.cohost ? 'Remove co-host' : 'Make co-host'}</button>}
-        {!p.host && (!p.manager || me.owner) && <>
-          <div className="menu-sep" />
-          <button className="danger" onClick={go(() => void askConfirm({ title: `Remove ${p.name}?`, text: 'They are disconnected and can rejoin with the link.', label: 'Remove', danger: true }).then((y) => y && call.kick(p.id)))}><UserX size={16} />Remove</button>
-          <button className="danger" onClick={go(() => void askConfirm({ title: `Remove and block ${p.name}?`, text: "They can't come back to this meeting session.", label: 'Remove and block', danger: true }).then((y) => y && call.kick(p.id, true)))}><UserX size={16} />Remove and block</button>
-        </>}
-      </>}
+      {items.map((it, i) => 'sep' in it ? <div key={i} className="menu-sep" /> : 'label' in it ? (
+        <button key={i} className={it.danger ? 'danger' : ''} onClick={() => { close(); it.onClick() }}>{it.icon}{it.label}</button>) : null)}
     </div>)
 }
 
@@ -84,17 +96,25 @@ export function PeoplePanel({ call, peers, onMessage }: { call: Call; peers: Pee
           {raised.map((p) => <div key={p.id} className="meet-person"><Avatar name={p.name} /><span className="name">{p.self ? `${p.name} (you)` : p.name}</span><span className="meet-hand-n"><Hand size={14} />{p.hand}</span></div>)}
         </section>)}
       <header className="meet-people-h"><b>In the meeting ({peers.length})</b></header>
-      {peers.map((p) => (
-        <div key={p.id} className="meet-person">
+      {peers.map((p) => <Row key={p.id} call={call} p={p} onMessage={onMessage} />)}
+    </div>
+  )
+}
+
+function Row({ call, p, onMessage }: { call: Call; p: Peer; onMessage: (id: string) => void }) {
+  const ctx = useContextMenu()
+  const items = () => personItems(call, p, { onMessage })
+  return (
+        <div className="meet-person" {...ctx.bind(items)}>
+          {ctx.node}
           <Avatar name={p.name} />
           <span className="name">{p.self ? `${p.name} (you)` : p.name}{p.host && <Crown size={13} aria-label="Host" />}{p.cohost && <Star size={13} aria-label="Co-host" />}</span>
           {!p.audio && <MicOff size={15} className="muted" />}
           {!p.self && (
             <Popover align="end" trigger={({ toggle }) => <button className="icon-btn sm" onClick={toggle} aria-label={`Options for ${p.name}`}><MoreHorizontal size={16} /></button>}>
-              {(close) => <PersonMenu call={call} p={p} onMessage={onMessage} close={close} />}
+              {(close) => <ItemsMenu items={items()} close={close} />}
             </Popover>)}
-        </div>))}
-    </div>
+        </div>
   )
 }
 

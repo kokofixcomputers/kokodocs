@@ -412,10 +412,10 @@ async def handle(room: Room, me: Peer, msg: dict) -> None:
             return
         await send_hands(room)
 
-    elif t in ("mute", "unmute-ask") and me.manager:
+    elif t in ("mute", "unmute-ask", "camoff") and me.manager:
         target = room.peers.get(str(msg.get("to")))
-        if target and target.id != me.id:
-            await send(target, {"t": "mute" if t == "mute" else "unmute-ask", "by": me.name})
+        if target and target.id != me.id and not (target.owner and not me.owner):   # a co-host can't mute the host
+            await send(target, {"t": {"mute": "mute", "unmute-ask": "unmute-ask", "camoff": "camoff"}[t], "by": me.name})
 
     elif t == "mute-all" and me.manager:
         room.settings["unmute"] = bool(msg.get("allow_unmute", True))

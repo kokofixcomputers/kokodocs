@@ -183,7 +183,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
 
       <div className="meet-body">
         <main className="meet-stage">
-          <Stage peers={peers} spotlight={call.spotlight()} layout={layout} hideSelf={hideSelf} />
+          <Stage call={call} peers={peers} spotlight={call.spotlight()} layout={layout} hideSelf={hideSelf} onMessage={(id) => { setChatTo(id); setPanel('chat') }} />
           {peers.length === 1 && <div className="meet-alone"><p>You're the only one here.</p><button className="btn btn-soft btn-pill btn-sm" onClick={copy}>{copied ? <Check size={15} /> : <Copy size={15} />}Copy the invite</button></div>}
           <Floaters call={call} />
           {capsOn && showCaps && recent.length > 0 && <div className="meet-caps" aria-live="polite">{recent.map((c) => <p key={c.id}><b>{c.name}</b> {c.text}</p>)}</div>}

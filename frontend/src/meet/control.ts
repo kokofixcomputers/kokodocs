@@ -40,6 +40,7 @@ export class Control extends Emitter {
   onNoticeFrom: ((m: string) => void) | null = null
   private forceFn: ((screen: boolean) => void) | null = null
   private muteFn: (() => void) | null = null
+  private camOffFn: (() => void) | null = null
 
   constructor(private code: string, private t: MeetTicket) {
     super()
@@ -53,6 +54,7 @@ export class Control extends Emitter {
   onLeft(fn: (id: string) => void) { this.leftFns.add(fn); return () => { this.leftFns.delete(fn) } }
   onForce(fn: (screen: boolean) => void) { this.forceFn = fn }
   onMute(fn: () => void) { this.muteFn = fn }
+  onCamOff(fn: () => void) { this.camOffFn = fn }
 
   send(m: object) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(m)) }
 
@@ -104,6 +106,7 @@ export class Control extends Emitter {
       case 'caption': this.captions = [...this.captions, { id: `${m.ts}-${m.from}`, from: m.from, name: m.name, text: m.text, ts: m.ts }].slice(-200); this.changed(); break
       case 'notice': this.onNoticeFrom?.(m.text); break
       case 'mute': this.muteFn?.(); this.onNoticeFrom?.(m.by ? `${m.by} muted you.` : 'You were muted.'); break
+      case 'camoff': this.camOffFn?.(); this.onNoticeFrom?.(m.by ? `${m.by} turned off your camera.` : 'Your camera was turned off.'); break
       case 'unmute-ask': this.onNoticeFrom?.(`${m.by || 'The host'} asked you to unmute.`); break
       case 'force': this.forceFn?.(m.screen); if (m.text) this.onNoticeFrom?.(m.text); break
       case 'kicked': this.finish(m.blocked ? 'blocked' : 'kicked'); break

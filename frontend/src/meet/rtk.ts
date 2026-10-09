@@ -36,6 +36,7 @@ export class RtkMedia extends Emitter implements Media {
     for (const p of joined.values()) this.watch(p as Part)
     this.ctl.onForce(() => this.stopScreen())
     this.ctl.onMute(() => void this.setMic(false))
+    this.ctl.onCamOff(() => void this.setCam(false))
     this.changed()
   }
 

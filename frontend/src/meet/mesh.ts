@@ -47,6 +47,7 @@ export class MeshMedia extends Emitter implements Media {
     this.ctl.onLeft((id) => { this.closeLink(id); this.changed() })
     this.ctl.onForce(() => this.stopScreen())
     this.ctl.onMute(() => void this.setMic(false))
+    this.ctl.onCamOff(() => void this.setCam(false))
     this.ctl.onWelcome(() => { this.dropLinks(); this.callEveryone() })   // the control channel reconnected: start over with whoever is here
     this.callEveryone()
   }

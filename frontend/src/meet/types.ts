@@ -70,6 +70,7 @@ export interface Call {
   send(text: string, to?: string): void
   mute(id: string): void
   askUnmute(id: string): void
+  camOff(id: string): void
   muteAll(allowUnmute: boolean): void
   kick(id: string, block?: boolean): void
   admit(id: string | 'all'): void

@@ -119,6 +119,7 @@ export class Session extends Emitter implements Call {
   send(text: string, to?: string) { if (text.trim()) this.ctl.send({ t: 'chat', text, ...(to ? { to } : {}) }) }
   mute(id: string) { this.ctl.send({ t: 'mute', to: id }) }
   askUnmute(id: string) { this.ctl.send({ t: 'unmute-ask', to: id }) }
+  camOff(id: string) { this.ctl.send({ t: 'camoff', to: id }) }
   muteAll(allowUnmute: boolean) { this.ctl.send({ t: 'mute-all', allow_unmute: allowUnmute }) }
   kick(id: string, block = false) { this.ctl.send({ t: 'kick', to: id, block }) }
   admit(id: string) { this.ctl.send(id === 'all' ? { t: 'admit', all: true } : { t: 'admit', id }) }

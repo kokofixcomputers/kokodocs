@@ -113,6 +113,8 @@ tx(g, t='mute', to=wh['me']['id']); tx(g, t='kick', to=wh['me']['id']); tx(g, t=
 ok('a guest cannot mute, remove, lock or spotlight', rx(h, 'mute', 0.5) is None and rx(h, 'kicked', 0.2) is None and rx(h, 'spotlight', 0.2) is None and rx(g, 'settings', 0.2) is None)
 tx(h, t='mute', to=wg['me']['id']); ok('the host can ask someone to mute', rx(g, 'mute') is not None)
 tx(h, t='unmute-ask', to=wg['me']['id']); ok('and ask them to unmute', rx(g, 'unmute-ask') is not None)
+tx(h, t='camoff', to=wg['me']['id']); ok('and turn their camera off', (rx(g, 'camoff') or {}).get('by') == 'Koko')
+tx(g, t='camoff', to=wh['me']['id']); ok('but a guest cannot turn anyone\'s camera off', rx(h, 'camoff', 0.4) is None)
 tx(h, t='spotlight', id=wg['me']['id']); sp = rx(g, 'spotlight'); ok('the host can spotlight someone, for everyone', sp and sp['id'] == wg['me']['id'], sp)
 tx(h, t='spotlight', id=None); ok('and clear it', (rx(g, 'spotlight') or {}).get('id') is None)
 
@@ -221,6 +223,7 @@ wl = rxp(wcat, 'waiting-list', lambda m: any(x['name'] == 'Zed' for x in m['list
 ok('a co-host can let people in', (rx(wz, 'welcome') or {}).get('t') == 'welcome')
 tx(wcat, t='cohost', to=wh['me']['id'], on=True); ok('but only the host can make co-hosts', rx(g, 'cohost', 0.4) is None)
 tx(wcat, t='kick', to=wh['me']['id']); ok('and a co-host cannot remove the host', rx(h, 'kicked', 0.4) is None)
+drain(h); tx(wcat, t='mute', to=wh['me']['id']); ok('or mute the host', rx(h, 'mute', 0.4) is None)
 
 # ---- host first
 s, hf = call('POST', '/api/meet', {'title': 'Host first', 'settings': {'host_first': True}}, A); fcode = hf['code']
