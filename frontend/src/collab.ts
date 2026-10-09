@@ -1,6 +1,7 @@
 import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import { getDocToken, getToken } from './api'
+import { clearDirty, isLocalNew, loadYState, markDirty, offlineOn, saveYState } from './offline/store'
 import { awarenessAad, decryptBlob, docKeyOf, encryptBlob, decryptUpdate, encryptUpdate } from './zk/session'
 
 const MSG_UPDATE = 0
@@ -45,6 +46,8 @@ const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.e
  *  state is exchanged both ways. Yjs merges the two histories, so nothing either side typed is lost and both end up identical.
  *  What this class adds is noticing quickly (browser offline events, a heartbeat for connections that die silently),
  *  reconnecting at once when the network returns, and saying what happened. */
+const LOCAL = 'local-store'   // origin of the state read back from this device: not a new edit, so it isn't counted as unsent
+
 export class KokoProvider {
   awareness: Awareness
   status: ConnStatus = 'connecting'
@@ -68,6 +71,8 @@ export class KokoProvider {
   private server: Y.Doc | null = null   // what the server is known to hold (decrypted here), so only what it lacks is sent
   private lastSeq = 0
   private sinceCheckpoint = 0
+  private saveTimer: number | undefined
+  private keep = false   // this document is also kept on this device
   private chain: Promise<void> = Promise.resolve()   // decrypting is asynchronous, but updates must be applied in the order they arrived
 
   constructor(public docId: string, public doc: Y.Doc, private readOnly: boolean) {
@@ -76,10 +81,32 @@ export class KokoProvider {
     doc.on('update', this.onDocUpdate)
     this.awareness.on('update', this.onAwarenessUpdate)
     window.addEventListener('beforeunload', this.onUnload)
+    window.addEventListener('pagehide', this.onHide)
     window.addEventListener('offline', this.onOffline)
     window.addEventListener('online', this.onOnline)
     document.addEventListener('visibilitychange', this.onVisible)
+    this.keep = !this.zkKey && offlineOn() && !getDocToken(docId)
+    if (this.keep) void this.restoreLocal()
     this.connect()
+  }
+
+  /** Offline copy: the document as last kept on this device is loaded first, so it opens and can be edited with no connection.
+   *  It merges with whatever the server sends (they are the same history, plus whatever each side added since). */
+  private async restoreLocal() {
+    const [saved, fresh] = await Promise.all([loadYState(this.docId), isLocalNew(this.docId)])
+    if (this.closed) return
+    if (saved?.length) { try { Y.applyUpdate(this.doc, saved, LOCAL) } catch { /* a damaged copy: the server's version is used */ } }
+    // without a connection, a document that is on this device is ready to use now (no waiting for a server that isn't there)
+    if (saved || fresh) window.setTimeout(() => { if (!this.synced && !this.closed && (fresh || this.ws?.readyState !== WebSocket.OPEN)) { this.synced = true; this.emit() } }, fresh ? 0 : 1200)
+  }
+  private scheduleSave() {
+    if (!this.keep) return
+    window.clearTimeout(this.saveTimer)
+    this.saveTimer = window.setTimeout(() => this.saveNow(), 700)
+  }
+  private saveNow() {
+    window.clearTimeout(this.saveTimer)
+    if (this.keep) void saveYState(this.docId, Y.encodeStateAsUpdate(this.doc))
   }
 
   subscribe(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn) } }
@@ -122,6 +149,7 @@ export class KokoProvider {
       if (this.awareness.getLocalState()) this.send(MSG_AWARENESS, encodeAwarenessUpdate(this.awareness, [this.doc.clientID]))
       this.everConnected = true
       this.pending = 0
+      if (this.keep) void clearDirty(this.docId)   // the full state was just sent
       this.setStatus('connected')
       this.commentsChanged()   // anything said while we were away
       this.startHeartbeat()
@@ -299,13 +327,14 @@ export class KokoProvider {
   }
 
   private onDocUpdate = (update: Uint8Array, origin: unknown) => {
+    if (origin !== LOCAL) { this.scheduleSave(); if (this.keep && !this.readOnly && origin !== this && this.ws?.readyState !== WebSocket.OPEN) void markDirty(this.docId) }
     if (origin === this || this.readOnly) return
     if (this.zkKey) {
       if (this.ws?.readyState !== WebSocket.OPEN || !this.synced) { this.pending++; this.announce(); return }   // kept in the doc; what the server lacks is sent when it is ready
       void this.zkSend(update)
       return
     }
-    if (this.ws?.readyState !== WebSocket.OPEN) { this.pending++; this.announce() }   // kept in the doc; sent in full when we reconnect
+    if (this.ws?.readyState !== WebSocket.OPEN && origin !== LOCAL) { this.pending++; this.announce() }   // kept in the doc; sent in full when we reconnect
     this.send(MSG_UPDATE, update)
   }
 
@@ -320,13 +349,16 @@ export class KokoProvider {
     else this.send(MSG_AWARENESS, encodeAwarenessUpdate(this.awareness, mine))
   }
 
+  private onHide = () => this.saveNow()
   private onUnload = () => removeAwarenessStates(this.awareness, [this.doc.clientID], 'unload')
 
   destroy() {
+    this.saveNow()
     this.closed = true
     window.clearTimeout(this.timer)
     this.stopHeartbeat()
     window.removeEventListener('beforeunload', this.onUnload)
+    window.removeEventListener('pagehide', this.onHide)
     window.removeEventListener('offline', this.onOffline)
     window.removeEventListener('online', this.onOnline)
     document.removeEventListener('visibilitychange', this.onVisible)

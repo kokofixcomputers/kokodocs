@@ -13,7 +13,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from . import access, quota, tagdb
@@ -129,6 +129,12 @@ def my_storage_items(user=Depends(must_user), db=Depends(get_db)):
     return quota.per_document(db, user["id"])
 
 
+@router.get("/ping")
+def ping():
+    """Is the server reachable? (The desktop app and the page check this while offline.)"""
+    return {"ok": True}
+
+
 @router.get("/auth/me")
 def me(user=Depends(must_user)):
     return public_user(user)
@@ -181,6 +187,7 @@ def list_docs(user=Depends(must_user), db=Depends(get_db)):
 
 
 class CreateDoc(BaseModel):
+    id: str | None = Field(None, pattern=r"^[0-9a-f]{16}$")   # chosen by the desktop app when it makes a document offline; creating it again later is harmless
     title: str | None = Field(None, max_length=200)
     folder_id: str | None = None
     kind: Literal["doc", "sheet", "slides", "form", "wiki", "board"] = "doc"
@@ -188,8 +195,14 @@ class CreateDoc(BaseModel):
 
 @router.post("/docs")
 def create_doc(body: CreateDoc, user=Depends(must_user), db=Depends(get_db)):
+    if body.id:
+        have = db.execute("SELECT * FROM documents WHERE id = ?", (body.id,)).fetchone()
+        if have:   # asked again (the first answer was lost, or the same offline queue ran twice): the same document, not a second one
+            if have["owner_id"] != user["id"]:
+                raise HTTPException(409, {"code": "exists", "message": "That id is taken"})
+            return doc_summary(have, "owner", user["name"])
     quota.check(db, user["id"], 0)
-    did, now = uuid.uuid4().hex[:16], time.time()
+    did, now = body.id or uuid.uuid4().hex[:16], time.time()
     folder = body.folder_id
     if folder and not db.execute("SELECT 1 FROM folders WHERE id = ? AND owner_id = ?", (folder, user["id"])).fetchone():
         folder = None
@@ -250,6 +263,17 @@ def get_doc(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
         "owner_email": owner["email"],
         "link": {"access": doc["link_access"], "role": "viewer" if doc["kind"] == "form" else doc["link_role"]},
     }
+
+
+@router.get("/docs/{doc_id}/state")
+def doc_state(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
+    """The whole document as one Yjs update: the desktop app and the offline copy download this to keep a local copy."""
+    from . import collab
+    doc, _ = access.require(db, doc_id, *c)
+    access.zk_unsupported(doc, "An offline copy")
+    room = collab.rooms.get(doc_id)
+    data = room.doc.get_update() if room else bytes(doc["ydoc"] or b"")
+    return Response(data, media_type="application/octet-stream", headers={"Cache-Control": "no-store"})
 
 
 class PatchDoc(BaseModel):

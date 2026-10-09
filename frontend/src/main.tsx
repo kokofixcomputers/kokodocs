@@ -22,6 +22,8 @@ import { Tooltips } from './ui/Tooltips'
 import { SearchPalette } from './ui/Search'
 import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
+import { NetPill } from './ui/NetStatus'
+import { DesktopBar, installDesktop } from './ui/DesktopBar'
 import { KeyboardFit } from './ui/KeyboardFit'
 import { UpdateNotice } from './ui/UpdateNotice'
 import { DecryptingPage } from './zk/Decrypting'
@@ -31,6 +33,7 @@ import { installZkImages } from './zk/images'
 import './app.css'
 import './editor.css'
 
+installDesktop()   // the Electron app marks the page so the layout leaves room for its title bar
 installEmojiRecovery()
 installZkImages()   // pictures in encrypted documents are decrypted here, as they appear
 
@@ -82,6 +85,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <SearchPalette />
         <ShortcutsSheet />
         <SyncNotices />
+        <NetPill />
+        <DesktopBar />
         <KeyboardFit />
         <SettingsHost />
         <DialogHost />
@@ -95,3 +100,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 // its own root: if a lazy-loaded file is gone the app below can crash outright, and the reload offer must outlive that
 const notice = document.createElement('div'); document.body.appendChild(notice)
 ReactDOM.createRoot(notice).render(<UpdateNotice />)
+
+// the app itself is kept on the device so it opens with no connection (documents are kept separately, see offline/)
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}) })
+}

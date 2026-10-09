@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, getToken, setToken, type User } from './api'
+import { startSync } from './offline/sync'
+import { forgetEverything } from './offline/store'
 import { hideBusy, showBusy, whileBusy } from './zk/busy'
 import { finishLogin, loginSecret, restoreSession, unlockWithPassword } from './zk/flows'
 import { zkErase, zkOnChange, zkUnlocked } from './zk/session'
@@ -38,7 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const me = await api.me()
         if (me.zk) { showBusy('Decrypting…', 'Opening your encryption keys'); try { await restoreSession(me) } finally { hideBusy() } }
         setUser(me)
-      } catch { setToken(null) } finally { setLoading(false) }
+      } catch (e) {
+        // no connection is not a reason to sign out: with a saved copy the app opens as usual
+        if ((e as { status?: number })?.status !== 0) setToken(null)
+      } finally { setLoading(false) }
     })()
   }, [])
 
@@ -75,7 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const r = await api.signup({ email, name, password })
     setToken(r.token); setUser(r.user)
   }, [])
-  const logout = useCallback(() => { setToken(null); setUser(null); pendingKek = null; void zkErase() }, [])
+  const logout = useCallback(() => { setToken(null); setUser(null); pendingKek = null; void zkErase(); void forgetEverything(); try { localStorage.removeItem('koko.zk') } catch { /* ignore */ } }, [])
+  useEffect(() => (user && !user.zk ? startSync() : undefined), [user?.id, user?.zk])   // eslint-disable-line react-hooks/exhaustive-deps
   const unlock = useCallback(async (password: string) => {
     if (!user) return
     await whileBusy('Decrypting…', () => unlockWithPassword(user, password), 'Opening your encryption keys')

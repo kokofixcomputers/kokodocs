@@ -1,4 +1,6 @@
 import { toast } from './ui/Toast'
+import { isOnline, setOnline } from './offline/net'
+import { addLocalDoc, cached, keepLists, keepPlain, offlineOn, outbox, renameLocal, searchLocal, setAccountZk } from './offline/store'
 import { importZkImage, uploadZkImage } from './zk/images'
 import { openConversation, openConversationTitle, sealConversation } from './zk/conversations'
 import { decorate, decorateAll, decryptComment, docKeyOf, encryptComment, encryptTitle, newDocKey, sealDocKeyForMe, setDocKey, zkNewEncrypted, zkUnlocked, type ZkFields } from './zk/session'
@@ -118,7 +120,13 @@ export async function request<T>(path: string, init: RequestInit = {}, docId?: s
   const dt = docId && getDocToken(docId)
   if (dt) headers.set('X-Doc-Token', dt)
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
-  const res = await fetch(path, { ...init, headers })
+  let res: Response
+  try { res = await fetch(path, { ...init, headers }) } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw e
+    setOnline(false)   // couldn't reach the server (as opposed to the server saying no): the offline copy takes over
+    throw new ApiError(0, 'offline', 'You’re offline.')
+  }
+  if (!isOnline()) setOnline(true)
   if (!res.ok) {
     let detail: any = null
     try { detail = (await res.json()).detail } catch { /* ignore */ }
@@ -174,8 +182,8 @@ export const api = {
   twofaDisable: (code: string) => request('/api/auth/2fa/disable', { method: 'POST', ...json({ code }) }),
   login: (b: { email: string; password: string }) =>
     request<LoginResult>('/api/auth/login', { method: 'POST', ...json(b) }),
-  me: () => request<User>('/api/auth/me'),
-  listDocs: async () => { const r = await request<{ mine: DocSummary[]; shared: DocSummary[] }>('/api/docs'); await Promise.all([decorateAll(r.mine), decorateAll(r.shared)]); return r },
+  me: async () => { const u = await cached('me', () => request<User>('/api/auth/me'), (u) => (u.zk ? (undefined as unknown as User) : u)); setAccountZk(!!u.zk); return u },
+  listDocs: () => cached('docs', async () => { const r = await request<{ mine: DocSummary[]; shared: DocSummary[] }>('/api/docs'); await Promise.all([decorateAll(r.mine), decorateAll(r.shared)]); return r }, keepLists),
   /** With encryption on, new documents are encrypted (forms can't be, and a person can ask for plain ones in Settings). */
   createDoc: async (title?: string, folder_id?: string | null, kind: DocKind = 'doc', opts: { plain?: boolean } = {}): Promise<DocSummary> => {
     if (zkUnlocked() && kind !== 'form' && zkNewEncrypted() && !opts.plain) {
@@ -185,10 +193,18 @@ export const api = {
       setDocKey(id, key)
       return decorate(r)
     }
-    return request<DocSummary>('/api/docs', { method: 'POST', ...json({ title: title ?? null, folder_id: folder_id ?? null, kind }) })
+    if (!offlineOn()) return request<DocSummary>('/api/docs', { method: 'POST', ...json({ title: title ?? null, folder_id: folder_id ?? null, kind }) })
+    // the id is chosen here, so the document can be made with no connection and created on the server later (creating the same id twice is harmless)
+    const id = Array.from(crypto.getRandomValues(new Uint8Array(8)), (x) => x.toString(16).padStart(2, '0')).join('')
+    const op = { op: 'create' as const, id, title: title ?? '', folder_id: folder_id ?? null, kind }
+    if (isOnline()) {
+      try { return await request<DocSummary>('/api/docs', { method: 'POST', ...json({ id, title: title ?? null, folder_id: folder_id ?? null, kind }) }) } catch (e) { if ((e as ApiError).status !== 0) throw e }
+    }
+    await outbox.push(op)
+    return addLocalDoc(op, (await cached<User>('me', () => request<User>('/api/auth/me')).catch(() => null))?.name ?? '')
   },
   moveDoc: (id: string, folder_id: string | null) => request(`/api/docs/${id}/move`, { method: 'POST', ...json({ folder_id }) }, id),
-  listFolders: () => request<Folder[]>('/api/folders'),
+  listFolders: () => cached('folders', () => request<Folder[]>('/api/folders')),
   createFolder: (name: string, parent_id: string | null) => request<Folder>('/api/folders', { method: 'POST', ...json({ name, parent_id }) }),
   colorFolder: (id: string, color: string | null) => request<Folder>(`/api/folders/${id}`, { method: 'PATCH', ...json({ color }) }),
   renameFolder: (id: string, name: string) => request<Folder>(`/api/folders/${id}`, { method: 'PATCH', ...json({ name }) }),
@@ -197,7 +213,7 @@ export const api = {
   getFolderSharing: (id: string) => request<FolderSharing>(`/api/folders/${id}/sharing`),
   putFolderSharing: (id: string, b: { shares: { email: string; role: string }[]; link_access: string; link_role: string }) =>
     request<FolderSharing>(`/api/folders/${id}/sharing`, { method: 'PUT', ...json(b) }),
-  listSharedFolders: () => request<SharedFolder[]>('/api/shared/folders'),
+  listSharedFolders: () => cached('sfolders', () => request<SharedFolder[]>('/api/shared/folders')),
   openSharedFolder: async (id: string) => { const r = await request<SharedFolderView>(`/api/shared/folders/${id}`); await decorateAll(r.docs); return r },
   listTrash: async () => { const r = await request<{ purge_days: number; docs: DocSummary[] }>('/api/trash'); await decorateAll(r.docs); return r },
   restoreDoc: (id: string) => request(`/api/docs/${id}/restore`, { method: 'POST' }),
@@ -207,12 +223,16 @@ export const api = {
   createVersion: (id: string, label?: string) => docKeyOf(id) ? Promise.reject(new Error('Version history isn\'t available in encrypted documents, because the server can\'t read them.')) : request<{ id: string }>(`/api/docs/${id}/versions`, { method: 'POST', ...json({ label: label ?? null }) }, id),
   renameVersion: (id: string, vid: string, label: string) => request(`/api/docs/${id}/versions/${vid}`, { method: 'PATCH', ...json({ label }) }, id),
   versionData: (id: string, vid: string) => requestBlob(`/api/docs/${id}/versions/${vid}/data`, id),
-  getDoc: async (id: string) => { const d = await request<DocInfo>(`/api/docs/${id}`, {}, id); return decorate(d) },
+  getDoc: (id: string) => cached(`doc:${id}`, async () => decorate(await request<DocInfo>(`/api/docs/${id}`, {}, id)), (d) => (d.zk || getDocToken(id) ? (undefined as unknown as DocInfo) : d)),
   /** Encrypted documents keep their title encrypted too. */
   renameDoc: async (id: string, title: string) => {
     const key = docKeyOf(id)
     if (key) return request(`/api/docs/${id}`, { method: 'PATCH', ...json({ zk_title: await encryptTitle(key, id, title || 'Untitled') }) }, id)
-    return request(`/api/docs/${id}`, { method: 'PATCH', ...json({ title }) }, id)
+    const send = () => request(`/api/docs/${id}`, { method: 'PATCH', ...json({ title }) }, id)
+    if (!offlineOn()) return send()
+    try { if (isOnline()) { const r = await send(); void renameLocal(id, title); return r } } catch (e) { if ((e as ApiError).status !== 0) throw e }
+    await outbox.push({ op: 'rename', id, title }); await renameLocal(id, title)
+    return { ok: true }
   },
   deleteDoc: (id: string) => request(`/api/docs/${id}`, { method: 'DELETE' }, id),
   getSharing: (id: string) => request<Sharing>(`/api/docs/${id}/sharing`, {}, id),
@@ -279,10 +299,14 @@ export const api = {
   deleteTag: (name: string) => request('/api/tags/delete', { method: 'POST', ...json({ name }) }),
   star: (id: string) => request(`/api/docs/${id}/star`, { method: 'PUT' }, id),
   unstar: (id: string) => request(`/api/docs/${id}/star`, { method: 'DELETE' }, id),
-  recent: async () => { const r = await request<DocSummary[]>('/api/recent?limit=8'); await decorateAll(r); return r },
+  recent: () => cached('recent', async () => { const r = await request<DocSummary[]>('/api/recent?limit=8'); await decorateAll(r); return r }, keepPlain),
   /** The server searches what it can read. Titles of encrypted documents are only readable here, so those are matched in the browser. */
   search: async (q: string, signal?: AbortSignal) => {
-    const hits = await request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`, { signal })
+    let hits: SearchHit[]
+    try { hits = await request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`, { signal }) } catch (e) {
+      if (!offlineOn() || (e as ApiError).status !== 0) throw e
+      return (await searchLocal(q)).map((d) => ({ id: d.id, title: d.title, kind: d.kind, owner: d.owner ?? '', updated_at: d.updated_at, title_match: true, snippet: '' }))   // offline: titles on this device
+    }
     if (!zkUnlocked()) return hits
     const needle = q.trim().toLowerCase(), seen = new Set(hits.map((h) => h.id))
     const { mine, shared } = await api.listDocs()

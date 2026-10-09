@@ -1,0 +1,49 @@
+{
+  "name": "kokodocs-desktop",
+  "version": "1.0.0",
+  "description": "KokoDocs for Mac, Windows and Linux: the web app in its own window, with an offline copy of everything.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "cc.kokodev.kokodocs",
+    "productName": "KokoDocs",
+    "files": [
+      "main.js",
+      "preload.js",
+      "pages/**",
+      "icon.png"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "extendInfo": {
+        "NSCameraUsageDescription": "KokoDocs uses the camera in meetings.",
+        "NSMicrophoneUsageDescription": "KokoDocs uses the microphone in meetings and for voice typing."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office"
+    }
+  }
+}

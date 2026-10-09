@@ -488,3 +488,26 @@ How good is the on-device reader? On synthetic phone-style photos (a page on a d
 In an encrypted document the on-device choice just works. The AI provider choice asks first (once per session), since it sends the picture through the server.
 
 The readers' files live in `frontend/public/ocr` (copied by `npm run build` from `node_modules` and from `frontend/ocr-models`, which holds the two reading models and their alphabets and explains a trap: the alphabet files must have no trailing newline). It's about 50 MB on disk. Server test: `backend/tests/test_ocr.py`.
+
+## Desktop app and offline copy
+
+KokoDocs keeps a copy of everything on the device and works with no connection, in the browser and in the desktop app.
+
+- **What is kept:** the app itself (a service worker), your document and folder lists, every document's content, and recent items. After signing in, a background job downloads everything you can open (shown as "Saving offline copy 3/12" in the title bar) and refreshes only what changed.
+- **Offline:** open, search titles, edit anything, create new documents and rename them. Edits are saved on the device as you type.
+- **Coming back online:** documents merge with whatever others changed (Yjs, so edits combine rather than overwrite), new documents are created on the server with the same id, renames are replayed in order, and you get a note saying what was sent.
+- **Not kept:** zero-knowledge (encrypted) accounts and documents, and password-protected links. The server can't read them and nothing readable is written to disk. Signing out erases the offline copy. A person can turn it off with `localStorage['koko.offline'] = 'off'`.
+- Needs a secure origin (https, or localhost) for the service worker.
+
+### The desktop app (`desktop/`)
+
+An Electron window around your server with a custom title bar (traffic lights inset on macOS, native window buttons on Windows and Linux), back/forward, a search button (also Cmd/Ctrl+K), and an offline/sync status chip. It also handles screen sharing in meetings, camera and microphone permission, and opens outside links in the browser.
+
+```bash
+cd desktop
+npm install
+npm start -- --server=https://docs.example.com    # or set KOKO_URL; otherwise it asks on first launch
+npm run dist                                       # dmg / exe / AppImage in desktop/dist
+```
+
+The address is remembered (File → Change server… to switch). Open it once while connected; after that it starts and works without a connection.
