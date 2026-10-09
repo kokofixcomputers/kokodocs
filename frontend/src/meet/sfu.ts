@@ -53,6 +53,7 @@ export class SfuMedia extends Emitter implements Media {
   private byMid = new Map<string, { peer: string; kind: Kind }>()
   private chain: Promise<void> = Promise.resolve()   // pulling tracks changes the one connection, so one at a time
   private stopped = false
+  private failed = new Set<string>()   // people whose tracks could not be fetched
   private error = ''
 
   constructor(private ctl: Control, private code: string, private jt: string, ice: RTCIceServer[], local: LocalTracks, private dialect: 'cloudflare' | 'metered' = 'cloudflare') {
@@ -128,6 +129,7 @@ export class SfuMedia extends Emitter implements Media {
   }
 
   private pull(peer: string, sid: string, ids: Ids) {
+    this.failed.delete(peer)
     this.remotes.set(peer, { sid, tracks: {}, stream: null, screenStream: null, since: Date.now(), mids: {} })
     window.setTimeout(() => { if (!this.stopped) this.changed() }, STUCK_MS + 100)
     this.chain = this.chain.then(async () => {
@@ -156,7 +158,10 @@ export class SfuMedia extends Emitter implements Media {
             await api.meetSfu(this.code, this.jt, `${this.sid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.pc.localDescription!.sdp } })
           }
         }
-      } catch (e) { this.error = (e as Error).message; this.remotes.delete(peer); this.changed() }
+      } catch (e) {
+        this.error = (e as Error).message; this.failed.add(peer); this.remotes.delete(peer); this.changed()
+        this.notice(`Couldn't receive ${this.ctl.peers.get(peer)?.name ?? 'someone'}'s audio and video: ${this.error}`)
+      }
     })
   }
 
@@ -178,7 +183,7 @@ export class SfuMedia extends Emitter implements Media {
   peer(p: CPeer): MediaView | null {
     const r = this.remotes.get(p.id)
     const up = this.pc.connectionState
-    const net = up === 'failed' || up === 'closed' ? 'failed' : r?.stream || r?.screenStream ? 'connected' : r && Date.now() - r.since > STUCK_MS ? 'failed' : 'connecting'
+    const net = up === 'failed' || up === 'closed' || this.failed.has(p.id) ? 'failed' : r?.stream || r?.screenStream ? 'connected' : r && Date.now() - r.since > STUCK_MS ? 'failed' : 'connecting'
     return { audio: p.audio, video: p.video, screen: p.screen, stream: r?.stream ?? null, screenStream: r?.screenStream ?? null, net, path: null }
   }
 

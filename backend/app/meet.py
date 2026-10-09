@@ -406,7 +406,10 @@ class MeteredSfu:
         if r.status_code in (401, 403):
             raise HTTPException(502, "Metered rejected the app secret. Check the app id and secret of the SFU app.")
         if r.status_code >= 400:
-            raise HTTPException(502, f"Metered returned an error ({r.status_code}).")
+            why = (j.get("message") or j.get("error") or j.get("detail") or "") if isinstance(j, dict) else ""
+            why = str(why or r.text)[:300]
+            print(f"Metered SFU {method} {path} -> {r.status_code}: {r.text[:500]}", flush=True)   # in the server log, for whoever sets this up
+            raise HTTPException(502, f"Metered returned an error ({r.status_code}){': ' + why if why else ''}")
         return j if isinstance(j, dict) else {"items": j}
 
     @staticmethod
