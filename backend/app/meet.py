@@ -48,6 +48,12 @@ TICKET_HOURS = 6
 CF_API = os.environ.get("KOKO_CF_API", "https://api.cloudflare.com/client/v4")          # overridable so tests can use a mock
 TURN_API = os.environ.get("KOKO_TURN_API", "https://rtc.live.cloudflare.com/v1/turn/keys")
 STUN_DEFAULT = "stun:stun.cloudflare.com:3478"
+try:   # a hardcoded test relay, if the (git-ignored) file is there
+    from .turn_test import ICE as TEST_ICE
+except ImportError:
+    TEST_ICE = []
+if os.environ.get("KOKO_NO_TEST_TURN"):
+    TEST_ICE = []
 
 
 def new_code() -> str:
@@ -101,7 +107,7 @@ def _usable(urls) -> list[str]:
 
 
 async def ice_servers(c: dict) -> list[dict]:
-    base = [{"urls": [STUN_DEFAULT]}]
+    base = [{"urls": [STUN_DEFAULT]}, *TEST_ICE]
     if c["turn_mode"] == "cloudflare" and c["turn_key_id"] and c["turn_token"]:
         hit = _ice_cache.get(c["turn_key_id"])
         if hit and hit[0] > time.time():

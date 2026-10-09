@@ -12,3 +12,6 @@ frontend/src/generated/
 .DS_Store
 .env
 *.log
+
+# temporary hardcoded relay credentials (never commit)
+backend/app/turn_test.py

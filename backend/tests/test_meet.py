@@ -1,5 +1,5 @@
 """Meetings: rooms, guests, passcodes, the waiting room, co-hosts, reactions, polls, permanent meetings, and both providers (RealtimeKit and TURN against a mock
-Cloudflare). Needs the server on :8000 with a fresh data dir, started with KOKO_CONSENT_GRACE=2 KOKO_RECORDER_GRACE=1 KOKO_SHARE_GRACE=1 KOKO_CF_API=http://127.0.0.1:8767/client/v4 KOKO_TURN_API=http://127.0.0.1:8767/v1/turn/keys"""
+Cloudflare). Needs the server on :8000 with a fresh data dir, started with KOKO_NO_TEST_TURN=1 KOKO_CONSENT_GRACE=2 KOKO_RECORDER_GRACE=1 KOKO_SHARE_GRACE=1 KOKO_CF_API=http://127.0.0.1:8767/client/v4 KOKO_TURN_API=http://127.0.0.1:8767/v1/turn/keys"""
 import json, os, re, sys, threading, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from websockets.sync.client import connect as wsconnect
