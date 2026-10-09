@@ -67,8 +67,19 @@ export interface MentionSkip { email: string; reason: 'not_shared' }
 export interface Comment { anchor: Record<string, unknown> | null; id: string; parent_id: string | null; body: string; quote: string; resolved: boolean; created_at: number; user_id: string; author: string; mentions: string[] }
 export interface FormFileRef { id: string; name: string; size: number }
 export interface FormResponse { id: string; created_at: number; name: string | null; email: string | null; answers: Record<string, string | string[] | FormFileRef> }
-export interface MeetInfo { code: string; title: string; host_name: string; is_host: boolean; ended: boolean; guests: boolean; provider: string; created_at: number; signed_in?: boolean; can_join?: boolean }
-export interface MeetJoin { provider: 'mesh' | 'realtimekit'; name: string; host: boolean; title: string; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
+export interface MeetSettings {
+  approval: boolean; host_first: boolean; guests: boolean; mute_on_entry: boolean; cam_off_on_entry: boolean
+  chat: 'all' | 'host' | 'off'; share: 'all' | 'host'; reactions: boolean; unmute: boolean; captions: boolean; max: number
+}
+export interface MeetInfo {
+  code: string; title: string; host_name: string; is_host: boolean; ended: boolean; permanent: boolean; guests: boolean; has_passcode: boolean; approval: boolean
+  provider: string; created_at: number; live: number; signed_in?: boolean; can_join?: boolean
+  settings?: MeetSettings; passcode?: string   // only the host sees these
+}
+export interface MeetTicket { jt: string; cid: string; name: string; host: boolean; title: string; provider: 'mesh' | 'realtimekit'; permanent: boolean }
+export interface MeetMedia { provider: 'mesh' | 'realtimekit'; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
+export interface MeetCreate { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings> }
+export interface MeetEdit { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings> }
 export interface MeetAdmin {
   enabled: boolean; guests: boolean; provider: string; providers: { id: string; label: string }[]; problem: string | null
   turn: { mode: 'none' | 'cloudflare' | 'custom'; key_id: string; token_set: boolean; urls: string; user: string; pass_set: boolean }
@@ -321,12 +332,16 @@ export const api = {
     fd.append('file', wav, 'speech.wav')
     return (await request<{ text: string }>(`/api/docs/${id}/transcribe/draft`, { method: 'POST', body: fd, signal }, id)).text
   },
-  meetConfig: () => request<{ enabled: boolean; guests: boolean }>('/api/meet/config'),
-  meetCreate: (title: string, guests: boolean) => request<MeetInfo>('/api/meet', { method: 'POST', ...json({ title, guests }) }),
+  meetConfig: () => request<{ enabled: boolean; guests: boolean; captions: boolean }>('/api/meet/config'),
+  meetCreate: (b: MeetCreate) => request<MeetInfo>('/api/meet', { method: 'POST', ...json(b) }),
   meetMine: () => request<MeetInfo[]>('/api/meet'),
   meetInfo: (code: string) => request<MeetInfo>(`/api/meet/${encodeURIComponent(code)}`),
-  meetJoin: (code: string, name: string) => request<MeetJoin>(`/api/meet/${encodeURIComponent(code)}/join`, { method: 'POST', ...json({ name }) }),
-  meetEnd: (code: string) => request<{ ok: true }>(`/api/meet/${encodeURIComponent(code)}/end`, { method: 'POST' }),
+  meetEdit: (code: string, b: MeetEdit) => request<MeetInfo>(`/api/meet/${encodeURIComponent(code)}`, { method: 'PUT', ...json(b) }),
+  meetDelete: (code: string) => request<{ ok: true }>(`/api/meet/${encodeURIComponent(code)}`, { method: 'DELETE' }),
+  meetJoin: (code: string, name: string, passcode = '') => request<MeetTicket>(`/api/meet/${encodeURIComponent(code)}/join`, { method: 'POST', ...json({ name, passcode }) }),
+  meetMedia: (code: string, jt: string) => request<MeetMedia>(`/api/meet/${encodeURIComponent(code)}/media`, { method: 'POST', ...json({ jt }) }),
+  meetEnd: (code: string) => request<{ ok: true; permanent: boolean }>(`/api/meet/${encodeURIComponent(code)}/end`, { method: 'POST' }),
+  meetCaption: (code: string, jt: string, wav: Blob) => { const fd = new FormData(); fd.append('jt', jt); fd.append('file', wav, 'speech.wav'); return request<{ text: string }>(`/api/meet/${encodeURIComponent(code)}/caption`, { method: 'POST', body: fd }) },
   adminMeet: () => request<MeetAdmin>('/api/admin/meet'),
   adminMeetSave: (b: MeetAdminIn) => request<MeetAdmin>('/api/admin/meet', { method: 'PUT', ...json(b) }),
   adminMeetTest: () => request<{ ok: boolean; message: string; turn?: boolean }>('/api/admin/meet/test', { method: 'POST' }),

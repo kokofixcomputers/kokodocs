@@ -1,46 +1,53 @@
-"""Video and voice meetings.
+"""Video and voice meetings: rooms, settings, tickets and the providers that carry the audio and video.
 
-A meeting is just a room with a link (/m/<code>) and a host. What carries the audio and video is a *provider*, chosen by the administrator and
-remembered on each meeting, so switching provider later never breaks a meeting that is already running:
+A meeting is a room with a link (/m/<code>) and a host. It is either one-off (it ends when the host ends it, or after a week of nobody using it) or
+permanent (it stays on the host's account with its code and settings; "ending" it only closes the session that is running, and the next person to
+arrive starts a new one).
 
-  mesh         Browsers connect to each other directly (WebRTC). This server only introduces them (a signalling WebSocket) and hands out STUN/TURN
-               servers, so no media passes through it. Cloudflare's free TURN service (or any TURN server) relays for people behind strict
-               networks. Good for small groups (up to ~8 people); it costs the server nothing.
-  realtimekit  Cloudflare RealtimeKit: this server creates the meeting and a token per person through Cloudflare's REST API; their SDK in the
-               browser does the rest. Scales to bigger rooms; billed by Cloudflare per participant-minute.
+Everything that is not audio or video (the waiting room, reactions, raised hands, polls, co-hosts, spotlight, chat, captions) goes through one control
+WebSocket per person (meetroom.py), for every provider. What carries the audio and video is a *provider*, chosen by the administrator and remembered on
+each meeting, so switching later never breaks a meeting that is already running:
 
-A new provider is one class here (`join`, `end`, `problem`, `test`) plus one adapter in frontend/src/meet/. Calls are not end-to-end encrypted
-(the server or the provider sees the signalling, and RealtimeKit sees the media), and the meeting page says so.
+  mesh         Browsers connect to each other directly (WebRTC). This server only introduces them and hands out STUN/TURN servers, so no media passes
+               through it. Cloudflare's free TURN service (or any TURN server) relays for people behind strict networks. Up to 8 people; costs nothing.
+  realtimekit  Cloudflare RealtimeKit: this server creates the meeting and a token per person through Cloudflare's REST API; their SDK in the browser
+               does the rest. Bigger rooms; billed by Cloudflare per participant-minute.
+
+Joining is two steps so that approval can't be skipped: a *ticket* (a short-lived signed token, issued after the meeting's checks such as the passcode)
+opens the control socket, where the host's waiting room decides; only once admitted does the person ask for *media credentials* (/media), which this
+server hands out only to people who are in the room. A new provider is one class here (`creds`, `end`, `problem`, `test`) plus one adapter in
+frontend/src/meet/. Calls are not end-to-end encrypted, and the meeting page says so.
 """
-import asyncio
 import json
 import os
 import secrets
 import time
-from dataclasses import dataclass, field
-from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+import jwt
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from typing import Literal
 
-from . import access
-from .db import connect, get_db, settings_get, settings_set
+from . import access, stt
+from .db import get_db, settings_get, settings_set
 from .routes import must_admin, must_user, current_user
-from .security import RateLimiter, decrypt_secret, encrypt_secret
+from .security import ALGO, SECRET, RateLimiter, decrypt_secret, encrypt_secret
 
 router = APIRouter(prefix="/api")
-ws_router = APIRouter()
-create_limiter = RateLimiter(20, 3600)
+create_limiter = RateLimiter(30, 3600)
 join_limiter = RateLimiter(60, 60)
+caption_limiter = RateLimiter(40, 60)
 
 CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"   # no look-alikes (i l o 0 1)
 MESH_MAX = 8
+RTK_MAX = 100
+MAX_PERMANENT = 25
+ONE_OFF_TTL = 7 * 86400    # a one-off meeting nobody has used for a week expires; make it permanent to keep it
+TICKET_HOURS = 6
 CF_API = os.environ.get("KOKO_CF_API", "https://api.cloudflare.com/client/v4")          # overridable so tests can use a mock
 TURN_API = os.environ.get("KOKO_TURN_API", "https://rtc.live.cloudflare.com/v1/turn/keys")
 STUN_DEFAULT = "stun:stun.cloudflare.com:3478"
-CHAT_MAX = 2000
-HISTORY = 60
 
 
 def new_code() -> str:
@@ -52,7 +59,7 @@ def norm_code(code: str) -> str:
     return (code or "").strip().lower()
 
 
-# ---------------------------------------------------------------- settings
+# ---------------------------------------------------------------- the administrator's settings
 
 def _secret(db, key: str) -> str:
     raw = settings_get(db, key)
@@ -60,11 +67,12 @@ def _secret(db, key: str) -> str:
 
 
 def cfg(db) -> dict:
-    """Everything the administrator can set, with environment fallbacks (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, KOKO_RTK_APP_ID)."""
+    """Everything the administrator can set, with environment fallbacks (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, KOKO_RTK_APP_ID, ...)."""
+    prov = settings_get(db, "meet_provider", "mesh")
     return {
         "enabled": settings_get(db, "meet_enabled", "1") == "1",
         "guests": settings_get(db, "meet_guests", "1") == "1",
-        "provider": settings_get(db, "meet_provider", "mesh") if settings_get(db, "meet_provider", "mesh") in PROVIDERS else "mesh",
+        "provider": prov if prov in PROVIDERS else "mesh",
         "turn_mode": settings_get(db, "meet_turn_mode", "none"),            # none | cloudflare | custom
         "turn_key_id": settings_get(db, "meet_turn_key_id") or os.environ.get("KOKO_TURN_KEY_ID", ""),
         "turn_token": _secret(db, "meet_turn_token") or os.environ.get("KOKO_TURN_TOKEN", ""),
@@ -124,6 +132,7 @@ async def ice_servers(c: dict) -> list[dict]:
 class Mesh:
     id = "mesh"
     label = "Direct between browsers (peer to peer)"
+    cap = MESH_MAX
 
     @staticmethod
     def problem(c) -> str | None:
@@ -132,9 +141,8 @@ class Mesh:
         return None
 
     @staticmethod
-    async def join(db, m, user, name: str, host: bool) -> dict:
-        c = cfg(db)
-        return {"provider": "mesh", "ice_servers": await ice_servers(c), "max": MESH_MAX}
+    async def creds(db, m, name: str, cid: str, manager: bool) -> dict:
+        return {"provider": "mesh", "ice_servers": await ice_servers(cfg(db)), "max": MESH_MAX}
 
     @staticmethod
     async def end(db, m) -> None:
@@ -142,8 +150,7 @@ class Mesh:
 
     @staticmethod
     async def test(db) -> dict:
-        c = cfg(db)
-        servers = await ice_servers(c)
+        servers = await ice_servers(cfg(db))
         turn = any(any(str(u).startswith(("turn:", "turns:")) for u in s["urls"]) for s in servers)
         return {"ok": True, "message": ("Relay servers are working." if turn else "Works, with STUN only. People on strict networks (some offices, mobile networks) may not connect without a TURN relay."), "turn": turn}
 
@@ -151,6 +158,7 @@ class Mesh:
 class RealtimeKit:
     id = "realtimekit"
     label = "Cloudflare RealtimeKit"
+    cap = RTK_MAX
 
     @staticmethod
     def problem(c) -> str | None:
@@ -159,16 +167,11 @@ class RealtimeKit:
         return None
 
     @staticmethod
-    def _call(c, method: str, path: str, body: dict | None = None):
-        url = f"{CF_API}/accounts/{c['rk_account']}/realtime/kit/{c['rk_app']}{path}"
-        return method, url, {"Authorization": f"Bearer {c['rk_token']}"}, body
-
-    @staticmethod
     async def _req(c, method: str, path: str, body: dict | None = None) -> dict:
-        method, url, headers, body = RealtimeKit._call(c, method, path, body)
+        url = f"{CF_API}/accounts/{c['rk_account']}/realtime/kit/{c['rk_app']}{path}"
         try:
             async with httpx.AsyncClient(timeout=15, follow_redirects=False) as h:
-                r = await h.request(method, url, json=body, headers=headers)
+                r = await h.request(method, url, json=body, headers={"Authorization": f"Bearer {c['rk_token']}"})
         except httpx.HTTPError as e:
             raise HTTPException(502, f"Could not reach Cloudflare ({type(e).__name__})")
         try:
@@ -183,7 +186,7 @@ class RealtimeKit:
         return j.get("data") or {}
 
     @staticmethod
-    async def join(db, m, user, name: str, host: bool) -> dict:
+    async def creds(db, m, name: str, cid: str, manager: bool) -> dict:
         c = cfg(db)
         ref = m["provider_ref"]
         if not ref:
@@ -193,10 +196,9 @@ class RealtimeKit:
                 raise HTTPException(502, "Cloudflare did not return a meeting id")
             db.execute("UPDATE meetings SET provider_ref = ? WHERE code = ? AND provider_ref = ''", (ref, m["code"]))
             db.commit()
-            ref = db.execute("SELECT provider_ref FROM meetings WHERE code = ?", (m["code"],)).fetchone()["provider_ref"]   # two people joining first: the first one's wins
-        who = f"u:{user['id']}" if user else f"g:{secrets.token_hex(8)}"
+            ref = db.execute("SELECT provider_ref FROM meetings WHERE code = ?", (m["code"],)).fetchone()["provider_ref"]   # two people arriving first: the first one's wins
         data = await RealtimeKit._req(c, "POST", f"/meetings/{ref}/participants", {
-            "name": name[:60], "preset_name": c["rk_host"] if host else c["rk_guest"], "custom_participant_id": who})
+            "name": name[:60], "preset_name": c["rk_host"] if manager else c["rk_guest"], "custom_participant_id": cid})
         token = data.get("token")
         if not token:
             raise HTTPException(502, "Cloudflare did not return a join token")
@@ -209,6 +211,8 @@ class RealtimeKit:
                 await RealtimeKit._req(cfg(db), "PATCH", f"/meetings/{m['provider_ref']}", {"status": "INACTIVE"})
             except HTTPException:
                 pass   # the meeting is already closed here; Cloudflare's copy ends by itself
+            db.execute("UPDATE meetings SET provider_ref = '' WHERE code = ?", (m["code"],))   # a permanent meeting starts a fresh one next time
+            db.commit()
 
     @staticmethod
     async def test(db) -> dict:
@@ -225,12 +229,75 @@ class RealtimeKit:
 PROVIDERS = {"mesh": Mesh, "realtimekit": RealtimeKit}
 
 
-# ---------------------------------------------------------------- REST
+# ---------------------------------------------------------------- one meeting's settings
 
-def info(db, m, user) -> dict:
+DEFAULTS = {
+    "approval": False,        # the host (or a co-host) must let each person in
+    "host_first": False,      # people wait until the host or a co-host is in
+    "guests": True,           # people without an account may join
+    "mute_on_entry": False,   # people join with the microphone off
+    "cam_off_on_entry": False,
+    "chat": "all",            # who can write in the chat: all | host | off
+    "share": "all",           # who can share their screen: all | host
+    "reactions": True,
+    "unmute": True,           # people may unmute themselves
+    "captions": True,         # live captions can be switched on (when the server can transcribe speech)
+    "max": 0,                 # most people at once; 0 = as many as the provider allows
+}
+
+
+class SettingsIn(BaseModel):
+    approval: bool | None = None
+    host_first: bool | None = None
+    guests: bool | None = None
+    mute_on_entry: bool | None = None
+    cam_off_on_entry: bool | None = None
+    chat: Literal["all", "host", "off"] | None = None
+    share: Literal["all", "host"] | None = None
+    reactions: bool | None = None
+    unmute: bool | None = None
+    captions: bool | None = None
+    max: int | None = Field(None, ge=0, le=RTK_MAX)
+
+
+def load_settings(m) -> dict:
+    try:
+        stored = json.loads(m["settings"] or "{}")
+    except ValueError:
+        stored = {}
+    out = {**DEFAULTS, **{k: v for k, v in stored.items() if k in DEFAULTS}}
+    out["guests"] = bool(m["guests"])
+    return out
+
+
+def passcode_of(m) -> str:
+    return (decrypt_secret(m["passcode_enc"]) or "") if m["passcode_enc"] else ""
+
+
+def expired(m) -> bool:
+    return not m["permanent"] and time.time() - (m["last_used"] or m["created_at"]) > ONE_OFF_TTL
+
+
+def closed(m) -> bool:
+    return bool(m["ended_at"]) or expired(m)
+
+
+def _room():
+    from . import meetroom
+    return meetroom
+
+
+def public_info(db, m, user) -> dict:
     host = db.execute("SELECT name FROM users WHERE id = ?", (m["host_id"],)).fetchone()
+    s = load_settings(m)
     return {"code": m["code"], "title": m["title"], "host_name": host["name"] if host else "", "is_host": bool(user and user["id"] == m["host_id"]),
-            "ended": bool(m["ended_at"]), "guests": bool(m["guests"]), "provider": m["provider"], "created_at": m["created_at"]}
+            "ended": closed(m), "permanent": bool(m["permanent"]), "guests": s["guests"], "has_passcode": bool(m["passcode_enc"]), "approval": s["approval"],
+            "provider": m["provider"], "created_at": m["created_at"], "live": _room().live_count(m["code"])}
+
+
+def full_info(db, m, user) -> dict:
+    """What the host sees and edits (the settings and the passcode)."""
+    return {**public_info(db, m, user), "settings": load_settings(m), "passcode": passcode_of(m)}
 
 
 def get_meeting(db, code: str):
@@ -240,15 +307,44 @@ def get_meeting(db, code: str):
     return m
 
 
+def owner_or_admin(m, user) -> bool:
+    return bool(user and (m["host_id"] == user["id"] or access.is_admin(user)))
+
+
+# ---------------------------------------------------------------- tickets (who you are in a meeting, signed by this server)
+
+def make_ticket(code: str, cid: str, name: str, uid: str | None) -> str:
+    return jwt.encode({"typ": "meet", "c": code, "i": cid, "n": name, "u": uid or "", "exp": time.time() + TICKET_HOURS * 3600}, SECRET, ALGO)
+
+
+def read_ticket(ticket: str | None, code: str) -> dict | None:
+    if not ticket:
+        return None
+    try:
+        p = jwt.decode(ticket, SECRET, algorithms=[ALGO])
+    except jwt.PyJWTError:
+        return None
+    return p if p.get("typ") == "meet" and p.get("c") == norm_code(code) else None
+
+
+# ---------------------------------------------------------------- REST: starting, finding, joining
+
 @router.get("/meet/config")
 def public_config(db=Depends(get_db)):
     c = cfg(db)
-    return {"enabled": c["enabled"], "guests": c["guests"]}
+    return {"enabled": c["enabled"], "guests": c["guests"], "captions": bool(stt.status(db).get("available"))}
 
 
 class NewMeeting(BaseModel):
     title: str = Field("", max_length=100)
-    guests: bool = True
+    permanent: bool = False
+    passcode: str = Field("", max_length=32)
+    settings: SettingsIn = SettingsIn()
+
+
+def _check_passcode(p: str):
+    if p and not (4 <= len(p) <= 32):
+        raise HTTPException(422, "A passcode is 4 to 32 characters")
 
 
 @router.post("/meet")
@@ -261,18 +357,24 @@ def create_meeting(body: NewMeeting, user=Depends(must_user), db=Depends(get_db)
     p = PROVIDERS[c["provider"]]
     if p.problem(c):
         raise HTTPException(409, f"Meetings aren't set up yet: {p.problem(c)}")
+    if body.permanent and db.execute("SELECT COUNT(*) AS n FROM meetings WHERE host_id = ? AND permanent = 1", (user["id"],)).fetchone()["n"] >= MAX_PERMANENT:
+        raise HTTPException(409, f"You can keep up to {MAX_PERMANENT} permanent meetings. Delete one first.")
+    _check_passcode(body.passcode)
+    s = body.settings.model_dump(exclude_none=True)
+    guests = 1 if (s.pop("guests", True) and c["guests"]) else 0
     code = new_code()
     title = body.title.strip() or f"{user['name']}'s meeting"
-    db.execute("INSERT INTO meetings (code, title, host_id, provider, guests, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-               (code, title, user["id"], c["provider"], 1 if (body.guests and c["guests"]) else 0, time.time()))
+    now = time.time()
+    db.execute("INSERT INTO meetings (code, title, host_id, provider, guests, created_at, permanent, settings, passcode_enc, last_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+               (code, title, user["id"], c["provider"], guests, now, 1 if body.permanent else 0, json.dumps(s), encrypt_secret(body.passcode) if body.passcode else "", now))
     db.commit()
-    return info(db, get_meeting(db, code), user)
+    return full_info(db, get_meeting(db, code), user)
 
 
 @router.get("/meet")
 def my_meetings(user=Depends(must_user), db=Depends(get_db)):
-    rows = db.execute("SELECT * FROM meetings WHERE host_id = ? AND ended_at IS NULL ORDER BY created_at DESC LIMIT 12", (user["id"],)).fetchall()
-    return [info(db, m, user) for m in rows]
+    rows = db.execute("SELECT * FROM meetings WHERE host_id = ? AND ended_at IS NULL ORDER BY permanent DESC, created_at DESC LIMIT 100", (user["id"],)).fetchall()
+    return [full_info(db, m, user) for m in rows if not expired(m)]
 
 
 @router.get("/meet/{code}")
@@ -281,47 +383,148 @@ def meeting_info(code: str, user=Depends(current_user), db=Depends(get_db)):
     if not c["enabled"]:
         raise HTTPException(403, "Meetings are turned off on this server")
     m = get_meeting(db, code)
-    return {**info(db, m, user), "signed_in": bool(user), "can_join": bool(user) or bool(m["guests"] and c["guests"])}
+    i = public_info(db, m, user)
+    return {**i, "signed_in": bool(user), "can_join": bool(user) or (i["guests"] and c["guests"])}
+
+
+class EditMeeting(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=100)
+    permanent: bool | None = None
+    passcode: str | None = Field(None, max_length=32)     # "" removes it
+    settings: SettingsIn | None = None
+
+
+@router.put("/meet/{code}")
+async def edit_meeting(code: str, body: EditMeeting, user=Depends(must_user), db=Depends(get_db)):
+    m = get_meeting(db, code)
+    if not owner_or_admin(m, user):
+        raise HTTPException(403, "Only the host can change this meeting")
+    if closed(m):
+        raise HTTPException(410, "This meeting has ended.")
+    if body.title is not None:
+        db.execute("UPDATE meetings SET title = ? WHERE code = ?", (body.title.strip(), m["code"]))
+    if body.permanent is not None and bool(body.permanent) != bool(m["permanent"]):
+        if body.permanent and db.execute("SELECT COUNT(*) AS n FROM meetings WHERE host_id = ? AND permanent = 1", (m["host_id"],)).fetchone()["n"] >= MAX_PERMANENT:
+            raise HTTPException(409, f"You can keep up to {MAX_PERMANENT} permanent meetings.")
+        db.execute("UPDATE meetings SET permanent = ?, last_used = ? WHERE code = ?", (1 if body.permanent else 0, time.time(), m["code"]))
+    if body.passcode is not None:
+        _check_passcode(body.passcode)
+        db.execute("UPDATE meetings SET passcode_enc = ? WHERE code = ?", (encrypt_secret(body.passcode) if body.passcode else "", m["code"]))
+    if body.settings is not None:
+        patch = body.settings.model_dump(exclude_none=True)
+        if "guests" in patch:
+            db.execute("UPDATE meetings SET guests = ? WHERE code = ?", (1 if (patch.pop("guests") and cfg(db)["guests"]) else 0, m["code"]))
+        merged = {k: v for k, v in load_settings(get_meeting(db, code)).items() if k != "guests"} | patch
+        db.execute("UPDATE meetings SET settings = ? WHERE code = ?", (json.dumps(merged), m["code"]))
+    db.commit()
+    m = get_meeting(db, code)
+    await _room().push_settings(m["code"], load_settings(m), m["title"])
+    return full_info(db, m, user)
+
+
+@router.delete("/meet/{code}")
+async def delete_meeting(code: str, user=Depends(must_user), db=Depends(get_db)):
+    m = get_meeting(db, code)
+    if not owner_or_admin(m, user):
+        raise HTTPException(403, "Only the host can delete this meeting")
+    await _room().close_room(m["code"], {"t": "ended"})
+    if m["provider"] in PROVIDERS:
+        await PROVIDERS[m["provider"]].end(db, m)
+    db.execute("DELETE FROM meetings WHERE code = ?", (m["code"],))
+    db.commit()
+    return {"ok": True}
 
 
 class Join(BaseModel):
     name: str = Field("", max_length=60)
+    passcode: str = Field("", max_length=64)
 
 
 @router.post("/meet/{code}/join")
-async def join_meeting(code: str, body: Join, user=Depends(current_user), db=Depends(get_db)):
+def join_meeting(code: str, body: Join, user=Depends(current_user), db=Depends(get_db)):
+    """Check who may come in (guests, passcode) and hand back a ticket for the control socket. Admission itself is decided there."""
     c = cfg(db)
     if not c["enabled"]:
         raise HTTPException(403, "Meetings are turned off on this server")
     m = get_meeting(db, code)
-    if m["ended_at"]:
+    if closed(m):
         raise HTTPException(410, "This meeting has ended.")
-    if not user and not (m["guests"] and c["guests"]):
+    s = load_settings(m)
+    if not user and not (s["guests"] and c["guests"]):
         raise HTTPException(401, {"code": "login_required", "message": "Sign in to join this meeting"})
-    name = (user["name"] if user else body.name).strip()
+    name = " ".join((user["name"] if user else body.name).split())[:60]
     if not name:
         raise HTTPException(422, "Enter your name")
+    host = bool(user and user["id"] == m["host_id"])
+    pc = passcode_of(m)
+    if pc and not host and not secrets.compare_digest(body.passcode.strip().encode(), pc.encode()):
+        raise HTTPException(403, {"code": "passcode", "message": "That passcode isn't right" if body.passcode else "This meeting needs a passcode"})
     if not join_limiter.allow(f"join:{user['id'] if user else 'guest'}"):
         raise HTTPException(429, "Too many people joining at once. Try again in a minute.")
     p = PROVIDERS.get(m["provider"])
     if not p or p.problem(c):
         raise HTTPException(409, f"This meeting was started with {p.label if p else m['provider']}, which isn't set up any more. Ask the host to start a new one.")
-    host = bool(user and user["id"] == m["host_id"])
-    return {**await p.join(db, m, user, name, host), "name": name, "host": host, "title": m["title"]}
+    cid = secrets.token_hex(8)
+    return {"jt": make_ticket(m["code"], cid, name, user["id"] if user else None), "cid": cid, "name": name, "host": host, "title": m["title"],
+            "provider": m["provider"], "permanent": bool(m["permanent"])}
+
+
+class Media(BaseModel):
+    jt: str = Field(max_length=2000)
+
+
+@router.post("/meet/{code}/media")
+async def meeting_media(code: str, body: Media, db=Depends(get_db)):
+    """Audio and video credentials: only for people the room has let in."""
+    t = read_ticket(body.jt, code)
+    if not t:
+        raise HTTPException(401, "Your place in the meeting expired. Join again.")
+    m = get_meeting(db, code)
+    if closed(m):
+        raise HTTPException(410, "This meeting has ended.")
+    state = _room().member(m["code"], t["i"])
+    if state is None:
+        raise HTTPException(403, "You're not in this meeting yet.")
+    p = PROVIDERS[m["provider"]]
+    return await p.creds(db, m, t["n"], t["i"], state["manager"])
 
 
 @router.post("/meet/{code}/end")
 async def end_meeting(code: str, user=Depends(must_user), db=Depends(get_db)):
+    """End the session for everyone. A one-off meeting is over for good; a permanent one stays, ready for the next session."""
     m = get_meeting(db, code)
-    if m["host_id"] != user["id"] and not access.is_admin(user):
+    if not owner_or_admin(m, user):
         raise HTTPException(403, "Only the host can end the meeting")
-    if not m["ended_at"]:
+    if not m["permanent"] and not m["ended_at"]:
         db.execute("UPDATE meetings SET ended_at = ? WHERE code = ?", (time.time(), m["code"]))
         db.commit()
-        if m["provider"] in PROVIDERS:
-            await PROVIDERS[m["provider"]].end(db, m)
-        await close_room(m["code"], {"t": "ended"})
-    return {"ok": True}
+    if m["provider"] in PROVIDERS:
+        await PROVIDERS[m["provider"]].end(db, m)
+    await _room().close_room(m["code"], {"t": "ended", "permanent": bool(m["permanent"])})
+    return {"ok": True, "permanent": bool(m["permanent"])}
+
+
+@router.post("/meet/{code}/caption")
+async def meeting_caption(code: str, jt: str = Form(...), language: str | None = Form(None), file: UploadFile = File(...), db=Depends(get_db)):
+    """Turn a few seconds of one person's speech into a caption for everyone, using the server's speech-to-text."""
+    t = read_ticket(jt, code)
+    if not t or _room().member(norm_code(code), t["i"]) is None:
+        raise HTTPException(403, "You're not in this meeting.")
+    m = get_meeting(db, code)
+    if not load_settings(m)["captions"]:
+        raise HTTPException(403, "Captions are turned off for this meeting")
+    if not caption_limiter.allow(f"cap:{t['i']}"):
+        raise HTTPException(429, "Too many captions at once")
+    audio = await file.read(stt.MAX_BYTES + 1)
+    if len(audio) > stt.MAX_BYTES:
+        raise HTTPException(413, "That recording is too long")
+    try:
+        text = (await stt.transcribe(audio, file.filename or "speech.wav", file.content_type or "audio/wav", language, db)).strip()
+    except stt.STTError as e:
+        raise HTTPException(503, str(e))
+    if text:
+        await _room().caption(norm_code(code), t["i"], text)
+    return {"text": text}
 
 
 # ---------------------------------------------------------------- admin
@@ -413,145 +616,3 @@ async def admin_test(admin=Depends(must_admin), db=Depends(get_db)):
     if p.problem(c):
         raise HTTPException(422, p.problem(c))
     return await p.test(db)
-
-
-# ---------------------------------------------------------------- mesh signalling (WebSocket)
-
-@dataclass
-class Peer:
-    id: str
-    ws: WebSocket
-    name: str
-    host: bool
-    user_id: str | None
-    audio: bool = False
-    video: bool = False
-    screen: bool = False
-    chat_hits: list = field(default_factory=list)
-
-    def public(self) -> dict:
-        return {"id": self.id, "name": self.name, "host": self.host, "audio": self.audio, "video": self.video, "screen": self.screen}
-
-
-@dataclass
-class Room:
-    code: str
-    peers: dict[str, Peer] = field(default_factory=dict)
-    history: list[dict] = field(default_factory=list)
-
-
-rooms: dict[str, Room] = {}
-MAX_SIGNAL = 24_000   # a session description is a few KB
-
-
-async def send(peer: Peer, msg: dict) -> None:
-    try:
-        await peer.ws.send_text(json.dumps(msg, separators=(",", ":")))
-    except Exception:
-        pass
-
-
-async def broadcast(room: Room, msg: dict, exclude: str | None = None) -> None:
-    await asyncio.gather(*(send(p, msg) for p in list(room.peers.values()) if p.id != exclude))
-
-
-async def close_room(code: str, msg: dict) -> None:
-    room = rooms.get(code)
-    if not room:
-        return
-    await broadcast(room, msg)
-    for p in list(room.peers.values()):
-        try:
-            await p.ws.close(code=4410)
-        except Exception:
-            pass
-
-
-def clean_name(s: str) -> str:
-    return " ".join((s or "").split())[:60] or "Guest"
-
-
-@ws_router.websocket("/ws/meet/{code}")
-async def ws_meet(ws: WebSocket, code: str):
-    token = ws.query_params.get("token")
-    guest_name = ws.query_params.get("name", "")
-    code = norm_code(code)
-
-    def authorize():
-        with connect() as db:
-            m = db.execute("SELECT * FROM meetings WHERE code = ?", (code,)).fetchone()
-            if not m or m["ended_at"] or m["provider"] != "mesh":
-                return None
-            c = cfg(db)
-            if not c["enabled"]:
-                return None
-            user = access.get_user(db, token)
-            if not user and not (m["guests"] and c["guests"] and guest_name.strip()):
-                return None
-            return {"user_id": user["id"] if user else None, "name": user["name"] if user else clean_name(guest_name), "host": bool(user and user["id"] == m["host_id"])}
-
-    who = await asyncio.to_thread(authorize)
-    if not who:
-        await ws.accept()
-        await ws.close(code=4403)
-        return
-    await ws.accept()
-    room = rooms.setdefault(code, Room(code))
-    if len(room.peers) >= MESH_MAX:
-        await ws.send_text(json.dumps({"t": "full", "max": MESH_MAX}))
-        await ws.close(code=4409)
-        return
-    me = Peer(secrets.token_hex(6), ws, who["name"], who["host"], who["user_id"])
-    existing = [p.public() for p in room.peers.values()]
-    room.peers[me.id] = me
-    await send(me, {"t": "welcome", "id": me.id, "host": me.host, "peers": existing, "chat": room.history[-HISTORY:], "max": MESH_MAX})
-    await broadcast(room, {"t": "joined", "peer": me.public()}, exclude=me.id)
-    try:
-        while True:
-            raw = await ws.receive_text()
-            if len(raw) > MAX_SIGNAL:
-                continue
-            try:
-                msg = json.loads(raw)
-            except ValueError:
-                continue
-            if not isinstance(msg, dict):
-                continue
-            t = msg.get("t")
-            if t == "signal":
-                target = room.peers.get(str(msg.get("to")))
-                if target and target.id != me.id and isinstance(msg.get("data"), dict):
-                    await send(target, {"t": "signal", "from": me.id, "data": msg["data"]})
-            elif t == "state":
-                me.audio, me.video, me.screen = bool(msg.get("audio")), bool(msg.get("video")), bool(msg.get("screen"))
-                await broadcast(room, {"t": "state", "id": me.id, "audio": me.audio, "video": me.video, "screen": me.screen}, exclude=me.id)
-            elif t == "chat":
-                text = str(msg.get("text", "")).strip()[:CHAT_MAX]
-                now = time.time()
-                me.chat_hits = [h for h in me.chat_hits if now - h < 5]
-                if not text or len(me.chat_hits) >= 8:
-                    continue
-                me.chat_hits.append(now)
-                entry = {"t": "chat", "id": secrets.token_hex(5), "from": me.id, "name": me.name, "text": text, "ts": int(now * 1000)}
-                room.history = [*room.history[-(HISTORY - 1):], entry]
-                await broadcast(room, entry)
-            elif t in ("mute", "kick") and me.host:
-                target = room.peers.get(str(msg.get("to")))
-                if target and target.id != me.id:
-                    if t == "mute":
-                        await send(target, {"t": "mute"})
-                    else:
-                        await send(target, {"t": "kicked"})
-                        try:
-                            await target.ws.close(code=4411)
-                        except Exception:
-                            pass
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
-    finally:
-        room.peers.pop(me.id, None)
-        await broadcast(room, {"t": "left", "id": me.id})
-        if not room.peers:
-            rooms.pop(code, None)

@@ -1,54 +1,95 @@
-/** What the meeting page needs from whatever carries the audio and video. Each provider (meshed browsers, Cloudflare RealtimeKit, ...)
- *  is one class implementing `Call`; the page never knows which one it is talking to. */
+import type { MeetSettings } from '../api'
+
+/** What the meeting page needs from a call. A call is two things working together: the *control channel* (who is here, the waiting room, chat,
+ *  reactions, hands, polls, ... the same for every provider) and a *media* part (the audio and video, which is where providers differ). */
+export type { MeetSettings }
+
 export interface Peer {
   id: string
+  cid: string
   name: string
   self: boolean
   host: boolean
+  cohost: boolean
+  manager: boolean
   audio: boolean
   video: boolean
   screen: boolean
+  hand: number                      // 0 = hand down; otherwise the place in the queue (1 = first)
   stream: MediaStream | null        // camera and microphone (the local one has no audio, so you never hear yourself)
   screenStream: MediaStream | null
+  mic: MediaStream | null           // the person's own microphone, to see when they talk (only for yourself; others are measured from `stream`)
 }
 
-export interface ChatMsg { id: string; from: string; name: string; text: string; ts: number; self: boolean }
+export interface ChatMsg { id: string; from: string; name: string; text: string; ts: number; self: boolean; private?: boolean; to?: string; to_name?: string }
+export interface PollView { id: string; q: string; options: string[]; multi: boolean; anonymous: boolean; open: boolean; counts: number[]; total: number; mine: number[]; names?: string[][] }
+export interface Caption { id: string; from: string; name: string; text: string; ts: number }
+export interface Waiting { id: string; name: string; reason: 'approval' | 'host' }
+export type RoomSettings = MeetSettings & { locked?: boolean; captions_on?: boolean }
 
-export type CallStatus = 'connecting' | 'connected' | 'reconnecting' | 'closed'
-/** Why a call stopped: the host ended it, you were removed, you left, or it could not be kept up. */
-export type CallEnd = 'ended' | 'kicked' | 'left' | 'failed' | 'full'
+export type CallStatus = 'connecting' | 'waiting' | 'connected' | 'reconnecting' | 'closed'
+/** Why a call stopped. */
+export type CallEnd = 'ended' | 'kicked' | 'blocked' | 'denied' | 'left' | 'failed' | 'full' | 'locked' | 'replaced'
+
+export interface LocalTracks { audio: MediaStreamTrack | null; video: MediaStreamTrack | null; micId?: string; camId?: string }
+export interface Devices { mics: MediaDeviceInfo[]; cams: MediaDeviceInfo[]; speakers: MediaDeviceInfo[]; mic: string; cam: string }
 
 export interface Call {
-  readonly selfId: string
-  readonly isHost: boolean
-  readonly canModerate: boolean
+  readonly code: string
+  readonly name: string
   status(): CallStatus
+  waitReason(): 'approval' | 'host' | null
   endReason(): CallEnd | null
+  permanent(): boolean
+  me(): { id: string; manager: boolean; owner: boolean; cohost: boolean }
+  title(): string
+  started(): number
+  settings(): RoomSettings
+  emojis(): string[]
   peers(): Peer[]
+  spotlight(): string | null
   chat(): ChatMsg[]
+  polls(): PollView[]
+  waiting(): Waiting[]
+  captions(): Caption[]
+  devices(): Promise<Devices>
   /** Called whenever anything above changes. Returns the unsubscribe function. */
   subscribe(fn: () => void): () => void
-  /** Called when a media device could not be used, with words fit to show. */
-  onProblem(fn: (message: string) => void): () => void
+  /** Short messages for the person: a device that could not be used, "the host muted you", ... */
+  onNotice(fn: (message: string) => void): () => void
+  /** Someone sent a reaction. */
+  onReact(fn: (from: string, emoji: string) => void): () => void
   setMic(on: boolean): Promise<void>
   setCam(on: boolean): Promise<void>
   shareScreen(): Promise<void>
   stopScreen(): void
-  send(text: string): void
-  mute(peerId: string): void
-  kick(peerId: string): void
+  setDevice(kind: 'mic' | 'cam', id: string): Promise<void>
+  react(emoji: string): void
+  hand(up: boolean): void
+  lowerHand(id: string | 'all'): void
+  send(text: string, to?: string): void
+  mute(id: string): void
+  askUnmute(id: string): void
+  muteAll(allowUnmute: boolean): void
+  kick(id: string, block?: boolean): void
+  admit(id: string | 'all'): void
+  deny(id: string): void
+  lock(on: boolean): void
+  captionsOn(on: boolean): void
+  spotlightTo(id: string | null): void
+  cohost(id: string, on: boolean): void
+  poll(msg: { action: 'create'; q: string; options: string[]; multi: boolean; anonymous: boolean } | { action: 'close' | 'reopen' | 'delete'; id: string }): void
+  vote(id: string, choices: number[]): void
   leave(): void
 }
 
-export interface LocalTracks { audio: MediaStreamTrack | null; video: MediaStreamTrack | null }
-
 export class Emitter {
   private fns = new Set<() => void>()
-  private problems = new Set<(m: string) => void>()
+  private notices = new Set<(m: string) => void>()
   subscribe(fn: () => void) { this.fns.add(fn); return () => { this.fns.delete(fn) } }
-  onProblem(fn: (m: string) => void) { this.problems.add(fn); return () => { this.problems.delete(fn) } }
+  onNotice(fn: (m: string) => void) { this.notices.add(fn); return () => { this.notices.delete(fn) } }
   protected changed() { this.fns.forEach((f) => f()) }
-  protected problem(m: string) { this.problems.forEach((f) => f(m)) }
+  protected notice(m: string) { this.notices.forEach((f) => f(m)) }
 }
 
 /** The words for a camera or microphone that could not be opened. */

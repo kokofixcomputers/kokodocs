@@ -13,6 +13,7 @@ import { SelfHost } from './pages/SelfHost'
 import { VoiceDemoFrame } from './marketing/VoiceDemo'
 import { EditorPage } from './pages/EditorPage'
 import { MeetPage } from './meet/MeetPage'
+import { MeetingsPage } from './meet/MeetingsPage'
 import { FolderPage } from './pages/FolderPage'
 import { DialogHost } from './ui/Dialogs'
 import { Toaster } from './ui/Toast'
@@ -71,6 +72,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/d/:id" element={<EditorPage />} />
           <Route path="/f/:id" element={<FolderPage />} />
           <Route path="/m/:code" element={<MeetPage />} />
+          <Route path="/meetings" element={<RequireAuth><MeetingsPage /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toaster />

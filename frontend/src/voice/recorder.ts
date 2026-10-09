@@ -6,6 +6,7 @@ registerProcessor('koko-tap', Tap)`
 export class Recorder {
   private ctx: AudioContext | null = null
   private stream: MediaStream | null = null
+  private borrowed = false   // the stream belongs to someone else (a call's microphone): never stop it
   private analyser: AnalyserNode | null = null
   private chunks: Float32Array[] = []
   private nodes: AudioNode[] = []
@@ -13,8 +14,9 @@ export class Recorder {
   startedAt = 0
   peak = 0
 
-  async start() {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+  async start(borrow?: MediaStream) {
+    this.borrowed = !!borrow
+    this.stream = borrow ?? await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
     const ctx = (this.ctx = new AC())
     if (ctx.state === 'suspended') await ctx.resume()
@@ -55,6 +57,26 @@ export class Recorder {
     return encodeWav(downsample(all.length > want ? all.subarray(all.length - want) : all, rate, 16000), 16000)
   }
 
+  /** Everything recorded so far as a 16 kHz WAV, and start again (for captions: one sentence at a time). */
+  take(): Blob | null {
+    if (!this.ctx || !this.chunks.length) return null
+    const rate = this.ctx.sampleRate, total = this.chunks.reduce((n, c) => n + c.length, 0)
+    const all = new Float32Array(total)
+    let o = 0
+    for (const c of this.chunks) { all.set(c, o); o += c.length }
+    this.chunks = []
+    return encodeWav(downsample(all, rate, 16000), 16000)
+  }
+
+  /** Keep only the last `seconds` (so the start of the next word isn't cut off). */
+  trim(seconds: number) {
+    if (!this.ctx) return
+    let n = 0, i = this.chunks.length
+    const want = Math.floor(seconds * this.ctx.sampleRate)
+    while (i > 0 && n < want) n += this.chunks[--i].length
+    this.chunks = this.chunks.slice(i)
+  }
+
   /** 0..1 loudness right now (for the waveform). */
   level(): number {
     if (!this.analyser) return 0
@@ -81,7 +103,7 @@ export class Recorder {
   cancel() { this.release(); this.chunks = [] }
 
   private release() {
-    this.stream?.getTracks().forEach((t) => t.stop())
+    if (!this.borrowed) this.stream?.getTracks().forEach((t) => t.stop())
     this.nodes.forEach((n) => { try { n.disconnect() } catch { /* already gone */ } })
     this.nodes = []
     void this.ctx?.close().catch(() => {})

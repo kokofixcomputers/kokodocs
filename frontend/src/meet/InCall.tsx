@@ -1,0 +1,240 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { BarChart3, Captions, Check, Copy, Hand, LayoutGrid, Lock, LockOpen, Maximize, MessageSquare, Mic, MicOff, MonitorUp, MonitorX, MoreVertical, PhoneOff, Settings2, Smile, SquareUser, Users, Video, VideoOff, Volume2, X, Keyboard, Download, EyeOff, Info } from 'lucide-react'
+import { api, type MeetInfo, type MeetSettings } from '../api'
+import { Modal } from '../ui/Modal'
+import { Popover } from '../ui/Popover'
+import { askConfirm } from '../ui/Dialogs'
+import { toast } from '../ui/Toast'
+import { DevicePicker } from './Devices'
+import { ChatPanel, PeoplePanel, PollsPanel } from './Panels'
+import { SettingsForm } from './SettingsForm'
+import { Stage } from './Stage'
+import type { Call } from './types'
+import { canShare, clock, download, inviteText, useCall } from './util'
+
+type Panel = 'chat' | 'people' | 'polls' | null
+
+function beep() {
+  try {
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    const ctx = new AC(), o = ctx.createOscillator(), g = ctx.createGain()
+    o.frequency.value = 880; g.gain.value = 0.06; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.14)
+    setTimeout(() => void ctx.close(), 400)
+  } catch { /* no sound */ }
+}
+
+function useTick(ms: number) { const [, set] = useState(0); useEffect(() => { const t = setInterval(() => set((n) => n + 1), ms); return () => clearInterval(t) }, [ms]) }
+
+/** Emoji that float up the screen. */
+function Floaters({ call }: { call: Call }) {
+  const [items, setItems] = useState<{ k: number; emoji: string; name: string; x: number }[]>([])
+  useEffect(() => call.onReact((from, emoji) => {
+    const name = call.peers().find((p) => p.id === from)?.name ?? ''
+    const k = Math.random()
+    setItems((l) => [...l.slice(-30), { k, emoji, name, x: 6 + Math.random() * 70 }])
+    setTimeout(() => setItems((l) => l.filter((i) => i.k !== k)), 3600)
+  }), [call])
+  return <div className="meet-floaters" aria-hidden>{items.map((i) => <div key={i.k} className="meet-float" style={{ left: `${i.x}%` }}><span>{i.emoji}</span><small>{i.name}</small></div>)}</div>
+}
+
+function Shortcuts({ onClose }: { onClose: () => void }) {
+  const rows: [string, string][] = [['M', 'Mute or unmute'], ['V', 'Camera on or off'], ['S', 'Present your screen'], ['H', 'Raise or lower your hand'], ['C', 'Chat'], ['P', 'People'], ['F', 'Full screen'], ['Esc', 'Close the side panel']]
+  return <Modal title="Keyboard shortcuts" onClose={onClose} width={380}><div className="meet-keys">{rows.map(([k, d]) => <div key={k}><kbd>{k}</kbd><span>{d}</span></div>)}</div></Modal>
+}
+
+function MeetingSettings({ code, call, onClose }: { code: string; call: Call; onClose: () => void }) {
+  const [s, setS] = useState<MeetSettings | null>(null)
+  const [cfg, setCfg] = useState({ guests: true, captions: true })
+  useEffect(() => { void api.meetMine().then((l) => { const m = l.find((x) => x.code === code); if (m?.settings) setS(m.settings) }); void api.meetConfig().then(setCfg) }, [code])
+  const change = (patch: Partial<MeetSettings>) => { setS((x) => (x ? { ...x, ...patch } : x)); api.meetEdit(code, { settings: patch }).catch((e) => toast((e as Error).message)) }
+  return (
+    <Modal title="Meeting settings" onClose={onClose} width={520}>
+      <div className="share-body">
+        <div className="switch-row"><div><b>Lock the meeting</b><span>Nobody new can join until you unlock it.</span></div>
+          <button role="switch" aria-checked={!!call.settings().locked} aria-label="Lock the meeting" className={`toggle ${call.settings().locked ? 'on' : ''}`} onClick={() => call.lock(!call.settings().locked)} /></div>
+        {s ? <SettingsForm s={s} onChange={change} guestsAllowed={cfg.guests} captionsAvailable={cfg.captions} /> : <span className="spinner" />}
+        <p className="muted small">Changes apply right away, and are saved to this meeting.</p>
+      </div>
+    </Modal>)
+}
+
+export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call; info: MeetInfo; onLeave: () => void; captionsAvailable: boolean }) {
+  useCall(call)
+  useTick(1000)
+  const [panel, setPanel] = useState<Panel>(null)
+  const [chatTo, setChatTo] = useState('')
+  const [layout, setLayout] = useState<'gallery' | 'speaker'>('gallery')
+  const [hideSelf, setHideSelf] = useState(false)
+  const [showCaps, setShowCaps] = useState(true)
+  const [modal, setModal] = useState<null | 'settings' | 'keys' | 'devices'>(null)
+  const [copied, setCopied] = useState(false)
+  const seen = useRef({ chat: 0, polls: 0, waiting: 0 })
+  const [unread, setUnread] = useState({ chat: 0, polls: 0 })
+
+  const peers = call.peers(), me = call.me(), s = call.settings(), status = call.status()
+  const self = peers[0]
+  const msgs = call.chat(), polls = call.polls(), waiting = call.waiting()
+  const code = call.code
+
+  // unread counters and the waiting-room alert
+  useEffect(() => {
+    if (panel === 'chat') seen.current.chat = msgs.length
+    if (panel === 'polls') seen.current.polls = polls.length
+    setUnread({ chat: Math.max(0, msgs.length - seen.current.chat), polls: Math.max(0, polls.length - seen.current.polls) })
+  }, [msgs.length, polls.length, panel])
+  useEffect(() => {
+    if (!me.manager) { seen.current.waiting = 0; return }
+    if (waiting.length > seen.current.waiting) { toast(`${waiting[waiting.length - 1].name} is waiting to join`); beep() }
+    seen.current.waiting = waiting.length
+  }, [waiting.length, me.manager]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // keep the screen awake
+  useEffect(() => {
+    let lock: { release: () => Promise<void> } | null = null
+    const get = async () => { try { lock = await (navigator as unknown as { wakeLock?: { request: (t: string) => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request('screen') ?? null } catch { /* not allowed */ } }
+    void get()
+    const vis = () => { if (document.visibilityState === 'visible') void get() }
+    document.addEventListener('visibilitychange', vis)
+    return () => { document.removeEventListener('visibilitychange', vis); void lock?.release() }
+  }, [])
+
+  const toggleHand = () => call.hand(!(self?.hand))
+  const toggleShare = () => (self?.screen ? call.stopScreen() : void call.shareScreen())
+  const open = (p: Panel) => setPanel((cur) => (cur === p ? null : p))
+  const fullscreen = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void document.documentElement.requestFullscreen().catch(() => {}) }
+
+  useEffect(() => {   // keyboard shortcuts
+    const on = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) || e.metaKey || e.ctrlKey || e.altKey) return
+      const k = e.key.toLowerCase()
+      if (k === 'm') void call.setMic(!self?.audio)
+      else if (k === 'v') void call.setCam(!self?.video)
+      else if (k === 's' && canShare) toggleShare()
+      else if (k === 'h') toggleHand()
+      else if (k === 'c') open('chat')
+      else if (k === 'p') open('people')
+      else if (k === 'f') fullscreen()
+      else if (k === 'escape') setPanel(null)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  })
+
+  const link = `${location.origin}/m/${code}`
+  const copy = async () => { try { await navigator.clipboard.writeText(inviteText(call.title(), code, info.passcode)); setCopied(true); setTimeout(() => setCopied(false), 1800) } catch { toast(link) } }
+  const leave = () => { call.leave(); onLeave() }
+  const endAll = async () => {
+    const perm = call.permanent()
+    if (!(await askConfirm({ title: perm ? 'End this session for everyone?' : 'End the meeting for everyone?', text: perm ? 'Everyone is disconnected. The meeting stays on your account with the same link and settings.' : 'Everyone is disconnected and the link stops working.', label: 'End for everyone', danger: true }))) return
+    try { await api.meetEnd(code) } catch (e) { toast((e as Error).message) }
+    leave()
+  }
+
+  const recent = useMemo(() => call.captions().filter((c) => Date.now() - c.ts < 7000).slice(-3), [call.captions().length, Math.floor(Date.now() / 1000)]) // eslint-disable-line react-hooks/exhaustive-deps
+  const capsOn = !!s.captions_on
+  const transcript = () => {
+    const t0 = call.started()
+    download(`${call.title() || 'meeting'} transcript.txt`, call.captions().map((c) => `[${clock(c.ts - t0)}] ${c.name}: ${c.text}`).join('\n'))
+  }
+
+  const moreMenu = (close: () => void) => {
+    const go = (f: () => void) => () => { close(); f() }
+    return (
+      <div className="menu wide">
+        <button className="meet-only-m" onClick={go(toggleHand)}><Hand size={17} />{self?.hand ? 'Lower your hand' : 'Raise your hand'}</button>
+        <button className="meet-only-m" onClick={go(() => open('polls'))}><BarChart3 size={17} />Polls</button>
+        <button onClick={go(() => setLayout(layout === 'gallery' ? 'speaker' : 'gallery'))}>{layout === 'gallery' ? <SquareUser size={17} /> : <LayoutGrid size={17} />}{layout === 'gallery' ? 'Speaker view' : 'Gallery view'}</button>
+        <button onClick={go(() => setHideSelf(!hideSelf))}><EyeOff size={17} />{hideSelf ? 'Show my video' : 'Hide my video from me'}</button>
+        <button onClick={go(fullscreen)}><Maximize size={17} />Full screen</button>
+        <button onClick={go(() => setModal('devices'))}><Volume2 size={17} />Microphone, camera and speaker</button>
+        {s.captions && captionsAvailable && (<>
+          <div className="menu-sep" />
+          {me.manager && <button onClick={go(() => call.captionsOn(!capsOn))}><Captions size={17} />{capsOn ? 'Stop live captions' : 'Start live captions for everyone'}</button>}
+          {capsOn && <button onClick={go(() => setShowCaps(!showCaps))}><Captions size={17} />{showCaps ? 'Hide captions for me' : 'Show captions'}</button>}
+          {call.captions().length > 0 && <button onClick={go(transcript)}><Download size={17} />Download the transcript</button>}
+        </>)}
+        {me.manager && (<>
+          <div className="menu-sep" />
+          <button onClick={go(() => call.lock(!s.locked))}>{s.locked ? <LockOpen size={17} /> : <Lock size={17} />}{s.locked ? 'Unlock the meeting' : 'Lock the meeting'}</button>
+          <button onClick={go(() => void askConfirm({ title: 'Mute everyone?', text: "Everyone except hosts is muted. They can unmute themselves unless you change that in the meeting settings.", label: 'Mute everyone' }).then((y) => y && call.muteAll(s.unmute)))}><MicOff size={17} />Mute everyone</button>
+          {me.owner && <button onClick={go(() => setModal('settings'))}><Settings2 size={17} />Meeting settings</button>}
+        </>)}
+        <div className="menu-sep" />
+        <button onClick={go(() => void copy())}><Info size={17} />Copy the invite</button>
+        <button onClick={go(() => setModal('keys'))}><Keyboard size={17} />Keyboard shortcuts</button>
+      </div>)
+  }
+
+  const waitingBadge = me.manager ? waiting.length : 0
+  return (
+    <div className="meet-call">
+      <header className="meet-top">
+        <div className="meet-title"><b>{call.title()}</b><button className="meet-code" onClick={copy} title="Copy the invite">{code}{copied ? <Check size={13} /> : <Copy size={13} />}</button></div>
+        <span className="meet-chip" title="People in the meeting"><Users size={13} />{peers.length}</span>
+        <span className="meet-chip" title="How long the meeting has run">{clock(Date.now() - call.started())}</span>
+        {s.locked && <span className="meet-chip warn"><Lock size={13} />Locked</span>}
+        {capsOn && <span className="meet-chip"><Captions size={13} />Captions</span>}
+        <span className="meet-chip" title="Audio and video aren't end-to-end encrypted: the call service can carry them."><LockOpen size={13} />Not encrypted</span>
+        {status === 'reconnecting' && <span className="meet-chip warn"><span className="spinner sm" />Reconnecting…</span>}
+      </header>
+
+      <div className="meet-body">
+        <main className="meet-stage">
+          <Stage peers={peers} spotlight={call.spotlight()} layout={layout} hideSelf={hideSelf} />
+          {peers.length === 1 && <div className="meet-alone"><p>You're the only one here.</p><button className="btn btn-soft btn-pill btn-sm" onClick={copy}>{copied ? <Check size={15} /> : <Copy size={15} />}Copy the invite</button></div>}
+          <Floaters call={call} />
+          {capsOn && showCaps && recent.length > 0 && <div className="meet-caps" aria-live="polite">{recent.map((c) => <p key={c.id}><b>{c.name}</b> {c.text}</p>)}</div>}
+        </main>
+
+        {panel && (
+          <aside className="meet-panel" aria-label={panel}>
+            <div className="meet-panel-head">
+              <div className="tabs">
+                <button className={panel === 'chat' ? 'on' : ''} onClick={() => setPanel('chat')}>Chat{unread.chat > 0 && <i className="meet-dot inline">{unread.chat}</i>}</button>
+                <button className={panel === 'people' ? 'on' : ''} onClick={() => setPanel('people')}>People{waitingBadge > 0 && <i className="meet-dot inline">{waitingBadge}</i>}</button>
+                <button className={panel === 'polls' ? 'on' : ''} onClick={() => setPanel('polls')}>Polls{unread.polls > 0 && <i className="meet-dot inline">{unread.polls}</i>}</button>
+              </div>
+              <button className="icon-btn sm" onClick={() => setPanel(null)} aria-label="Close"><X size={16} /></button>
+            </div>
+            {panel === 'chat' && <ChatPanel call={call} peers={peers} to={chatTo} setTo={setChatTo} />}
+            {panel === 'people' && <PeoplePanel call={call} peers={peers} onMessage={(id) => { setChatTo(id); setPanel('chat') }} />}
+            {panel === 'polls' && <PollsPanel call={call} />}
+          </aside>)}
+      </div>
+
+      <footer className="meet-bar">
+        <button className={`meet-ctl ${self?.audio ? '' : 'off'}`} onClick={() => void call.setMic(!self?.audio)} aria-label={self?.audio ? 'Mute' : 'Unmute'} title={self?.audio ? 'Mute (M)' : 'Unmute (M)'}>{self?.audio ? <Mic size={20} /> : <MicOff size={20} />}</button>
+        <button className={`meet-ctl ${self?.video ? '' : 'off'}`} onClick={() => void call.setCam(!self?.video)} aria-label={self?.video ? 'Turn off camera' : 'Turn on camera'} title={self?.video ? 'Turn off camera (V)' : 'Turn on camera (V)'}>{self?.video ? <Video size={20} /> : <VideoOff size={20} />}</button>
+        {canShare && <button className={`meet-ctl ${self?.screen ? 'on' : ''}`} onClick={toggleShare} aria-label={self?.screen ? 'Stop presenting' : 'Present your screen'} title={self?.screen ? 'Stop presenting (S)' : 'Present your screen (S)'}>{self?.screen ? <MonitorX size={20} /> : <MonitorUp size={20} />}</button>}
+        {s.reactions && (
+          <Popover trigger={({ toggle }) => <button className="meet-ctl" onClick={toggle} aria-label="Reactions" title="Reactions"><Smile size={20} /></button>}>
+            {(close) => <div className="meet-emojis">{call.emojis().map((e) => <button key={e} onClick={() => { call.react(e); close() }} aria-label={`React ${e}`}>{e}</button>)}</div>}
+          </Popover>)}
+        <button className={`meet-ctl meet-hide-m ${self?.hand ? 'on' : ''}`} onClick={toggleHand} aria-label={self?.hand ? 'Lower your hand' : 'Raise your hand'} title="Raise or lower your hand (H)"><Hand size={20} /></button>
+        <button className={`meet-ctl ${panel === 'chat' ? 'on' : ''}`} onClick={() => open('chat')} aria-label="Chat" title="Chat (C)"><MessageSquare size={20} />{unread.chat > 0 && panel !== 'chat' && <i className="meet-dot">{unread.chat > 9 ? '9+' : unread.chat}</i>}</button>
+        <button className={`meet-ctl ${panel === 'people' ? 'on' : ''}`} onClick={() => open('people')} aria-label="People" title="People (P)"><Users size={20} />{waitingBadge > 0 && <i className="meet-dot">{waitingBadge}</i>}</button>
+        <button className={`meet-ctl meet-hide-m ${panel === 'polls' ? 'on' : ''}`} onClick={() => open('polls')} aria-label="Polls" title="Polls"><BarChart3 size={20} />{unread.polls > 0 && panel !== 'polls' && <i className="meet-dot">{unread.polls}</i>}</button>
+        <Popover align="end" trigger={({ toggle }) => <button className="meet-ctl" onClick={toggle} aria-label="More" title="More"><MoreVertical size={20} /></button>}>{moreMenu}</Popover>
+        {me.owner ? (
+          <Popover align="end" trigger={({ toggle }) => <button className="meet-ctl hang" onClick={toggle} aria-label="Leave"><PhoneOff size={20} /></button>}>
+            {(close) => (
+              <div className="menu wide">
+                <button onClick={() => { close(); leave() }}><PhoneOff size={17} />Leave, the meeting carries on</button>
+                <button className="danger" onClick={() => { close(); void endAll() }}><X size={17} />{call.permanent() ? 'End the session for everyone' : 'End for everyone'}</button>
+              </div>)}
+          </Popover>
+        ) : <button className="meet-ctl hang" onClick={leave} aria-label="Leave" title="Leave"><PhoneOff size={20} /></button>}
+      </footer>
+
+      {modal === 'settings' && <MeetingSettings code={code} call={call} onClose={() => setModal(null)} />}
+      {modal === 'keys' && <Shortcuts onClose={() => setModal(null)} />}
+      {modal === 'devices' && (
+        <Modal title="Microphone, camera and speaker" onClose={() => setModal(null)} width={440}>
+          <div className="share-body"><DevicePicker load={() => call.devices()} onMic={(id) => void call.setDevice('mic', id)} onCam={(id) => void call.setDevice('cam', id)} /></div>
+        </Modal>)}
+    </div>
+  )
+}
