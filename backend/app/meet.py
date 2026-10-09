@@ -20,6 +20,7 @@ frontend/src/meet/. Calls are not end-to-end encrypted, and the meeting page say
 """
 import json
 import os
+import re
 import secrets
 import time
 
@@ -106,6 +107,38 @@ def _usable(urls) -> list[str]:
     return out
 
 
+def _scheme(addr: str) -> str:
+    """A server address needs turn: or turns: in front, or the browser rejects the whole list. People type host:port, so add it (turns: for the usual TLS port 5349)."""
+    if re.match(r"^(turns?|stuns?):", addr, re.I):
+        return addr
+    port = re.search(r":(\d+)(\?|$)", addr)
+    return ("turns:" if port and port.group(1) == "5349" else "turn:") + addr
+
+
+def custom_servers(c: dict) -> list[dict]:
+    """One address per line. A line can carry its own login, `address username password`, for a service that has a different one; the lines without one share
+    the username and password below the list (and become one server with several addresses)."""
+    shared, own = [], []
+    for line in c["turn_urls"].replace(",", "\n").splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        urls = _usable([_scheme(parts[0])])
+        if not urls:
+            continue
+        if len(parts) >= 3:
+            own.append({"urls": urls, "username": parts[1], "credential": " ".join(parts[2:])})
+        else:
+            shared.append(urls[0])
+    out = []
+    if shared:
+        extra = {"urls": shared}
+        if c["turn_user"]:
+            extra.update(username=c["turn_user"], credential=c["turn_pass"])
+        out.append(extra)
+    return out + own
+
+
 async def ice_servers(c: dict) -> list[dict]:
     base = [{"urls": [STUN_DEFAULT]}, *TEST_ICE]
     if c["turn_mode"] == "cloudflare" and c["turn_key_id"] and c["turn_token"]:
@@ -125,11 +158,7 @@ async def ice_servers(c: dict) -> list[dict]:
         _ice_cache[c["turn_key_id"]] = (time.time() + 6 * 3600, servers)   # credentials last a day; people join with at least 18 hours left
         return servers
     if c["turn_mode"] == "custom" and c["turn_urls"].strip():
-        urls = _usable([u.strip() for u in c["turn_urls"].replace(",", "\n").splitlines() if u.strip()])
-        extra = {"urls": urls}
-        if c["turn_user"]:
-            extra.update(username=c["turn_user"], credential=c["turn_pass"])
-        return [*base, extra] if urls else base
+        return [*base, *custom_servers(c)]
     return base
 
 

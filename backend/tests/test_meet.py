@@ -521,6 +521,12 @@ call('PUT', '/api/admin/meet', {'turn': {'token': 'wrong'}}, A)
 call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'turn:relay.example.com:3478\nturns:relay.example.com:443', 'user': 'me', 'password': 'pw'}}, A)
 s, mc = call('POST', f"/api/meet/{m3['code']}/media", {'jt': j3['jt']}); cu = [x for x in mc['ice_servers'] if x.get('username') == 'me']
 ok('a custom TURN server is passed on', cu and cu[0]['credential'] == 'pw' and len(cu[0]['urls']) == 2, mc)
+call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'free.expressturn.com:3478\nglobal.relay.metered.ca:80 userA secretA\nturn:other.example.com:3478?transport=tcp user B', 'user': 'shared', 'password': 'sp'}}, A)
+s, mc = call('POST', f"/api/meet/{m3['code']}/media", {'jt': j3['jt']})
+byu = {x.get('username'): x for x in mc['ice_servers'] if x.get('username')}
+ok('addresses typed without turn: get it added', 'turn:free.expressturn.com:3478' in byu['shared']['urls'], mc)
+ok('a line with its own login keeps it (a different service), the others share the form\'s', byu['userA']['credential'] == 'secretA' and byu['userA']['urls'] == ['turn:global.relay.metered.ca:80'] and byu['shared']['credential'] == 'sp', byu)
+ok('and a line already starting with turn: is left alone', byu['user']['urls'] == ['turn:other.example.com:3478?transport=tcp'] and byu['user']['credential'] == 'B', byu)
 call('PUT', '/api/admin/meet', {'turn': {'mode': 'none'}}, A)
 
 # ---- RealtimeKit

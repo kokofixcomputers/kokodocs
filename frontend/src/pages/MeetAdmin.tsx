@@ -73,8 +73,9 @@ export function MeetAdminSection() {
             <Field label="TURN key API token" hint={m.turn.token_set ? 'Saved. Type to replace it.' : undefined}><input type="password" value={d.token} placeholder={m.turn.token_set ? '••••••••' : ''} onChange={(e) => setD({ ...d, token: e.target.value })} autoComplete="new-password" /></Field>
           </>)}
           {m.turn.mode === 'custom' && (<>
-            <label className="ai-field"><span>Server addresses</span>
-              <textarea className="ocr-prompt" rows={3} value={d.urls} placeholder={'turn:relay.example.com:3478\nturns:relay.example.com:443'} onChange={(e) => setD({ ...d, urls: e.target.value })} spellCheck={false} /></label>
+            <label className="ai-field"><span>Server addresses, one per line</span>
+              <textarea className="ocr-prompt" rows={3} value={d.urls} placeholder={'free.expressturn.com:3478\nturn:relay.example.com:3478\nglobal.relay.metered.ca:80 username password'} onChange={(e) => setD({ ...d, urls: e.target.value })} spellCheck={false} />
+              <span className="muted hint">Just the address and port is fine: turn: is added for you. For a service with its own login, add it on the same line: <code>address username password</code>. Lines without one use the username and password below.</span></label>
             <Field label="Username"><input value={d.user} onChange={(e) => setD({ ...d, user: e.target.value })} autoComplete="off" /></Field>
             <Field label="Password" hint={m.turn.pass_set ? 'Saved. Type to replace it.' : undefined}><input type="password" value={d.pass} placeholder={m.turn.pass_set ? '••••••••' : ''} onChange={(e) => setD({ ...d, pass: e.target.value })} autoComplete="new-password" /></Field>
           </>)}
