@@ -51,18 +51,30 @@ function offlineFiles() {
   })
 }
 
-/** after a normal load: fetch the rest of the app (every file the service worker's list names), so the editors work offline too */
+/** after a normal load: fetch the rest of the app so the editors work offline too. The service worker's list is only a starting point:
+ *  every saved script and stylesheet is also read for the files it loads, so nothing depends on how complete the server's list is. */
+const FILE = /(?:\/?assets\/|\.\/)([A-Za-z0-9_.-]+\.(?:js|css|woff2?|ttf|otf|svg|png|jpe?g|webp|gif|json))/g
 let prefetching = false
 async function prefetch() {
   if (prefetching) return; prefetching = true
   try {
-    const sw = await (await net.fetch(server + '/sw.js', { cache: 'no-store' })).text()
-    const list = JSON.parse(/const PRECACHE = (\[.*\])/.exec(sw)?.[1] || '[]').filter((p) => cacheable(p) && !have(p))
-    let i = 0
+    const sw = await (await net.fetch(server + '/sw.js', { cache: 'no-store' })).text().catch(() => '')
+    const queue = new Set(JSON.parse(/const PRECACHE = (\[.*\])/.exec(sw)?.[1] || '[]').filter(cacheable))
+    const idx = saved('/index.html'); if (idx) for (const m of idx.body.toString().matchAll(FILE)) queue.add('/assets/' + m[1])
+    const done = new Set()
+    const next = () => { for (const p of queue) if (!done.has(p)) return p; return null }
     await Promise.all([1, 2, 3, 4].map(async () => {
-      while (i < list.length) {
-        const p = list[i++]
-        try { const r = await net.fetch(server + p, { bypassCustomProtocolHandlers: true }); if (r.ok) store(p, r.headers.get('content-type') || '', Buffer.from(await r.arrayBuffer())) } catch { /* next time */ }
+      for (let p = next(); p; p = next()) {
+        done.add(p)
+        try {
+          let body, type = ''
+          if (have(p)) { const c = saved(p); body = c.body; type = c.type } else {
+            const r = await net.fetch(server + p, { bypassCustomProtocolHandlers: true })
+            if (!r.ok) continue
+            type = r.headers.get('content-type') || ''; body = Buffer.from(await r.arrayBuffer()); store(p, type, body)
+          }
+          if (/javascript|css/.test(type)) for (const m of body.toString('utf8').matchAll(FILE)) queue.add('/assets/' + m[1])   // what this file loads in turn
+        } catch { /* next time */ }
       }
     }))
   } catch { /* offline, or an older server */ } finally { prefetching = false }
