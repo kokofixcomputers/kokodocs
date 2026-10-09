@@ -43,6 +43,8 @@ caption_limiter = RateLimiter(40, 60)
 CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"   # no look-alikes (i l o 0 1)
 MESH_MAX = 8
 RTK_MAX = 100
+SFU_MAX = 100
+SFU_API = os.environ.get("KOKO_SFU_API", "https://rtc.live.cloudflare.com/v1")    # overridable so tests can use a mock
 MAX_PERMANENT = 25
 ONE_OFF_TTL = 7 * 86400    # a one-off meeting nobody has used for a week expires; make it permanent to keep it
 TICKET_HOURS = 6
@@ -89,6 +91,8 @@ def cfg(db) -> dict:
         "rk_account": settings_get(db, "meet_rk_account") or os.environ.get("CLOUDFLARE_ACCOUNT_ID", ""),
         "rk_app": settings_get(db, "meet_rk_app") or os.environ.get("KOKO_RTK_APP_ID", ""),
         "rk_token": _secret(db, "meet_rk_token") or os.environ.get("CLOUDFLARE_API_TOKEN", ""),
+        "sfu_app": settings_get(db, "meet_sfu_app") or os.environ.get("KOKO_SFU_APP_ID", ""),
+        "sfu_secret": _secret(db, "meet_sfu_secret") or os.environ.get("KOKO_SFU_SECRET", ""),
         "rk_host": settings_get(db, "meet_rk_host_preset", "group_call_host"),
         "rk_guest": settings_get(db, "meet_rk_guest_preset", "group_call_participant"),
     }
@@ -290,7 +294,67 @@ class RealtimeKit:
         return {"ok": True, "message": "Connected: a test meeting was created and closed."}
 
 
-PROVIDERS = {"mesh": Mesh, "realtimekit": RealtimeKit}
+# Cloudflare Realtime SFU: everyone sends ONE copy of their audio and video to Cloudflare, which forwards it to the others, so a 6 person call is 1 upload
+# instead of 5. The browsers talk to Cloudflare's session API through this server (the app secret never leaves it); who is in which Cloudflare session is
+# announced over the meeting's own control channel.
+_sfu_sessions: dict[str, tuple[str, str, float]] = {}   # Cloudflare session id -> (meeting code, person, created)
+
+
+def _sfu_prune() -> None:
+    cut = time.time() - 12 * 3600
+    for k in [k for k, v in _sfu_sessions.items() if v[2] < cut]:
+        _sfu_sessions.pop(k, None)
+
+
+class CloudflareSfu:
+    id = "sfu"
+    label = "Cloudflare SFU (one upload for everyone)"
+    cap = SFU_MAX
+
+    @staticmethod
+    def problem(c) -> str | None:
+        if not (c["sfu_app"] and c["sfu_secret"]):
+            return "The Cloudflare SFU needs the app id and app secret (Admin → Meetings)."
+        return None
+
+    @staticmethod
+    async def _req(c, method: str, path: str, body: dict | None = None) -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=20, follow_redirects=False) as h:
+                r = await h.request(method, f"{SFU_API}/apps/{c['sfu_app']}{path}", json=body, headers={"Authorization": f"Bearer {c['sfu_secret']}"})
+        except httpx.HTTPError as e:
+            raise HTTPException(502, f"Could not reach Cloudflare ({type(e).__name__})")
+        try:
+            j = r.json()
+        except ValueError:
+            j = {}
+        if r.status_code in (401, 403):
+            raise HTTPException(502, "Cloudflare rejected the app secret. Check the app id and secret of the Realtime SFU app.")
+        if r.status_code >= 400 or (isinstance(j, dict) and j.get("errorCode")):
+            raise HTTPException(502, f"Cloudflare returned an error ({r.status_code}){': ' + str(j.get('errorDescription'))[:200] if isinstance(j, dict) and j.get('errorDescription') else ''}")
+        return j if isinstance(j, dict) else {}
+
+    @staticmethod
+    async def creds(db, m, name: str, cid: str, manager: bool) -> dict:
+        servers = await ice_servers(cfg(db))
+        if not any("stun.cloudflare.com" in str(u) for s in servers for u in s["urls"]):
+            servers = [{"urls": ["stun:stun.cloudflare.com:3478"]}, *servers]
+        return {"provider": "sfu", "ice_servers": servers, "max": SFU_MAX}
+
+    @staticmethod
+    async def end(db, m) -> None:
+        for k in [k for k, v in _sfu_sessions.items() if v[0] == m["code"]]:
+            _sfu_sessions.pop(k, None)
+
+    @staticmethod
+    async def test(db) -> dict:
+        d = await CloudflareSfu._req(cfg(db), "POST", "/sessions/new")
+        if not d.get("sessionId"):
+            raise HTTPException(502, "Cloudflare did not return a session id")
+        return {"ok": True, "message": "Connected: a test session was created."}
+
+
+PROVIDERS = {"mesh": Mesh, "realtimekit": RealtimeKit, "sfu": CloudflareSfu}
 
 
 # ---------------------------------------------------------------- one meeting's settings
@@ -619,6 +683,62 @@ async def meeting_media(code: str, body: Media, db=Depends(get_db)):
     return await p.creds(db, m, t["n"], t["i"], state["manager"])
 
 
+class SfuCall(BaseModel):
+    jt: str = Field(max_length=2000)
+    body: dict = Field(default_factory=dict)
+
+
+def _sfu_member(db, code: str, jt: str):
+    t = read_ticket(jt, code)
+    if not t:
+        raise HTTPException(401, "Your place in the meeting expired. Join again.")
+    m = get_meeting(db, code)
+    if closed(m):
+        raise HTTPException(410, "This meeting has ended.")
+    if m["provider"] != "sfu":
+        raise HTTPException(409, "This meeting doesn't use the Cloudflare SFU.")
+    if _room().member(m["code"], t["i"]) is None:
+        raise HTTPException(403, "You're not in this meeting yet.")
+    return m, t
+
+
+@router.post("/meet/{code}/sfu/session")
+async def sfu_session(code: str, body: SfuCall, db=Depends(get_db)):
+    """Start this person's Cloudflare session (where their audio and video are sent)."""
+    m, t = _sfu_member(db, code, body.jt)
+    _sfu_prune()
+    d = await CloudflareSfu._req(cfg(db), "POST", "/sessions/new")
+    sid = str(d.get("sessionId") or "")
+    if not sid:
+        raise HTTPException(502, "Cloudflare did not return a session id")
+    _sfu_sessions[sid] = (m["code"], t["i"], time.time())
+    return {"sessionId": sid}
+
+
+@router.post("/meet/{code}/sfu/{sid}/tracks")
+async def sfu_tracks(code: str, sid: str, body: SfuCall, db=Depends(get_db)):
+    """Send tracks (an offer with local tracks) or fetch other people's (remote tracks, which must belong to this meeting)."""
+    m, t = _sfu_member(db, code, body.jt)
+    own = _sfu_sessions.get(sid)
+    if not own or own[0] != m["code"] or own[1] != t["i"]:
+        raise HTTPException(403, "That isn't your session.")
+    for tr in (body.body.get("tracks") or []):
+        if isinstance(tr, dict) and tr.get("location") == "remote":
+            other = _sfu_sessions.get(str(tr.get("sessionId")))
+            if not other or other[0] != m["code"]:
+                raise HTTPException(403, "That session isn't in this meeting.")
+    return await CloudflareSfu._req(cfg(db), "POST", f"/sessions/{sid}/tracks/new", body.body)
+
+
+@router.put("/meet/{code}/sfu/{sid}/renegotiate")
+async def sfu_renegotiate(code: str, sid: str, body: SfuCall, db=Depends(get_db)):
+    m, t = _sfu_member(db, code, body.jt)
+    own = _sfu_sessions.get(sid)
+    if not own or own[0] != m["code"] or own[1] != t["i"]:
+        raise HTTPException(403, "That isn't your session.")
+    return await CloudflareSfu._req(cfg(db), "PUT", f"/sessions/{sid}/renegotiate", body.body)
+
+
 @router.post("/meet/{code}/share/token")
 async def share_token(code: str, body: Media, db=Depends(get_db)):
     """A key to open the document being shared in the meeting: editor if people may edit it (and this person may), otherwise viewer."""
@@ -691,6 +811,7 @@ def admin_view(db) -> dict:
             "providers": [{"id": p.id, "label": p.label} for p in PROVIDERS.values()],
             "turn": {"mode": c["turn_mode"], "key_id": c["turn_key_id"], "token_set": bool(c["turn_token"]), "urls": c["turn_urls"], "user": c["turn_user"], "pass_set": bool(c["turn_pass"])},
             "rtk": {"account": c["rk_account"], "app": c["rk_app"], "token_set": bool(c["rk_token"]), "host_preset": c["rk_host"], "guest_preset": c["rk_guest"]},
+            "sfu": {"app": c["sfu_app"], "secret_set": bool(c["sfu_secret"])},
             "problem": PROVIDERS[c["provider"]].problem(c)}
 
 
@@ -711,12 +832,18 @@ class RtkIn(BaseModel):
     guest_preset: str | None = Field(None, max_length=80)
 
 
+class SfuIn(BaseModel):
+    app: str | None = Field(None, max_length=80)
+    secret: str | None = Field(None, max_length=500)    # None or "" keeps the stored one
+
+
 class AdminIn(BaseModel):
     enabled: bool | None = None
     guests: bool | None = None
     provider: str | None = None
     turn: TurnIn | None = None
     rtk: RtkIn | None = None
+    sfu: SfuIn | None = None
 
 
 def _put(db, key: str, val: str | None, secret: bool = False):
@@ -771,6 +898,10 @@ def admin_put(body: AdminIn, admin=Depends(must_admin), db=Depends(get_db)):
         _put(db, "meet_rk_token", r.token, secret=True)
         _put(db, "meet_rk_host_preset", r.host_preset)
         _put(db, "meet_rk_guest_preset", r.guest_preset)
+    f = body.sfu
+    if f:
+        _put(db, "meet_sfu_app", f.app)
+        _put(db, "meet_sfu_secret", f.secret, secret=True)
     db.commit()
     return admin_view(db)
 

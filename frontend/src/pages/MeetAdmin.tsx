@@ -18,10 +18,10 @@ export function MeetAdminSection() {
   const [busy, setBusy] = useState(false)
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null)
   // text typed since the last save (secrets are never sent back, so they start empty)
-  const [d, setD] = useState({ keyId: '', token: '', urls: '', user: '', pass: '', account: '', app: '', rtoken: '', host: '', guest: '' })
+  const [d, setD] = useState({ keyId: '', token: '', urls: '', user: '', pass: '', account: '', app: '', rtoken: '', host: '', guest: '', sfuApp: '', sfuSecret: '' })
   const load = (x: MeetAdmin) => {
     setM(x)
-    setD({ keyId: x.turn.key_id, token: '', urls: x.turn.urls, user: x.turn.user, pass: '', account: x.rtk.account, app: x.rtk.app, rtoken: '', host: x.rtk.host_preset, guest: x.rtk.guest_preset })
+    setD({ keyId: x.turn.key_id, token: '', urls: x.turn.urls, user: x.turn.user, pass: '', account: x.rtk.account, app: x.rtk.app, rtoken: '', host: x.rtk.host_preset, guest: x.rtk.guest_preset, sfuApp: x.sfu.app, sfuSecret: '' })
   }
   useEffect(() => { api.adminMeet().then(load).catch((e) => setErr(e.message)) }, [])
   if (!m) return err ? <p className="form-error">{err}</p> : <span className="spinner" />
@@ -32,6 +32,7 @@ export function MeetAdminSection() {
       load(await api.adminMeetSave({
         turn: { key_id: d.keyId, token: d.token, urls: d.urls, user: d.user, password: d.pass },
         rtk: { account: d.account, app: d.app, token: d.rtoken, host_preset: d.host, guest_preset: d.guest },
+        sfu: { app: d.sfuApp, secret: d.sfuSecret },
         ...patch,
       }))
       toast('Saved')
@@ -80,6 +81,14 @@ export function MeetAdminSection() {
             <Field label="Username"><input value={d.user} onChange={(e) => setD({ ...d, user: e.target.value })} autoComplete="off" /></Field>
             <Field label="Password" hint={m.turn.pass_set ? 'Saved. Type to replace it.' : undefined}><input type="password" value={d.pass} placeholder={m.turn.pass_set ? '••••••••' : ''} onChange={(e) => setD({ ...d, pass: e.target.value })} autoComplete="new-password" /></Field>
           </>)}
+        </div>)}
+
+      {p === 'sfu' && (
+        <div className="ad-card ad-form">
+          <h3 className="ad-h">Cloudflare SFU</h3>
+          <p className="muted" style={{ margin: 0 }}>Everyone sends their audio and video to Cloudflare once, and Cloudflare sends it on to the others. In a 6 person call that is 1 upload instead of 5.</p>
+          <Field label="App id" hint="Dashboard → Realtime → SFU → create an app."><input value={d.sfuApp} onChange={(e) => setD({ ...d, sfuApp: e.target.value })} autoComplete="off" /></Field>
+          <Field label="App secret" hint={m.sfu.secret_set ? 'Saved. Type to replace it.' : 'Shown once when you create the app.'}><input type="password" value={d.sfuSecret} placeholder={m.sfu.secret_set ? '••••••••' : ''} onChange={(e) => setD({ ...d, sfuSecret: e.target.value })} autoComplete="new-password" /></Field>
         </div>)}
 
       {p === 'realtimekit' && (

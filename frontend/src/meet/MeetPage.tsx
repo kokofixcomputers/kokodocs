@@ -169,7 +169,7 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
           {error && <p className="form-error">{error}</p>}
           <button className="btn btn-primary btn-pill btn-lg" disabled={busy} onClick={() => void join()}>{busy ? <span className="spinner sm" /> : info.approval && !info.is_host && !info.is_cohost ? 'Ask to join' : 'Join now'}</button>
           {!user && <p className="muted small">Have an account? <Link to="/login" state={{ from: `/m/${code}` }}>Sign in</Link></p>}
-          <p className="meet-enc"><Lock size={14} />{info.provider === 'realtimekit' ? "Calls are encrypted on the way to Cloudflare's call servers, which carry them." : 'Calls are encrypted between the browsers.'}</p>
+          <p className="meet-enc"><Lock size={14} />{info.provider === 'realtimekit' || info.provider === 'sfu' ? "Calls are encrypted on the way to Cloudflare's call servers, which carry them." : 'Calls are encrypted between the browsers.'}</p>
         </div>
       </div>
       {asking && <ConsentModal required={info.recording?.required ?? false} onAnswer={(a) => { setAsking(false); if (!a && info.recording?.required) setError("You can't join this meeting without agreeing to be recorded."); else void join(a) }} />}

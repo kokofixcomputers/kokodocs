@@ -472,6 +472,10 @@ The settings can also come from the environment: `CLOUDFLARE_ACCOUNT_ID`, `CLOUD
 
 The RealtimeKit adapter follows Cloudflare's published SDK types and was tested only against a mock Cloudflare API, not a live account. Tests: `backend/tests/test_meet.py` (REST, passcodes, the waiting room, co-hosts, polls, permanent meetings, both providers against a mock Cloudflare, the socket; start the server with `KOKO_CF_API=http://127.0.0.1:8767/client/v4 KOKO_TURN_API=http://127.0.0.1:8767/v1/turn/keys`).
 
+### Cloudflare SFU (one upload for everyone)
+
+Admin → Meetings → Provider → **Cloudflare SFU**. In a mesh call you upload a copy of your video to every other person (5 copies in a 6 person call); with the SFU you upload once to Cloudflare, which forwards it. Create an app in the Cloudflare dashboard (Realtime → SFU), paste its **app id** and **app secret** (or set `KOKO_SFU_APP_ID` and `KOKO_SFU_SECRET`), and use *Save and test*. The browsers never see the secret: this server relays their calls to Cloudflare's session API, and only lets a person use their own session and fetch tracks from sessions in the same meeting. Switching the provider only affects meetings started afterwards. Tests: `backend/tests/test_sfu.py`.
+
 ## Scan a page (reading text from a photo)
 
 In a document or wiki, the toolbar's **Scan a page** button lets you choose a photo or scan (or drop one in) and adds the text on it where your cursor is. Undo works like any other edit. Two ways to read it, remembered per browser:

@@ -83,20 +83,22 @@ export interface MeetInfo {
   recording?: { required: boolean } | null   // the meeting is being recorded right now
 }
 export interface RecordingItem { id: string; title: string; code: string; by: string; status: 'recording' | 'done'; mime: string; size: number; duration_ms: number; created_at: number }
-export interface MeetTicket { jt: string; cid: string; name: string; host: boolean; title: string; provider: 'mesh' | 'realtimekit'; permanent: boolean }
+export interface MeetTicket { jt: string; cid: string; name: string; host: boolean; title: string; provider: 'mesh' | 'realtimekit' | 'sfu'; permanent: boolean }
 export interface MeetShareToken { doc_id: string; token: string; role: 'viewer' | 'editor'; kind: 'collab' | 'present'; doc_kind: 'doc' | 'sheet' | 'slides' }
-export interface MeetMedia { provider: 'mesh' | 'realtimekit'; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
+export interface MeetMedia { provider: 'mesh' | 'realtimekit' | 'sfu'; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
 export interface MeetCreate { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
 export interface MeetEdit { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
 export interface MeetAdmin {
   enabled: boolean; guests: boolean; provider: string; providers: { id: string; label: string }[]; problem: string | null; warning?: string | null
   turn: { mode: 'none' | 'cloudflare' | 'custom'; key_id: string; token_set: boolean; urls: string; user: string; pass_set: boolean }
   rtk: { account: string; app: string; token_set: boolean; host_preset: string; guest_preset: string }
+  sfu: { app: string; secret_set: boolean }
 }
 export interface MeetAdminIn {
   enabled?: boolean; guests?: boolean; provider?: string
   turn?: Partial<{ mode: string; key_id: string; token: string; urls: string; user: string; password: string }>
   rtk?: Partial<{ account: string; app: string; token: string; host_preset: string; guest_preset: string }>
+  sfu?: Partial<{ app: string; secret: string }>
 }
 export interface OcrConfig { available: boolean; model: { id: string; label: string; model: string } | null; locked: boolean; default: '' | 'local' | 'ai' }
 export interface OcrAdmin { model_id: string; prompt: string; default_prompt: string; lock: boolean; default: '' | 'local' | 'ai'; models: { id: string; label: string; model: string; host: string }[] }
@@ -373,6 +375,9 @@ export const api = {
   recordings: () => request<{ items: RecordingItem[]; total: number }>('/api/recordings'),
   recording: (id: string) => request<RecordingItem & { url: string }>(`/api/recordings/${id}`),
   deleteRecording: (id: string) => request<{ ok: true }>(`/api/recordings/${id}`, { method: 'DELETE' }),
+  /** Calls to Cloudflare's SFU session API, relayed by this server (which holds the app secret). */
+  meetSfu: <T = unknown>(code: string, jt: string, path: string, method: 'POST' | 'PUT' = 'POST', body: object = {}) =>
+    request<T>(`/api/meet/${encodeURIComponent(code)}/sfu/${path}`, { method, ...json({ jt, body }) }),
   meetShareToken: (code: string, jt: string) => request<MeetShareToken>(`/api/meet/${encodeURIComponent(code)}/share/token`, { method: 'POST', ...json({ jt }) }),
   meetEnd: (code: string) => request<{ ok: true; permanent: boolean }>(`/api/meet/${encodeURIComponent(code)}/end`, { method: 'POST' }),
   meetCaption: (code: string, jt: string, wav: Blob) => { const fd = new FormData(); fd.append('jt', jt); fd.append('file', wav, 'speech.wav'); return request<{ text: string }>(`/api/meet/${encodeURIComponent(code)}/caption`, { method: 'POST', body: fd }) },
