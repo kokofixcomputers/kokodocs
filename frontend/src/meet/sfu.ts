@@ -44,6 +44,11 @@ export class SfuMedia extends Emitter implements Media {
   private pc: RTCPeerConnection
   private rx: RTCPeerConnection      // the connection others' tracks arrive on: the same one for Cloudflare; for Metered a second one, as its documentation does it (one session sends, another receives)
   private rxSid = ''
+  private expect: { peer: string; kind: Kind } | null = null   // the track being subscribed to right now (Metered): whatever arrives during that is it
+  private hooked = false
+  private restarts: number[] = []
+  private restarting = false
+  private downTimer: number | undefined
   private ice: RTCIceServer[]
   private slots: RTCRtpTransceiver[] = []
   private audio: MediaStreamTrack | null
@@ -85,12 +90,15 @@ export class SfuMedia extends Emitter implements Media {
 
   private async begin(at: (stage: string) => void) {
     const pc = this.pc
-    this.ctl.onSignal((from, data) => void this.onSignal(from, data))
-    this.ctl.onLeft((id) => { this.remotes.delete(id); this.changed() })
-    this.ctl.onForce((f) => { if (f.screen === false) this.stopScreen(); if (f.audio === false) void this.setMic(false); if (f.video === false) void this.setCam(false) })
-    this.ctl.onMute(() => void this.setMic(false))
-    this.ctl.onCamOff(() => void this.setCam(false))
-    this.ctl.onWelcome(() => this.announce(this.ctl.welcomePeers, false))   // the control channel reconnected: say again where we are
+    if (!this.hooked) {
+      this.hooked = true
+      this.ctl.onSignal((from, data) => void this.onSignal(from, data))
+      this.ctl.onLeft((id) => { this.remotes.delete(id); this.changed() })
+      this.ctl.onForce((f) => { if (f.screen === false) this.stopScreen(); if (f.audio === false) void this.setMic(false); if (f.video === false) void this.setCam(false) })
+      this.ctl.onMute(() => void this.setMic(false))
+      this.ctl.onCamOff(() => void this.setCam(false))
+      this.ctl.onWelcome(() => this.announce(this.ctl.welcomePeers, false))   // the control channel reconnected: say again where we are
+    }
     this.wire(pc)
     const addSlots = () => {
       this.slots = [
@@ -141,21 +149,50 @@ export class SfuMedia extends Emitter implements Media {
       await pc.setRemoteDescription(r.sessionDescription)
     }
     this.ready()
-    this.announce(this.ctl.welcomePeers, false)
+    this.announce(this.restarts.length ? [...this.ctl.peers.keys()] : this.ctl.welcomePeers, false)
   }
 
   /** hand received tracks to the right person (the connection line they arrive on says whose and which) */
   private wire(c: RTCPeerConnection) {
     c.ontrack = (e) => {
-      const m = e.transceiver.mid ? this.byMid.get(e.transceiver.mid) : undefined
+      const m = this.expect ?? (e.transceiver.mid ? this.byMid.get(e.transceiver.mid) : undefined)
       const r = m && this.remotes.get(m.peer)
       if (!m || !r) return
+      if ((m.kind === 'mic') !== (e.track.kind === 'audio')) return   // not the kind we asked for
+      if (e.transceiver.mid) this.byMid.set(e.transceiver.mid, m)
       r.tracks[m.kind] = e.track; r.mids[m.kind] = e.transceiver
       if (m.kind === 'screen') r.screenStream = new MediaStream([e.track])
       else r.stream = new MediaStream([r.tracks.mic, r.tracks.cam].filter(Boolean) as MediaStreamTrack[])
       this.changed()
     }
-    c.onconnectionstatechange = () => this.changed()
+    c.onconnectionstatechange = () => {
+      this.changed()
+      window.clearTimeout(this.downTimer)
+      if (c !== this.pc && c !== this.rx) return
+      if (c.connectionState === 'failed') void this.restart()
+      else if (c.connectionState === 'disconnected') this.downTimer = window.setTimeout(() => { if (c.connectionState !== 'connected') void this.restart() }, 6000)
+    }
+  }
+
+  /** a connection to the call service died: start both over (new sessions) and tell everyone where we are now; they fetch us again and we fetch them */
+  private async restart() {
+    if (this.stopped || this.restarting) return
+    const now = Date.now()
+    this.restarts = this.restarts.filter((t) => now - t < 120_000)
+    if (this.restarts.length >= 6) { this.error = 'the connection to the call service keeps dropping (the network may be blocking its UDP traffic)'; this.changed(); return }
+    this.restarts.push(now); this.restarting = true
+    try {
+      for (const c of new Set([this.pc, this.rx])) { c.ontrack = c.onconnectionstatechange = null; c.close() }
+      this.pc = this.rx = new RTCPeerConnection({ iceServers: this.ice, bundlePolicy: 'max-bundle' })
+      this.remotes.clear(); this.byMid.clear(); this.known.clear(); this.slots = []; this.ids = {}; this.error = ''
+      this.ok = new Promise((r) => { this.ready = r })
+      this.changed()
+      await this.begin(() => {})
+    } catch (e) {
+      this.error = `couldn't reconnect: ${(e as Error).message}`; this.changed()
+      window.setTimeout(() => { this.restarting = false; void this.restart() }, 4000)
+      return
+    } finally { if (!this.error) this.restarting = false }
   }
 
   /** tell people which Cloudflare session carries us (ack: this answers someone who told us theirs) */
@@ -205,7 +242,8 @@ export class SfuMedia extends Emitter implements Media {
               { op: 'subscribe', tracks: [{ remoteSessionId: sid, remoteTrackId: ids[kind] }] })
             if (r.sessionDescription && r.immediateRenegotiationRequired !== false) {
               for (const m of r.sessionDescription.sdp!.matchAll(/^a=mid:(\S+)/gm)) if (!this.known.has(m[1])) { this.known.add(m[1]); this.byMid.set(m[1], { peer, kind }) }
-              await this.rx.setRemoteDescription(r.sessionDescription)
+              this.expect = { peer, kind }
+              try { await this.rx.setRemoteDescription(r.sessionDescription) } finally { this.expect = null }
               await this.rx.setLocalDescription(await this.rx.createAnswer())
               await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.rx.localDescription!.sdp } })
             }
@@ -325,6 +363,7 @@ export class SfuMedia extends Emitter implements Media {
 
   stop() {
     this.stopped = true
+    window.clearTimeout(this.downTimer)
     for (const c of new Set([this.pc, this.rx])) { c.ontrack = c.onconnectionstatechange = null; c.close() }
     this.audio?.stop(); this.video?.stop(); this.screenMedia?.getTracks().forEach((t) => t.stop())
     this.audio = this.video = this.screenTrack = null
