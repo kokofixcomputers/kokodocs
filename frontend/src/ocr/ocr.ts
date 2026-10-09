@@ -1,18 +1,21 @@
-// Reading text from a photo of a page, on this device. The reader (Tesseract) and the English data are served by this app itself (see
-// scripts/copy-ocr.mjs), so it works offline and the picture never leaves the browser. Other languages' data are fetched the first time from a CDN.
+// The classic on-device reader (Tesseract): the fallback when the main reader (paddle.ts) can't run, and the reader for scripts the main one has
+// no model for. Served by this app (see scripts/copy-ocr.mjs) so it works offline; other languages' data are fetched the first time from a CDN.
 import type { Worker } from 'tesseract.js'
 
-export const LANGS: { id: string; label: string }[] = [
-  { id: 'eng', label: 'English' }, { id: 'spa', label: 'Spanish' }, { id: 'fra', label: 'French' }, { id: 'deu', label: 'German' }, { id: 'ita', label: 'Italian' },
-  { id: 'por', label: 'Portuguese' }, { id: 'nld', label: 'Dutch' }, { id: 'pol', label: 'Polish' }, { id: 'rus', label: 'Russian' }, { id: 'tur', label: 'Turkish' },
-  { id: 'ara', label: 'Arabic' }, { id: 'hin', label: 'Hindi' }, { id: 'jpn', label: 'Japanese' }, { id: 'kor', label: 'Korean' }, { id: 'chi_sim', label: 'Chinese (simplified)' },
+/** `en` and `latin` are read by the main reader (PaddleOCR) with a model bundled in the app; the rest by the classic reader (Tesseract), whose data downloads on first use. */
+export const LANGS: { id: string; label: string; engine: 'en' | 'latin' | 'tess' }[] = [
+  { id: 'eng', label: 'English', engine: 'en' },
+  { id: 'spa', label: 'Spanish', engine: 'latin' }, { id: 'fra', label: 'French', engine: 'latin' }, { id: 'deu', label: 'German', engine: 'latin' }, { id: 'ita', label: 'Italian', engine: 'latin' },
+  { id: 'por', label: 'Portuguese', engine: 'latin' }, { id: 'nld', label: 'Dutch', engine: 'latin' }, { id: 'pol', label: 'Polish', engine: 'latin' }, { id: 'tur', label: 'Turkish', engine: 'latin' },
+  { id: 'rus', label: 'Russian', engine: 'tess' }, { id: 'ara', label: 'Arabic', engine: 'tess' }, { id: 'hin', label: 'Hindi', engine: 'tess' },
+  { id: 'jpn', label: 'Japanese', engine: 'tess' }, { id: 'kor', label: 'Korean', engine: 'tess' }, { id: 'chi_sim', label: 'Chinese (simplified)', engine: 'tess' },
 ]
 
-export interface OcrPrefs { via: 'local' | 'ai'; lang: string; model: string }
+export interface OcrPrefs { via: 'local' | 'ai'; lang: string; model: string; crop: boolean }
 const KEY = 'koko.ocr'
 export function loadPrefs(): OcrPrefs {
-  try { const p = JSON.parse(localStorage.getItem(KEY) ?? 'null'); if (p && (p.via === 'local' || p.via === 'ai')) return { via: p.via, lang: p.lang || 'eng', model: p.model || '' } } catch { /* defaults */ }
-  return { via: 'local', lang: 'eng', model: '' }
+  try { const p = JSON.parse(localStorage.getItem(KEY) ?? 'null'); if (p && (p.via === 'local' || p.via === 'ai')) return { via: p.via, lang: p.lang || 'eng', model: p.model || '', crop: !!p.crop } } catch { /* defaults */ }
+  return { via: 'local', lang: 'eng', model: '', crop: false }
 }
 export const savePrefs = (p: OcrPrefs) => { try { localStorage.setItem(KEY, JSON.stringify(p)) } catch { /* not remembered */ } }
 

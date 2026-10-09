@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 /** Gives every build an id (a hash of the names of everything it produced; the names already carry each file's content hash).
@@ -24,8 +24,14 @@ function buildStamp(): Plugin {
   }
 }
 
+/** js-clipper (used by the page reader to cut out lines of text) is saved in a Latin-1 encoding that the bundler refuses to read as UTF-8. */
+function latin1Clipper(): Plugin {
+  return { name: 'js-clipper-latin1', enforce: 'pre', load(id) { if (/js-clipper[\\/]clipper\.js/.test(id)) return readFileSync(id.split('?')[0], 'latin1') } }
+}
+
 export default defineConfig({
-  plugins: [react(), buildStamp()],
+  plugins: [react(), buildStamp(), latin1Clipper()],
+  resolve: { alias: { 'onnxruntime-web': 'onnxruntime-web/wasm' } },   // the CPU-only build (about half the size: the page reader doesn't use the GPU)
   server: {
     port: 5173,
     proxy: {

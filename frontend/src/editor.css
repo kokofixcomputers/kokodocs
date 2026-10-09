@@ -483,3 +483,8 @@ img.emoji.emoji-failed { width: auto; height: auto; font-size: 1em; color: inher
 .ocr-drop b { color: var(--ink); font-size: 15px; } .ocr-drop:hover, .ocr-drop.over, .ocr-drop:focus-visible { border-color: var(--accent); color: var(--ink); outline: none; }
 .ocr-busy { display: grid; gap: 10px; justify-items: center; padding: 22px 8px; font-size: 14px; color: var(--muted); } .ocr-busy .zk-bar { width: 100%; }
 @media (max-width: 520px) { .ocr-ways { grid-template-columns: 1fr; } }
+.ocr-crop { position: relative; margin: 0 auto; background: #000; border-radius: 12px; overflow: hidden; touch-action: none; user-select: none; }
+.ocr-crop canvas, .ocr-crop svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ocr-shade { fill: rgba(0, 0, 0, .5); } .ocr-quad { fill: none; stroke: var(--accent, #6366f1); stroke-linejoin: round; }
+.ocr-handle { fill: #fff; stroke: var(--accent, #6366f1); stroke-width: 4; cursor: grab; touch-action: none; } .ocr-handle:active { cursor: grabbing; }
+.ocr-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
