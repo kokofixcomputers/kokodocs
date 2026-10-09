@@ -42,6 +42,9 @@ function black(): MediaStreamTrack {
 
 export class SfuMedia extends Emitter implements Media {
   private pc: RTCPeerConnection
+  private rx: RTCPeerConnection      // the connection others' tracks arrive on: the same one for Cloudflare; for Metered a second one, as its documentation does it (one session sends, another receives)
+  private rxSid = ''
+  private ice: RTCIceServer[]
   private slots: RTCRtpTransceiver[] = []
   private audio: MediaStreamTrack | null
   private video: MediaStreamTrack | null
@@ -69,7 +72,8 @@ export class SfuMedia extends Emitter implements Media {
     super()
     this.audio = local.audio; this.video = local.video
     this.micId = local.micId ?? ''; this.camId = local.camId ?? ''
-    this.pc = new RTCPeerConnection({ iceServers: ice, bundlePolicy: 'max-bundle' })
+    this.ice = ice
+    this.pc = this.rx = new RTCPeerConnection({ iceServers: ice, bundlePolicy: 'max-bundle' })
     this.ph = { mic: silence(), cam: black(), screen: black() }
     this.rebuild()
   }
@@ -87,16 +91,7 @@ export class SfuMedia extends Emitter implements Media {
     this.ctl.onMute(() => void this.setMic(false))
     this.ctl.onCamOff(() => void this.setCam(false))
     this.ctl.onWelcome(() => this.announce(this.ctl.welcomePeers, false))   // the control channel reconnected: say again where we are
-    pc.ontrack = (e) => {
-      const m = e.transceiver.mid ? this.byMid.get(e.transceiver.mid) : undefined
-      const r = m && this.remotes.get(m.peer)
-      if (!m || !r) return
-      r.tracks[m.kind] = e.track; r.mids[m.kind] = e.transceiver
-      if (m.kind === 'screen') r.screenStream = new MediaStream([e.track])
-      else r.stream = new MediaStream([r.tracks.mic, r.tracks.cam].filter(Boolean) as MediaStreamTrack[])
-      this.changed()
-    }
-    pc.onconnectionstatechange = () => this.changed()
+    this.wire(pc)
     const addSlots = () => {
       this.slots = [
         pc.addTransceiver(this.audio ?? this.ph.mic, { direction: 'sendonly' }),
@@ -123,13 +118,22 @@ export class SfuMedia extends Emitter implements Media {
         tracks: this.slots.map((t, i) => ({ trackId: t.sender.track?.id, mid: t.mid, customTrackName: NAMES[i] })),
       })
       await pc.setRemoteDescription(r.sessionDescription)
-      this.slots.forEach((t) => { if (t.mid) this.known.add(t.mid) })
+      this.known.clear()   // (mids are counted per connection: the receiving one starts fresh)
+      at('opening the receiving session')
+      const rx = this.rx = new RTCPeerConnection({ iceServers: this.ice, bundlePolicy: 'max-bundle' })
+      this.wire(rx)
+      rx.addTransceiver('video', { direction: 'recvonly' })
+      await rx.setLocalDescription(await rx.createOffer())
+      const second = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: rx.localDescription!.sdp } })
+      this.rxSid = second.sessionId
+      await rx.setRemoteDescription(second.sessionDescription)
+      for (const t of rx.getTransceivers()) if (t.mid) this.known.add(t.mid)
     } else {
       at('creating the session')
       addSlots()
       await pc.setLocalDescription(await pc.createOffer())
       const { sessionId } = await api.meetSfu<{ sessionId: string }>(this.code, this.jt, 'session')
-      this.sid = sessionId
+      this.sid = this.rxSid = sessionId
       const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${sessionId}/tracks`, 'POST', {
         sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp },
         tracks: this.slots.map((t, i) => ({ location: 'local', mid: t.mid, trackName: NAMES[i] })),
@@ -138,6 +142,20 @@ export class SfuMedia extends Emitter implements Media {
     }
     this.ready()
     this.announce(this.ctl.welcomePeers, false)
+  }
+
+  /** hand received tracks to the right person (the connection line they arrive on says whose and which) */
+  private wire(c: RTCPeerConnection) {
+    c.ontrack = (e) => {
+      const m = e.transceiver.mid ? this.byMid.get(e.transceiver.mid) : undefined
+      const r = m && this.remotes.get(m.peer)
+      if (!m || !r) return
+      r.tracks[m.kind] = e.track; r.mids[m.kind] = e.transceiver
+      if (m.kind === 'screen') r.screenStream = new MediaStream([e.track])
+      else r.stream = new MediaStream([r.tracks.mic, r.tracks.cam].filter(Boolean) as MediaStreamTrack[])
+      this.changed()
+    }
+    c.onconnectionstatechange = () => this.changed()
   }
 
   /** tell people which Cloudflare session carries us (ack: this answers someone who told us theirs) */
@@ -165,7 +183,7 @@ export class SfuMedia extends Emitter implements Media {
           // the ids to ask for are the ones Metered itself lists for that session (found by the names we gave the tracks)
           let listed: { items?: { trackId?: string; customTrackName?: string }[] } = {}
           for (let i = 0; i < 6; i++) {   // their tracks may take a moment to appear after they publish
-            listed = await api.meetSfu(this.code, this.jt, `${this.sid}/tracks`, 'POST', { op: 'list', sessionId: sid })
+            listed = await api.meetSfu(this.code, this.jt, `${this.rxSid}/tracks`, 'POST', { op: 'list', sessionId: sid })
             if (listed.items?.length) break
             await new Promise((r) => setTimeout(r, 1000))
           }
@@ -183,23 +201,23 @@ export class SfuMedia extends Emitter implements Media {
           for (const kind of NAMES) {
             if (!found[kind]) continue
             ids = { ...ids, [kind]: found[kind] }
-            const r = await api.meetSfu<{ immediateRenegotiationRequired?: boolean; sessionDescription?: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.sid}/tracks`, 'POST',
+            const r = await api.meetSfu<{ immediateRenegotiationRequired?: boolean; sessionDescription?: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.rxSid}/tracks`, 'POST',
               { op: 'subscribe', tracks: [{ remoteSessionId: sid, remoteTrackId: ids[kind] }] })
             if (r.sessionDescription && r.immediateRenegotiationRequired !== false) {
               for (const m of r.sessionDescription.sdp!.matchAll(/^a=mid:(\S+)/gm)) if (!this.known.has(m[1])) { this.known.add(m[1]); this.byMid.set(m[1], { peer, kind }) }
-              await this.pc.setRemoteDescription(r.sessionDescription)
-              await this.pc.setLocalDescription(await this.pc.createAnswer())
-              await api.meetSfu(this.code, this.jt, `${this.sid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.pc.localDescription!.sdp } })
+              await this.rx.setRemoteDescription(r.sessionDescription)
+              await this.rx.setLocalDescription(await this.rx.createAnswer())
+              await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.rx.localDescription!.sdp } })
             }
           }
         } else {
           const r = await api.meetSfu<{ requiresImmediateRenegotiation?: boolean; sessionDescription?: RTCSessionDescriptionInit; tracks?: { mid?: string; trackName?: string; errorCode?: string }[] }>(
-            this.code, this.jt, `${this.sid}/tracks`, 'POST', { tracks: NAMES.map((n) => ({ location: 'remote', sessionId: sid, trackName: n })) })
+            this.code, this.jt, `${this.rxSid}/tracks`, 'POST', { tracks: NAMES.map((n) => ({ location: 'remote', sessionId: sid, trackName: n })) })
           for (const t of r.tracks ?? []) if (t.mid && !t.errorCode && NAMES.includes(t.trackName as Kind)) this.byMid.set(t.mid, { peer, kind: t.trackName as Kind })
           if (r.requiresImmediateRenegotiation && r.sessionDescription) {
-            await this.pc.setRemoteDescription(r.sessionDescription)
-            await this.pc.setLocalDescription(await this.pc.createAnswer())
-            await api.meetSfu(this.code, this.jt, `${this.sid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.pc.localDescription!.sdp } })
+            await this.rx.setRemoteDescription(r.sessionDescription)
+            await this.rx.setLocalDescription(await this.rx.createAnswer())
+            await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.rx.localDescription!.sdp } })
           }
         }
       } catch (e) {
@@ -226,7 +244,7 @@ export class SfuMedia extends Emitter implements Media {
 
   peer(p: CPeer): MediaView | null {
     const r = this.remotes.get(p.id)
-    const up = this.pc.connectionState
+    const up = this.rx.connectionState === 'failed' || this.pc.connectionState === 'failed' ? 'failed' : this.rx.connectionState
     const net = up === 'failed' || up === 'closed' || this.failed.has(p.id) ? 'failed' : r?.stream || r?.screenStream ? 'connected' : r && Date.now() - r.since > STUCK_MS ? 'failed' : 'connecting'
     return { audio: p.audio, video: p.video, screen: p.screen, stream: r?.stream ?? null, screenStream: r?.screenStream ?? null, net, path: null }
   }
@@ -235,7 +253,7 @@ export class SfuMedia extends Emitter implements Media {
   problem() {
     if (this.error) return this.error
     const pc = this.pc
-    if (pc.connectionState !== 'connected') return `the connection to the call service is "${pc.connectionState}" (network "${pc.iceConnectionState}"), so nothing can be sent or received. A firewall or VPN may be blocking its UDP traffic`
+    for (const [n, c] of [['sending', pc], ['receiving', this.rx]] as const) if (c.connectionState !== 'connected') return `the ${n} connection to the call service is "${c.connectionState}" (network "${c.iceConnectionState}"), so nothing can be sent or received. A firewall or VPN may be blocking its UDP traffic`
     const got = [...this.remotes.entries()].filter(([, r]) => !r.stream && !r.screenStream).map(([id, r]) => `${this.ctl.peers.get(id)?.name ?? id} (subscribed to ${this.pulled(id)} tracks)`)
     return got.length ? `connected, but no audio or video arrived for ${got.join(', ')}` : ''
   }
@@ -252,7 +270,7 @@ export class SfuMedia extends Emitter implements Media {
     if (this.error) out.push(`Last error: ${this.error}`)
     const stats = await this.pc.getStats().catch(() => null)
     stats?.forEach((s: any) => { if (s.type === 'transport' && s.selectedCandidatePairId) { const p = (stats as any).get(s.selectedCandidatePairId); if (p) out.push(`Selected path: ${p.currentRoundTripTime ? Math.round(p.currentRoundTripTime * 1000) + ' ms' : ''}, sent ${p.bytesSent ?? 0} B, received ${p.bytesReceived ?? 0} B`) } })
-    out.push(`Transceivers: ${pc_summary(this.pc)}`, `Signalling state: ${this.pc.signalingState}`, `Connection lines assigned to people: ${[...this.byMid.entries()].map(([m, v]) => `${m}=${names[v.peer] ?? v.peer}/${v.kind}`).join(', ') || 'none'}`)
+    out.push(`Receiving connection: ${this.rx === this.pc ? 'the same' : `${this.rx.connectionState}, ICE ${this.rx.iceConnectionState}, session ${this.rxSid}`}`, `Transceivers: ${pc_summary(this.rx)}`, `Signalling state: ${this.pc.signalingState}`, `Connection lines assigned to people: ${[...this.byMid.entries()].map(([m, v]) => `${m}=${names[v.peer] ?? v.peer}/${v.kind}`).join(', ') || 'none'}`)
     for (const [id, r] of this.remotes) out.push(`${names[id] ?? id}: session ${r.sid}, ${Object.keys(r.tracks).join(', ') || 'no tracks yet'}`)
     const p = this.problem(); if (p) out.push(`Problem: ${p}`)
     return out.join('\n')
@@ -307,8 +325,7 @@ export class SfuMedia extends Emitter implements Media {
 
   stop() {
     this.stopped = true
-    this.pc.ontrack = this.pc.onconnectionstatechange = null
-    this.pc.close()
+    for (const c of new Set([this.pc, this.rx])) { c.ontrack = c.onconnectionstatechange = null; c.close() }
     this.audio?.stop(); this.video?.stop(); this.screenMedia?.getTracks().forEach((t) => t.stop())
     this.audio = this.video = this.screenTrack = null
     Object.values(this.ph).forEach((t) => t.stop())
