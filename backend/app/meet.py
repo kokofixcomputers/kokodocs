@@ -107,6 +107,10 @@ def _usable(urls) -> list[str]:
     return out
 
 
+ADDR = re.compile(r"^(?:(turns?|stuns?):)?(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+|localhost)(?::(\d{1,5}))?(\?transport=(?:udp|tcp))?$", re.I)
+EXPLICIT = re.compile(r"^(turns?|stuns?):|:\d{1,5}(\?|$)", re.I)   # an address with a scheme or a port, as opposed to a word that happens to look like a host
+
+
 def _scheme(addr: str) -> str:
     """A server address needs turn: or turns: in front, or the browser rejects the whole list. People type host:port, so add it (turns: for the usual TLS port 5349)."""
     if re.match(r"^(turns?|stuns?):", addr, re.I):
@@ -115,28 +119,39 @@ def _scheme(addr: str) -> str:
     return ("turns:" if port and port.group(1) == "5349" else "turn:") + addr
 
 
-def custom_servers(c: dict) -> list[dict]:
-    """One address per line. A line can carry its own login, `address username password`, for a service that has a different one; the lines without one share
-    the username and password below the list (and become one server with several addresses)."""
-    shared, own = [], []
-    for line in c["turn_urls"].replace(",", "\n").splitlines():
-        parts = line.split()
-        if not parts:
+def parse_servers(text: str) -> tuple[list[dict], list[str]]:
+    """One address per line. A line can carry its own login, `address username password` (for a service that has a different one), and several addresses can share
+    a line. Returns the servers and anything that isn't an address (a browser refuses the whole list when one entry is invalid, so those are left out and reported)."""
+    shared: list[str] = []
+    own: list[dict] = []
+    bad: list[str] = []
+    for line in text.splitlines():
+        tokens = [t for t in re.split(r"[\s,]+", line.strip()) if t]
+        if not tokens:
             continue
-        urls = _usable([_scheme(parts[0])])
-        if not urls:
+        if not ADDR.match(tokens[0]):
+            bad.append(tokens[0])
             continue
-        if len(parts) >= 3:
-            own.append({"urls": urls, "username": parts[1], "credential": " ".join(parts[2:])})
+        addrs = [tokens[0]]
+        rest = tokens[1:]
+        while rest and EXPLICIT.search(rest[0]) and ADDR.match(rest[0]):
+            addrs.append(rest.pop(0))
+        urls = _usable([_scheme(x) for x in addrs])
+        if len(rest) >= 2:
+            own.append({"urls": urls, "username": rest[0], "credential": " ".join(rest[1:])})
         else:
-            shared.append(urls[0])
-    out = []
-    if shared:
-        extra = {"urls": shared}
-        if c["turn_user"]:
-            extra.update(username=c["turn_user"], credential=c["turn_pass"])
-        out.append(extra)
-    return out + own
+            shared.extend(urls)
+            bad.extend(rest)   # a single leftover word is neither an address nor a full login
+    out: list[dict] = []
+    return ([{"urls": shared}] if shared else []) + own, bad
+
+
+def custom_servers(c: dict) -> list[dict]:
+    servers, _ = parse_servers(c["turn_urls"])
+    for sv in servers:
+        if "username" not in sv and c["turn_user"]:   # the lines without a login of their own share the username and password below the list
+            sv.update(username=c["turn_user"], credential=c["turn_pass"])
+    return servers
 
 
 async def ice_servers(c: dict) -> list[dict]:
@@ -708,6 +723,10 @@ def admin_put(body: AdminIn, admin=Depends(must_admin), db=Depends(get_db)):
             raise HTTPException(422, "Unknown provider")
         settings_set(db, "meet_provider", body.provider)
     t = body.turn
+    if t and t.urls is not None:
+        _, bad = parse_servers(t.urls)
+        if bad:
+            raise HTTPException(422, "These aren't server addresses: " + ", ".join(f'"{x}"' for x in bad[:6]) + ". Write one address per line, like free.expressturn.com:3478. A login goes after the address on the same line (address username password), or in the Username and Password boxes below.")
     if t:
         _put(db, "meet_turn_mode", t.mode)
         _put(db, "meet_turn_key_id", t.key_id)

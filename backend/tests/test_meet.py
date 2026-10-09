@@ -527,6 +527,14 @@ byu = {x.get('username'): x for x in mc['ice_servers'] if x.get('username')}
 ok('addresses typed without turn: get it added', 'turn:free.expressturn.com:3478' in byu['shared']['urls'], mc)
 ok('a line with its own login keeps it (a different service), the others share the form\'s', byu['userA']['credential'] == 'secretA' and byu['userA']['urls'] == ['turn:global.relay.metered.ca:80'] and byu['shared']['credential'] == 'sp', byu)
 ok('and a line already starting with turn: is left alone', byu['user']['urls'] == ['turn:other.example.com:3478?transport=tcp'] and byu['user']['credential'] == 'B', byu)
+s, r = call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'free.expressturn.com:3478\nUsername\n000000002106878974\nPassword\nOpkCPvc79Xhy'}}, A)
+ok('pasting the provider\'s whole page is refused, naming what is wrong', s == 422 and '"Username"' in r['detail'] and '"Password"' in r['detail'], s, r)
+s, r = call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'free.expressturn.com:3478 000000002106878974 OpkCPvc79Xhymaz84+LcVRrKgvo='}}, A)
+s, mc = call('POST', f"/api/meet/{m3['code']}/media", {'jt': j3['jt']})
+ok('the address with its login on one line works (also with = and + in the password)', s == 200 and any(x.get('username') == '000000002106878974' and x['credential'] == 'OpkCPvc79Xhymaz84+LcVRrKgvo=' and x['urls'] == ['turn:free.expressturn.com:3478'] for x in mc['ice_servers']), mc)
+s, r = call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'free.expressturn.com:3478, global.relay.metered.ca:80 userA secretA'}}, A)
+s, mc = call('POST', f"/api/meet/{m3['code']}/media", {'jt': j3['jt']})
+ok('a comma between addresses on one line is fine', s == 200 and ['turn:free.expressturn.com:3478', 'turn:global.relay.metered.ca:80'] == [u for x in mc['ice_servers'] for u in x['urls'] if 'stun' not in u], mc)
 call('PUT', '/api/admin/meet', {'turn': {'mode': 'none'}}, A)
 
 # ---- RealtimeKit
