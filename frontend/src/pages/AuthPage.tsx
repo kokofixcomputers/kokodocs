@@ -1,3 +1,5 @@
+import { isDesktop } from '../ui/DesktopBar'
+import { openSso } from '../ui/ssoPopup'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, KeyRound, Lock, Mail, ShieldCheck, User as UserIcon } from 'lucide-react'
@@ -61,7 +63,7 @@ export function MfaForm({ token, onDone }: { token: string; onDone: () => void }
 }
 
 export function AuthEmbedded({ mode, onDone, next = '/' }: { mode: 'login' | 'signup'; onDone?: () => void; next?: string }) {
-  const { login, signup, completeSignup } = useAuth()
+  const { login, signup, completeSignup, acceptToken } = useAuth()
   const [pendingCode, setPendingCode] = useState<{ cooldown: number } | null>(null)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -95,7 +97,16 @@ export function AuthEmbedded({ mode, onDone, next = '/' }: { mode: 'login' | 'si
       {!!cfg?.providers.length && (
         <>
           {cfg.providers.map((p) => (
-            <a key={p.id} className="btn btn-ghost btn-pill btn-lg google-btn" href={`/api/auth/sso/${p.id}/start?next=${encodeURIComponent(next)}`}><ProviderMark preset={p.preset} />Continue with {p.name}</a>))}
+            <a key={p.id} className="btn btn-ghost btn-pill btn-lg google-btn" href={`/api/auth/sso/${p.id}/start?next=${encodeURIComponent(next)}`}
+              onClick={(e) => {
+                if (!isDesktop()) return
+                e.preventDefault(); setErr('')
+                openSso((e.currentTarget as HTMLAnchorElement).href, (r) => {   // the desktop app signs in in a pop-up window
+                  if (r.token) acceptToken(r.token).then(() => onDone?.()).catch((x) => setErr((x as Error).message))
+                  else if (r.mfa) setMfa(r.mfa)
+                  else if (r.error) setErr(r.error)
+                })
+              }}><ProviderMark preset={p.preset} />Continue with {p.name}</a>))}
           <div className="auth-or"><span>or</span></div>
         </>
       )}

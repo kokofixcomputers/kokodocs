@@ -1,3 +1,5 @@
+import { isDesktop } from '../ui/DesktopBar'
+import { openSso } from '../ui/ssoPopup'
 import { useEffect, useState } from 'react'
 import { Check, Copy, KeyRound, Lock, Mail, ShieldCheck, Trash2 } from 'lucide-react'
 import { api, getToken } from '../api'
@@ -50,7 +52,11 @@ export function LinkedAccounts() {
   useEffect(load, [])
   const shown = [...providers.map((p) => ({ id: p.id, name: p.name, preset: p.preset })), ...linked.filter((l) => !providers.some((p) => p.id === l.provider)).map((l) => ({ id: l.provider, name: l.name, preset: 'custom' }))]
   if (!shown.length) return null
-  const link = async (id: string) => { setBusy(id); try { location.href = (await api.ssoLink(id)).url } catch (e) { toast((e as Error).message); setBusy(null) } }
+  const link = async (id: string) => { setBusy(id); try {
+    const url = (await api.ssoLink(id)).url
+    if (!isDesktop()) { location.href = url; return }
+    openSso(url, (r) => { setBusy(null); toast(r.error ?? 'Account linked'); load() }, () => setBusy(null))   // desktop app: in a pop-up
+  } catch (e) { toast((e as Error).message); setBusy(null) } }
   const unlink = async (id: string, name: string) => { setBusy(id); try { await api.ssoUnlink(id); toast(`${name} account unlinked`); load() } catch (e) { toast((e as Error).message) } finally { setBusy(null) } }
   return (
     <div className="st-stack" style={{ gap: 14 }}>

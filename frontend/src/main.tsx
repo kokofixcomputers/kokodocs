@@ -22,6 +22,7 @@ import { Tooltips } from './ui/Tooltips'
 import { SearchPalette } from './ui/Search'
 import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
+import { ssoPopupLanding } from './ui/ssoPopup'
 import { NetPill } from './ui/NetStatus'
 import { DesktopBar, installDesktop, isDesktop } from './ui/DesktopBar'
 import { KeyboardFit } from './ui/KeyboardFit'
@@ -59,7 +60,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+if (!ssoPopupLanding()) ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>

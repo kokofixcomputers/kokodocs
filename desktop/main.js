@@ -34,7 +34,7 @@ function createWindow() {
   win.on('leave-full-screen', () => win?.webContents.send('desktop:fullscreen', false))
   win.webContents.on('did-finish-load', () => win?.webContents.send('desktop:fullscreen', win.isFullScreen()))
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (new URL(url).origin === server) return { action: 'allow', overrideBrowserWindowOptions: { autoHideMenuBar: true, titleBarStyle: 'default' } }   // the app's own pop-out windows
+    if (new URL(url).origin === server) return { action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 720, parent: win ?? undefined, autoHideMenuBar: true, titleBarStyle: 'default', minimizable: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } } }   // the app's own pop-ups (single sign-on)
     if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
