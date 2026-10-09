@@ -57,9 +57,11 @@ export function MeetAdminSection() {
       <div className="ad-card ad-form">
         <div className="ai-field"><span>How calls are carried</span>
           <Select label="How calls are carried" value={p} onChange={(v) => void save({ provider: v })}
-            options={m.providers.map((x) => ({ value: x.id, label: x.id === 'mesh' ? 'Directly between browsers (free, up to 8 people)' : x.label + ' (bigger meetings, billed by Cloudflare)' }))} />
+            options={m.providers.map((x) => ({ value: x.id, label: x.id === 'mesh' ? 'Directly between browsers (free, up to 8 people)' : x.label + ' (bigger meetings)' }))} />
           <span className="muted hint">{p === 'mesh'
             ? "People connect to each other directly and this server only introduces them, so no audio or video passes through it and it costs nothing. Each person sends their video to everyone else, so it suits small groups. People on strict networks need a relay (below)."
+            : p === 'livekit' ? "LiveKit's server receives everyone's audio and video once and sends it on, so meetings can be bigger. You run it yourself (or use LiveKit Cloud). Meetings already started keep the way they began."
+            : p === 'sfu' || p === 'metered' ? "Everyone sends their audio and video once to the SFU, which sends it on to the others, so meetings can be bigger and use less of each person's upload. Billed by the SFU's provider. Meetings already started keep the way they began."
             : "Cloudflare carries everything through its own network, so meetings can be bigger and work from anywhere. Charged per participant-minute by Cloudflare. Meetings already started keep the way they began."}</span></div>
         {m.problem && <p className="form-error">{m.problem}</p>}
       </div>
