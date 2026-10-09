@@ -152,6 +152,7 @@ export class Session extends Emitter implements Call {
   async report(): Promise<string> {
     const c = this.ctl, names = Object.fromEntries([...c.peers.values()].map((p) => [p.id, p.name]))
     const head = [`KokoDocs meeting report, ${new Date().toISOString()}`, `Browser: ${navigator.userAgent}`, `Page: ${location.host}, secure ${window.isSecureContext}`,
+      `Carried by: ${this.ticket.provider} (the meeting's provider, from the server), media started: ${this.media ? 'yes' : 'no'}, site build ${document.querySelector('meta[name="koko-build"]')?.getAttribute('content') ?? 'dev'}`,
       `Meeting: ${this.code}, you are ${this.ticket.name}${c.me.owner ? ' (host)' : c.me.cohost ? ' (co-host)' : ''}, control channel ${c.status}, ${c.peers.size + 1} people`,
       `What you may do: ${Object.entries(c.perms).map(([k, v]) => `${k} ${v ? 'yes' : 'NO'}`).join(', ')}`,
       `Meeting defaults: unmute ${c.settings.unmute}, camera ${c.settings.camera}, mute on entry ${c.settings.mute_on_entry}, camera off on entry ${c.settings.cam_off_on_entry}`,
