@@ -408,7 +408,8 @@ class MeteredSfu:
         if r.status_code >= 400:
             why = (j.get("message") or j.get("error") or j.get("detail") or "") if isinstance(j, dict) else ""
             why = str(why or r.text)[:300]
-            print(f"Metered SFU {method} {path} -> {r.status_code}: {r.text[:500]}", flush=True)   # in the server log, for whoever sets this up
+            sent = json.dumps(body)[:6000] if body else ""
+            print(f"Metered SFU {method} {path} -> {r.status_code}: {r.text[:500]}\n  what was sent: {sent}", flush=True)   # in the server log, for whoever sets this up (an SDP only holds network addresses and fingerprints)
             raise HTTPException(502, f"Metered returned an error ({r.status_code}){': ' + why if why else ''}")
         return j if isinstance(j, dict) else {"items": j}
 
