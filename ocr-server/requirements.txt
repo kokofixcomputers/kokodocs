@@ -1,0 +1,6 @@
+torch
+transformers>=5
+pillow
+fastapi
+uvicorn
+accelerate
