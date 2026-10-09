@@ -44,6 +44,8 @@ CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"   # no look-alikes (i l o 0 1)
 MESH_MAX = 8
 RTK_MAX = 100
 SFU_MAX = 100
+LK_MAX = 100
+METERED_API = os.environ.get("KOKO_METERED_SFU_API", "https://global.sfu.metered.ca")    # overridable so tests can use a mock
 SFU_API = os.environ.get("KOKO_SFU_API", "https://rtc.live.cloudflare.com/v1")    # overridable so tests can use a mock
 MAX_PERMANENT = 25
 ONE_OFF_TTL = 7 * 86400    # a one-off meeting nobody has used for a week expires; make it permanent to keep it
@@ -93,6 +95,11 @@ def cfg(db) -> dict:
         "rk_token": _secret(db, "meet_rk_token") or os.environ.get("CLOUDFLARE_API_TOKEN", ""),
         "sfu_app": settings_get(db, "meet_sfu_app") or os.environ.get("KOKO_SFU_APP_ID", ""),
         "sfu_secret": _secret(db, "meet_sfu_secret") or os.environ.get("KOKO_SFU_SECRET", ""),
+        "mt_app": settings_get(db, "meet_mt_app") or os.environ.get("KOKO_METERED_SFU_APP_ID", ""),
+        "mt_secret": _secret(db, "meet_mt_secret") or os.environ.get("KOKO_METERED_SFU_SECRET", ""),
+        "lk_url": settings_get(db, "meet_lk_url") or os.environ.get("KOKO_LIVEKIT_URL", ""),
+        "lk_key": settings_get(db, "meet_lk_key") or os.environ.get("KOKO_LIVEKIT_KEY", ""),
+        "lk_secret": _secret(db, "meet_lk_secret") or os.environ.get("KOKO_LIVEKIT_SECRET", ""),
         "rk_host": settings_get(db, "meet_rk_host_preset", "group_call_host"),
         "rk_guest": settings_get(db, "meet_rk_guest_preset", "group_call_participant"),
     }
@@ -334,6 +341,24 @@ class CloudflareSfu:
             raise HTTPException(502, f"Cloudflare returned an error ({r.status_code}){': ' + str(j.get('errorDescription'))[:200] if isinstance(j, dict) and j.get('errorDescription') else ''}")
         return j if isinstance(j, dict) else {}
 
+    # what the browsers ask for, in this SFU's own terms (see the routes below)
+    @staticmethod
+    async def new_session(c, body: dict) -> dict:
+        d = await CloudflareSfu._req(c, "POST", "/sessions/new")
+        return {"sessionId": d.get("sessionId")}
+
+    @staticmethod
+    async def tracks(c, sid: str, body: dict) -> dict:
+        return await CloudflareSfu._req(c, "POST", f"/sessions/{sid}/tracks/new", body)
+
+    @staticmethod
+    def remote_sessions(body: dict) -> list[str]:
+        return [str(t.get("sessionId")) for t in (body.get("tracks") or []) if isinstance(t, dict) and t.get("location") == "remote"]
+
+    @staticmethod
+    async def reneg(c, sid: str, body: dict) -> dict:
+        return await CloudflareSfu._req(c, "PUT", f"/sessions/{sid}/renegotiate", body)
+
     @staticmethod
     async def creds(db, m, name: str, cid: str, manager: bool) -> dict:
         servers = await ice_servers(cfg(db))
@@ -354,7 +379,137 @@ class CloudflareSfu:
         return {"ok": True, "message": "Connected: a test session was created."}
 
 
-PROVIDERS = {"mesh": Mesh, "realtimekit": RealtimeKit, "sfu": CloudflareSfu}
+class MeteredSfu:
+    """Metered's Global Cloud SFU. Same idea as Cloudflare's, with its own API: the session is created with an offer, tracks are published and subscribed
+    to by track id, and every change to the connection is a separate call."""
+    id = "metered"
+    label = "Metered Global Cloud SFU"
+    cap = SFU_MAX
+
+    @staticmethod
+    def problem(c) -> str | None:
+        if not (c["mt_app"] and c["mt_secret"]):
+            return "Metered's SFU needs the app id and app secret (Admin → Meetings)."
+        return None
+
+    @staticmethod
+    async def _req(c, method: str, path: str, body: dict | None = None) -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=20, follow_redirects=False) as h:
+                r = await h.request(method, f"{METERED_API}/api/sfu/{c['mt_app']}{path}", json=body, headers={"Authorization": f"Bearer {c['mt_secret']}"})
+        except httpx.HTTPError as e:
+            raise HTTPException(502, f"Could not reach Metered ({type(e).__name__})")
+        try:
+            j = r.json()
+        except ValueError:
+            j = {}
+        if r.status_code in (401, 403):
+            raise HTTPException(502, "Metered rejected the app secret. Check the app id and secret of the SFU app.")
+        if r.status_code >= 400:
+            raise HTTPException(502, f"Metered returned an error ({r.status_code}).")
+        return j if isinstance(j, dict) else {"items": j}
+
+    @staticmethod
+    async def new_session(c, body: dict) -> dict:
+        if not isinstance(body.get("sessionDescription"), dict):
+            raise HTTPException(422, "A session starts with an offer.")
+        return await MeteredSfu._req(c, "POST", "/session/new", {"sessionDescription": body["sessionDescription"]})
+
+    @staticmethod
+    async def tracks(c, sid: str, body: dict) -> dict:
+        op = body.get("op")
+        rest = {k: v for k, v in body.items() if k != "op"}
+        if op not in ("publish", "subscribe"):
+            raise HTTPException(422, "Unknown track operation.")
+        return await MeteredSfu._req(c, "POST", f"/session/{sid}/track/{op}", rest)
+
+    @staticmethod
+    def remote_sessions(body: dict) -> list[str]:
+        return [str(t.get("remoteSessionId")) for t in (body.get("tracks") or []) if isinstance(t, dict) and body.get("op") == "subscribe"]
+
+    @staticmethod
+    async def reneg(c, sid: str, body: dict) -> dict:
+        return await MeteredSfu._req(c, "PUT", f"/session/{sid}/renegotiate", body)
+
+    @staticmethod
+    async def creds(db, m, name: str, cid: str, manager: bool) -> dict:
+        servers = await ice_servers(cfg(db))
+        if not any("stun.metered.ca" in str(u) for s in servers for u in s["urls"]):
+            servers = [{"urls": ["stun:stun.metered.ca:80"]}, *servers]
+        return {"provider": "metered", "ice_servers": servers, "max": SFU_MAX}
+
+    @staticmethod
+    async def end(db, m) -> None:
+        for k in [k for k, v in _sfu_sessions.items() if v[0] == m["code"]]:
+            _sfu_sessions.pop(k, None)
+
+    @staticmethod
+    async def test(db) -> dict:
+        await MeteredSfu._req(cfg(db), "GET", "/sessions")
+        return {"ok": True, "message": "Connected: Metered accepted the app id and secret."}
+
+
+# LiveKit (open source, self-hosted or LiveKit Cloud): an SFU that isn't Cloudflare's. This server only signs a join token per person (the key and secret
+# stay here); the browsers connect to LiveKit's own address with their SDK. Other SFUs can be added the same way: one class here and one adapter in
+# frontend/src/meet/.
+class LiveKit:
+    id = "livekit"
+    label = "LiveKit (self-hosted or LiveKit Cloud)"
+    cap = LK_MAX
+
+    @staticmethod
+    def problem(c) -> str | None:
+        if not (c["lk_url"] and c["lk_key"] and c["lk_secret"]):
+            return "LiveKit needs the server address, API key and API secret (Admin → Meetings)."
+        if not re.match(r"^(wss?|https?)://[^\s/]+", c["lk_url"]):
+            return "The LiveKit address should look like wss://livekit.example.com."
+        return None
+
+    @staticmethod
+    def _http(c) -> str:
+        return re.sub(r"^ws", "http", c["lk_url"].strip().rstrip("/"))
+
+    @staticmethod
+    def _token(c, identity: str, name: str, room: str, admin: bool = False, hours: float = 6) -> str:
+        now = int(time.time())
+        grant = {"roomList": True, "roomCreate": True, "roomAdmin": True, "room": room} if admin else {"room": room, "roomJoin": True, "canPublish": True, "canSubscribe": True, "canPublishData": False}
+        return jwt.encode({"iss": c["lk_key"], "sub": identity, "name": name[:60], "nbf": now - 10, "exp": int(now + hours * 3600), "video": grant}, c["lk_secret"], algorithm="HS256")
+
+    @staticmethod
+    async def _twirp(c, method: str, body: dict) -> dict:
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=False) as h:
+                r = await h.post(f"{LiveKit._http(c)}/twirp/livekit.RoomService/{method}", json=body, headers={"Authorization": f"Bearer {LiveKit._token(c, 'koko-admin', 'KokoDocs', '', admin=True, hours=0.1)}"})
+        except httpx.HTTPError as e:
+            raise HTTPException(502, f"Could not reach LiveKit ({type(e).__name__}). Check the address and that the server is running.")
+        if r.status_code in (401, 403):
+            raise HTTPException(502, "LiveKit rejected the API key or secret.")
+        if r.status_code >= 400:
+            raise HTTPException(502, f"LiveKit returned an error ({r.status_code}).")
+        try:
+            return r.json()
+        except ValueError:
+            return {}
+
+    @staticmethod
+    async def creds(db, m, name: str, cid: str, manager: bool) -> dict:
+        c = cfg(db)
+        return {"provider": "livekit", "url": re.sub(r"^http", "ws", c["lk_url"].strip().rstrip("/")), "token": LiveKit._token(c, cid, name, m["code"]), "max": LK_MAX}
+
+    @staticmethod
+    async def end(db, m) -> None:
+        try:
+            await LiveKit._twirp(cfg(db), "DeleteRoom", {"room": m["code"]})   # closes the room for anyone still in it
+        except HTTPException:
+            pass
+
+    @staticmethod
+    async def test(db) -> dict:
+        await LiveKit._twirp(cfg(db), "ListRooms", {})
+        return {"ok": True, "message": "Connected: LiveKit accepted the key and secret."}
+
+
+PROVIDERS = {"mesh": Mesh, "realtimekit": RealtimeKit, "sfu": CloudflareSfu, "metered": MeteredSfu, "livekit": LiveKit}
 
 
 # ---------------------------------------------------------------- one meeting's settings
@@ -695,48 +850,49 @@ def _sfu_member(db, code: str, jt: str):
     m = get_meeting(db, code)
     if closed(m):
         raise HTTPException(410, "This meeting has ended.")
-    if m["provider"] != "sfu":
-        raise HTTPException(409, "This meeting doesn't use the Cloudflare SFU.")
+    if m["provider"] not in ("sfu", "metered"):
+        raise HTTPException(409, "This meeting doesn't use an SFU.")
     if _room().member(m["code"], t["i"]) is None:
         raise HTTPException(403, "You're not in this meeting yet.")
-    return m, t
+    return m, t, PROVIDERS[m["provider"]]
+
+
+def _own(sid: str, m, t) -> None:
+    own = _sfu_sessions.get(sid)
+    if not own or own[0] != m["code"] or own[1] != t["i"]:
+        raise HTTPException(403, "That isn't your session.")
 
 
 @router.post("/meet/{code}/sfu/session")
 async def sfu_session(code: str, body: SfuCall, db=Depends(get_db)):
-    """Start this person's Cloudflare session (where their audio and video are sent)."""
-    m, t = _sfu_member(db, code, body.jt)
+    """Start this person's session on the SFU (where their audio and video are sent)."""
+    m, t, P = _sfu_member(db, code, body.jt)
     _sfu_prune()
-    d = await CloudflareSfu._req(cfg(db), "POST", "/sessions/new")
+    d = await P.new_session(cfg(db), body.body)
     sid = str(d.get("sessionId") or "")
     if not sid:
-        raise HTTPException(502, "Cloudflare did not return a session id")
+        raise HTTPException(502, "The SFU did not return a session id")
     _sfu_sessions[sid] = (m["code"], t["i"], time.time())
-    return {"sessionId": sid}
+    return d
 
 
 @router.post("/meet/{code}/sfu/{sid}/tracks")
 async def sfu_tracks(code: str, sid: str, body: SfuCall, db=Depends(get_db)):
-    """Send tracks (an offer with local tracks) or fetch other people's (remote tracks, which must belong to this meeting)."""
-    m, t = _sfu_member(db, code, body.jt)
-    own = _sfu_sessions.get(sid)
-    if not own or own[0] != m["code"] or own[1] != t["i"]:
-        raise HTTPException(403, "That isn't your session.")
-    for tr in (body.body.get("tracks") or []):
-        if isinstance(tr, dict) and tr.get("location") == "remote":
-            other = _sfu_sessions.get(str(tr.get("sessionId")))
-            if not other or other[0] != m["code"]:
-                raise HTTPException(403, "That session isn't in this meeting.")
-    return await CloudflareSfu._req(cfg(db), "POST", f"/sessions/{sid}/tracks/new", body.body)
+    """Send tracks, or fetch other people's (which must belong to this meeting)."""
+    m, t, P = _sfu_member(db, code, body.jt)
+    _own(sid, m, t)
+    for other in P.remote_sessions(body.body):
+        o = _sfu_sessions.get(other)
+        if not o or o[0] != m["code"]:
+            raise HTTPException(403, "That session isn't in this meeting.")
+    return await P.tracks(cfg(db), sid, body.body)
 
 
 @router.put("/meet/{code}/sfu/{sid}/renegotiate")
 async def sfu_renegotiate(code: str, sid: str, body: SfuCall, db=Depends(get_db)):
-    m, t = _sfu_member(db, code, body.jt)
-    own = _sfu_sessions.get(sid)
-    if not own or own[0] != m["code"] or own[1] != t["i"]:
-        raise HTTPException(403, "That isn't your session.")
-    return await CloudflareSfu._req(cfg(db), "PUT", f"/sessions/{sid}/renegotiate", body.body)
+    m, t, P = _sfu_member(db, code, body.jt)
+    _own(sid, m, t)
+    return await P.reneg(cfg(db), sid, body.body)
 
 
 @router.post("/meet/{code}/share/token")
@@ -812,6 +968,8 @@ def admin_view(db) -> dict:
             "turn": {"mode": c["turn_mode"], "key_id": c["turn_key_id"], "token_set": bool(c["turn_token"]), "urls": c["turn_urls"], "user": c["turn_user"], "pass_set": bool(c["turn_pass"])},
             "rtk": {"account": c["rk_account"], "app": c["rk_app"], "token_set": bool(c["rk_token"]), "host_preset": c["rk_host"], "guest_preset": c["rk_guest"]},
             "sfu": {"app": c["sfu_app"], "secret_set": bool(c["sfu_secret"])},
+            "metered": {"app": c["mt_app"], "secret_set": bool(c["mt_secret"])},
+            "livekit": {"url": c["lk_url"], "key": c["lk_key"], "secret_set": bool(c["lk_secret"])},
             "problem": PROVIDERS[c["provider"]].problem(c)}
 
 
@@ -837,6 +995,17 @@ class SfuIn(BaseModel):
     secret: str | None = Field(None, max_length=500)    # None or "" keeps the stored one
 
 
+class MeteredIn(BaseModel):
+    app: str | None = Field(None, max_length=80)
+    secret: str | None = Field(None, max_length=500)    # None or "" keeps the stored one
+
+
+class LiveKitIn(BaseModel):
+    url: str | None = Field(None, max_length=300)
+    key: str | None = Field(None, max_length=200)
+    secret: str | None = Field(None, max_length=500)    # None or "" keeps the stored one
+
+
 class AdminIn(BaseModel):
     enabled: bool | None = None
     guests: bool | None = None
@@ -844,6 +1013,8 @@ class AdminIn(BaseModel):
     turn: TurnIn | None = None
     rtk: RtkIn | None = None
     sfu: SfuIn | None = None
+    livekit: LiveKitIn | None = None
+    metered: MeteredIn | None = None
 
 
 def _put(db, key: str, val: str | None, secret: bool = False):
@@ -898,6 +1069,17 @@ def admin_put(body: AdminIn, admin=Depends(must_admin), db=Depends(get_db)):
         _put(db, "meet_rk_token", r.token, secret=True)
         _put(db, "meet_rk_host_preset", r.host_preset)
         _put(db, "meet_rk_guest_preset", r.guest_preset)
+    mt = body.metered
+    if mt:
+        _put(db, "meet_mt_app", mt.app)
+        _put(db, "meet_mt_secret", mt.secret, secret=True)
+    k = body.livekit
+    if k:
+        if k.url and not re.match(r"^(wss?|https?)://[^\s/]+", k.url.strip()):
+            raise HTTPException(422, "The LiveKit address should look like wss://livekit.example.com.")
+        _put(db, "meet_lk_url", k.url)
+        _put(db, "meet_lk_key", k.key)
+        _put(db, "meet_lk_secret", k.secret, secret=True)
     f = body.sfu
     if f:
         _put(db, "meet_sfu_app", f.app)

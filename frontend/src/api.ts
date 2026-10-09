@@ -83,9 +83,9 @@ export interface MeetInfo {
   recording?: { required: boolean } | null   // the meeting is being recorded right now
 }
 export interface RecordingItem { id: string; title: string; code: string; by: string; status: 'recording' | 'done'; mime: string; size: number; duration_ms: number; created_at: number }
-export interface MeetTicket { jt: string; cid: string; name: string; host: boolean; title: string; provider: 'mesh' | 'realtimekit' | 'sfu'; permanent: boolean }
+export interface MeetTicket { jt: string; cid: string; name: string; host: boolean; title: string; provider: 'mesh' | 'realtimekit' | 'sfu' | 'metered' | 'livekit'; permanent: boolean }
 export interface MeetShareToken { doc_id: string; token: string; role: 'viewer' | 'editor'; kind: 'collab' | 'present'; doc_kind: 'doc' | 'sheet' | 'slides' }
-export interface MeetMedia { provider: 'mesh' | 'realtimekit' | 'sfu'; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
+export interface MeetMedia { provider: 'mesh' | 'realtimekit' | 'sfu' | 'metered' | 'livekit'; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string; url?: string; token?: string }
 export interface MeetCreate { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
 export interface MeetEdit { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
 export interface MeetAdmin {
@@ -93,12 +93,16 @@ export interface MeetAdmin {
   turn: { mode: 'none' | 'cloudflare' | 'custom'; key_id: string; token_set: boolean; urls: string; user: string; pass_set: boolean }
   rtk: { account: string; app: string; token_set: boolean; host_preset: string; guest_preset: string }
   sfu: { app: string; secret_set: boolean }
+  livekit: { url: string; key: string; secret_set: boolean }
+  metered: { app: string; secret_set: boolean }
 }
 export interface MeetAdminIn {
   enabled?: boolean; guests?: boolean; provider?: string
   turn?: Partial<{ mode: string; key_id: string; token: string; urls: string; user: string; password: string }>
   rtk?: Partial<{ account: string; app: string; token: string; host_preset: string; guest_preset: string }>
   sfu?: Partial<{ app: string; secret: string }>
+  livekit?: Partial<{ url: string; key: string; secret: string }>
+  metered?: Partial<{ app: string; secret: string }>
 }
 export interface OcrConfig { available: boolean; model: { id: string; label: string; model: string } | null; locked: boolean; default: '' | 'local' | 'ai' }
 export interface OcrAdmin { model_id: string; prompt: string; default_prompt: string; lock: boolean; default: '' | 'local' | 'ai'; models: { id: string; label: string; model: string; host: string }[] }

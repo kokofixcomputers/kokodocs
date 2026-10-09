@@ -18,10 +18,10 @@ export function MeetAdminSection() {
   const [busy, setBusy] = useState(false)
   const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null)
   // text typed since the last save (secrets are never sent back, so they start empty)
-  const [d, setD] = useState({ keyId: '', token: '', urls: '', user: '', pass: '', account: '', app: '', rtoken: '', host: '', guest: '', sfuApp: '', sfuSecret: '' })
+  const [d, setD] = useState({ keyId: '', token: '', urls: '', user: '', pass: '', account: '', app: '', rtoken: '', host: '', guest: '', sfuApp: '', sfuSecret: '', lkUrl: '', lkKey: '', lkSecret: '', mtApp: '', mtSecret: '' })
   const load = (x: MeetAdmin) => {
     setM(x)
-    setD({ keyId: x.turn.key_id, token: '', urls: x.turn.urls, user: x.turn.user, pass: '', account: x.rtk.account, app: x.rtk.app, rtoken: '', host: x.rtk.host_preset, guest: x.rtk.guest_preset, sfuApp: x.sfu.app, sfuSecret: '' })
+    setD({ keyId: x.turn.key_id, token: '', urls: x.turn.urls, user: x.turn.user, pass: '', account: x.rtk.account, app: x.rtk.app, rtoken: '', host: x.rtk.host_preset, guest: x.rtk.guest_preset, sfuApp: x.sfu.app, sfuSecret: '', lkUrl: x.livekit.url, lkKey: x.livekit.key, lkSecret: '', mtApp: x.metered.app, mtSecret: '' })
   }
   useEffect(() => { api.adminMeet().then(load).catch((e) => setErr(e.message)) }, [])
   if (!m) return err ? <p className="form-error">{err}</p> : <span className="spinner" />
@@ -33,6 +33,8 @@ export function MeetAdminSection() {
         turn: { key_id: d.keyId, token: d.token, urls: d.urls, user: d.user, password: d.pass },
         rtk: { account: d.account, app: d.app, token: d.rtoken, host_preset: d.host, guest_preset: d.guest },
         sfu: { app: d.sfuApp, secret: d.sfuSecret },
+        metered: { app: d.mtApp, secret: d.mtSecret },
+        livekit: { url: d.lkUrl, key: d.lkKey, secret: d.lkSecret },
         ...patch,
       }))
       toast('Saved')
@@ -81,6 +83,23 @@ export function MeetAdminSection() {
             <Field label="Username"><input value={d.user} onChange={(e) => setD({ ...d, user: e.target.value })} autoComplete="off" /></Field>
             <Field label="Password" hint={m.turn.pass_set ? 'Saved. Type to replace it.' : undefined}><input type="password" value={d.pass} placeholder={m.turn.pass_set ? '••••••••' : ''} onChange={(e) => setD({ ...d, pass: e.target.value })} autoComplete="new-password" /></Field>
           </>)}
+        </div>)}
+
+      {p === 'metered' && (
+        <div className="ad-card ad-form">
+          <h3 className="ad-h">Metered Global Cloud SFU</h3>
+          <p className="muted" style={{ margin: 0 }}>Everyone uploads once to Metered, which sends it on to the others (billed by what is downloaded). Create an SFU app in the Metered dashboard.</p>
+          <Field label="App id"><input value={d.mtApp} onChange={(e) => setD({ ...d, mtApp: e.target.value })} autoComplete="off" /></Field>
+          <Field label="App secret" hint={m.metered.secret_set ? 'Saved. Type to replace it.' : 'Shown when you create the app; you can reveal it again on its page.'}><input type="password" value={d.mtSecret} placeholder={m.metered.secret_set ? '••••••••' : ''} onChange={(e) => setD({ ...d, mtSecret: e.target.value })} autoComplete="new-password" /></Field>
+        </div>)}
+
+      {p === 'livekit' && (
+        <div className="ad-card ad-form">
+          <h3 className="ad-h">LiveKit</h3>
+          <p className="muted" style={{ margin: 0 }}>An open source SFU you can run yourself (livekit.io) or use as LiveKit Cloud. Everyone uploads once and the server sends it on. This server only signs join tokens; the key and secret never reach the browsers.</p>
+          <Field label="Server address" hint="Like wss://livekit.example.com (LiveKit Cloud shows it in the project settings)."><input value={d.lkUrl} onChange={(e) => setD({ ...d, lkUrl: e.target.value })} autoComplete="off" placeholder="wss://livekit.example.com" /></Field>
+          <Field label="API key"><input value={d.lkKey} onChange={(e) => setD({ ...d, lkKey: e.target.value })} autoComplete="off" /></Field>
+          <Field label="API secret" hint={m.livekit.secret_set ? 'Saved. Type to replace it.' : undefined}><input type="password" value={d.lkSecret} placeholder={m.livekit.secret_set ? '••••••••' : ''} onChange={(e) => setD({ ...d, lkSecret: e.target.value })} autoComplete="new-password" /></Field>
         </div>)}
 
       {p === 'sfu' && (

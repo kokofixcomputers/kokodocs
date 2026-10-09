@@ -476,6 +476,15 @@ The RealtimeKit adapter follows Cloudflare's published SDK types and was tested 
 
 Admin → Meetings → Provider → **Cloudflare SFU**. In a mesh call you upload a copy of your video to every other person (5 copies in a 6 person call); with the SFU you upload once to Cloudflare, which forwards it. Create an app in the Cloudflare dashboard (Realtime → SFU), paste its **app id** and **app secret** (or set `KOKO_SFU_APP_ID` and `KOKO_SFU_SECRET`), and use *Save and test*. The browsers never see the secret: this server relays their calls to Cloudflare's session API, and only lets a person use their own session and fetch tracks from sessions in the same meeting. Switching the provider only affects meetings started afterwards. Tests: `backend/tests/test_sfu.py`.
 
+### Other SFUs: Metered and LiveKit
+
+Same admin page, same one-upload-for-everyone idea.
+
+- **Metered Global Cloud SFU** (`metered`): create an SFU app in the Metered dashboard and paste its app id and secret (or `KOKO_METERED_SFU_APP_ID` / `KOKO_METERED_SFU_SECRET`). Works like the Cloudflare one (this server relays the calls, the secret stays here) but speaks Metered's API: the session starts with an offer, and tracks are published and subscribed to by track id.
+- **LiveKit** (`livekit`), open source: run your own (`livekit-server`, or its Docker image) or use LiveKit Cloud, then enter the address (`wss://…`), API key and secret (or `KOKO_LIVEKIT_URL` / `KOKO_LIVEKIT_KEY` / `KOKO_LIVEKIT_SECRET`). This server only signs short-lived join tokens; browsers connect to LiveKit with its SDK. *Save and test* checks the key and secret. Needs LiveKit's ports reachable from your users (7880 for signalling, UDP 7882 or its configured range for media).
+
+Tests: `backend/tests/test_sfu.py` (Cloudflare and Metered, against mocks) and `backend/tests/test_livekit.py`.
+
 ## Scan a page (reading text from a photo)
 
 In a document or wiki, the toolbar's **Scan a page** button lets you choose a photo or scan (or drop one in) and adds the text on it where your cursor is. Undo works like any other edit. Two ways to read it, remembered per browser:

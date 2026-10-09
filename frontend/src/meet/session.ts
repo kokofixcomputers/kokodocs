@@ -5,6 +5,7 @@ import { listDevices, type Media } from './media'
 import { MeshMedia } from './mesh'
 import { RtkMedia } from './rtk'
 import { SfuMedia } from './sfu'
+import { LivekitMedia } from './livekit'
 import { MeetingRecorder } from './record'
 import { Emitter, type Answer, type Call, type Caption, type CallEnd, type CallStatus, type ChatMsg, type Consents, type Devices, type LocalTracks, type Peer, type PermKey, type Perms, type PollView, type RoomSettings, type Share, type Waiting } from './types'
 
@@ -46,7 +47,8 @@ export class Session extends Emitter implements Call {
       const mc = await api.meetMedia(this.code, this.ticket.jt)
       if (this.ended) return
       const m = mc.provider === 'realtimekit' ? new RtkMedia(this.ctl, mc.auth_token ?? '', this.local)
-        : mc.provider === 'sfu' ? new SfuMedia(this.ctl, this.code, this.ticket.jt, mc.ice_servers ?? [], this.local)
+        : mc.provider === 'livekit' ? new LivekitMedia(this.ctl, mc.url ?? '', mc.token ?? '', this.local)
+        : mc.provider === 'sfu' || mc.provider === 'metered' ? new SfuMedia(this.ctl, this.code, this.ticket.jt, mc.ice_servers ?? [], this.local, mc.provider === 'metered' ? 'metered' : 'cloudflare')
         : new MeshMedia(this.ctl, mc.ice_servers ?? [], this.local)
       m.subscribe(() => { this.syncState(); this.changed(); void this.syncCaptions() })
       m.onNotice((t) => this.notice(t))

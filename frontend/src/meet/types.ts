@@ -60,7 +60,7 @@ export interface Call {
   readonly code: string
   readonly name: string
   status(): CallStatus
-  provider(): 'mesh' | 'realtimekit' | 'sfu'
+  provider(): 'mesh' | 'realtimekit' | 'sfu' | 'metered' | 'livekit'
   waitReason(): 'approval' | 'host' | null
   endReason(): CallEnd | null
   permanent(): boolean

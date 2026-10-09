@@ -3,7 +3,7 @@ import type { Control, CPeer } from './control'
 import { listDevices, type Media, type MediaView } from './media'
 import { deviceProblem, Emitter, type Devices, type LocalTracks } from './types'
 
-/** Cloudflare's SFU. Each person keeps ONE connection to Cloudflare: it sends their audio, camera and screen once, and receives everyone else's. That is
+/** Cloudflare's SFU, and Metered's Global Cloud SFU (the same design with a different API: see `dialect`). Each person keeps ONE connection to Cloudflare: it sends their audio, camera and screen once, and receives everyone else's. That is
  *  one upload however many people are in the call (a mesh uploads a copy to every person). This server only relays the calls to Cloudflare's session API
  *  (it holds the app secret); who is in which Cloudflare session is announced over the meeting's control channel.
  *
@@ -12,6 +12,7 @@ import { deviceProblem, Emitter, type Devices, type LocalTracks } from './types'
 
 const NAMES = ['mic', 'cam', 'screen'] as const
 type Kind = (typeof NAMES)[number]
+type Ids = Partial<Record<Kind, string>>
 interface Remote { sid: string; tracks: Partial<Record<Kind, MediaStreamTrack>>; stream: MediaStream | null; screenStream: MediaStream | null; since: number; mids: Partial<Record<Kind, RTCRtpTransceiver>> }
 
 const STUCK_MS = 15000
@@ -46,13 +47,15 @@ export class SfuMedia extends Emitter implements Media {
   private sid = ''
   private ready!: () => void
   private ok: Promise<void> = new Promise((r) => { this.ready = r })
+  private ids: Ids = {}   // Metered names tracks by id, so ours are announced
+  private known = new Set<string>()   // connection lines (mids) already assigned, Metered side
   private remotes = new Map<string, Remote>()
   private byMid = new Map<string, { peer: string; kind: Kind }>()
   private chain: Promise<void> = Promise.resolve()   // pulling tracks changes the one connection, so one at a time
   private stopped = false
   private error = ''
 
-  constructor(private ctl: Control, private code: string, private jt: string, ice: RTCIceServer[], local: LocalTracks) {
+  constructor(private ctl: Control, private code: string, private jt: string, ice: RTCIceServer[], local: LocalTracks, private dialect: 'cloudflare' | 'metered' = 'cloudflare') {
     super()
     this.audio = local.audio; this.video = local.video
     this.micId = local.micId ?? ''; this.camId = local.camId ?? ''
@@ -85,43 +88,73 @@ export class SfuMedia extends Emitter implements Media {
       pc.addTransceiver(this.ph.screen, { direction: 'sendonly' }),
     ]
     await pc.setLocalDescription(await pc.createOffer())
-    const { sessionId } = await api.meetSfu<{ sessionId: string }>(this.code, this.jt, 'session')
-    this.sid = sessionId
-    const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${sessionId}/tracks`, 'POST', {
-      sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp },
-      tracks: this.slots.map((t, i) => ({ location: 'local', mid: t.mid, trackName: NAMES[i] })),
-    })
-    await pc.setRemoteDescription(r.sessionDescription)
+    if (this.dialect === 'metered') {
+      // the session starts with this offer; the tracks are then published by id (and a new offer)
+      const first = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp } })
+      this.sid = first.sessionId
+      await pc.setRemoteDescription(first.sessionDescription)
+      this.slots.forEach((t, i) => { this.ids[NAMES[i]] = t.sender.track?.id })
+      await pc.setLocalDescription(await pc.createOffer())
+      const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.sid}/tracks`, 'POST', {
+        op: 'publish', sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp },
+        tracks: this.slots.map((t, i) => ({ trackId: t.sender.track?.id, mid: t.mid, customTrackName: NAMES[i] })),
+      })
+      await pc.setRemoteDescription(r.sessionDescription)
+      this.slots.forEach((t) => { if (t.mid) this.known.add(t.mid) })
+    } else {
+      const { sessionId } = await api.meetSfu<{ sessionId: string }>(this.code, this.jt, 'session')
+      this.sid = sessionId
+      const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${sessionId}/tracks`, 'POST', {
+        sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp },
+        tracks: this.slots.map((t, i) => ({ location: 'local', mid: t.mid, trackName: NAMES[i] })),
+      })
+      await pc.setRemoteDescription(r.sessionDescription)
+    }
     this.ready()
     this.announce(this.ctl.welcomePeers, false)
   }
 
   /** tell people which Cloudflare session carries us (ack: this answers someone who told us theirs) */
   private announce(ids: string[], ack: boolean) {
-    for (const id of ids) if (this.ctl.peers.has(id)) this.ctl.send({ t: 'signal', to: id, data: { sfu: { sid: this.sid, ack } } })
+    for (const id of ids) if (this.ctl.peers.has(id)) this.ctl.send({ t: 'signal', to: id, data: { sfu: { sid: this.sid, ack, ids: this.ids } } })
   }
 
   private async onSignal(from: string, data: any) {
     const s = data?.sfu
     if (this.stopped || !s?.sid || !this.ctl.peers.has(from)) return
     await this.ok
-    if (this.remotes.get(from)?.sid !== s.sid) this.pull(from, String(s.sid))
+    if (this.remotes.get(from)?.sid !== s.sid) this.pull(from, String(s.sid), (s.ids ?? {}) as Ids)
     if (!s.ack) this.announce([from], true)
   }
 
-  private pull(peer: string, sid: string) {
+  private pull(peer: string, sid: string, ids: Ids) {
     this.remotes.set(peer, { sid, tracks: {}, stream: null, screenStream: null, since: Date.now(), mids: {} })
     window.setTimeout(() => { if (!this.stopped) this.changed() }, STUCK_MS + 100)
     this.chain = this.chain.then(async () => {
       if (this.stopped) return
       try {
-        const r = await api.meetSfu<{ requiresImmediateRenegotiation?: boolean; sessionDescription?: RTCSessionDescriptionInit; tracks?: { mid?: string; trackName?: string; errorCode?: string }[] }>(
-          this.code, this.jt, `${this.sid}/tracks`, 'POST', { tracks: NAMES.map((n) => ({ location: 'remote', sessionId: sid, trackName: n })) })
-        for (const t of r.tracks ?? []) if (t.mid && !t.errorCode && NAMES.includes(t.trackName as Kind)) this.byMid.set(t.mid, { peer, kind: t.trackName as Kind })
-        if (r.requiresImmediateRenegotiation && r.sessionDescription) {
-          await this.pc.setRemoteDescription(r.sessionDescription)
-          await this.pc.setLocalDescription(await this.pc.createAnswer())
-          await api.meetSfu(this.code, this.jt, `${this.sid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.pc.localDescription!.sdp } })
+        if (this.dialect === 'metered') {
+          // one track at a time: the connection line each one arrives on is then the new one in the server's offer
+          for (const kind of NAMES) {
+            if (!ids[kind]) continue
+            const r = await api.meetSfu<{ immediateRenegotiationRequired?: boolean; sessionDescription?: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.sid}/tracks`, 'POST',
+              { op: 'subscribe', tracks: [{ remoteSessionId: sid, remoteTrackId: ids[kind] }] })
+            if (r.sessionDescription && r.immediateRenegotiationRequired !== false) {
+              for (const m of r.sessionDescription.sdp!.matchAll(/^a=mid:(\S+)/gm)) if (!this.known.has(m[1])) { this.known.add(m[1]); this.byMid.set(m[1], { peer, kind }) }
+              await this.pc.setRemoteDescription(r.sessionDescription)
+              await this.pc.setLocalDescription(await this.pc.createAnswer())
+              await api.meetSfu(this.code, this.jt, `${this.sid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.pc.localDescription!.sdp } })
+            }
+          }
+        } else {
+          const r = await api.meetSfu<{ requiresImmediateRenegotiation?: boolean; sessionDescription?: RTCSessionDescriptionInit; tracks?: { mid?: string; trackName?: string; errorCode?: string }[] }>(
+            this.code, this.jt, `${this.sid}/tracks`, 'POST', { tracks: NAMES.map((n) => ({ location: 'remote', sessionId: sid, trackName: n })) })
+          for (const t of r.tracks ?? []) if (t.mid && !t.errorCode && NAMES.includes(t.trackName as Kind)) this.byMid.set(t.mid, { peer, kind: t.trackName as Kind })
+          if (r.requiresImmediateRenegotiation && r.sessionDescription) {
+            await this.pc.setRemoteDescription(r.sessionDescription)
+            await this.pc.setLocalDescription(await this.pc.createAnswer())
+            await api.meetSfu(this.code, this.jt, `${this.sid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.pc.localDescription!.sdp } })
+          }
         }
       } catch (e) { this.error = (e as Error).message; this.remotes.delete(peer); this.changed() }
     })
@@ -156,7 +189,7 @@ export class SfuMedia extends Emitter implements Media {
   }
 
   async report(names: Record<string, string>): Promise<string> {
-    const out = [`Provider: Cloudflare SFU, one connection (${this.pc.connectionState}, ICE ${this.pc.iceConnectionState}), session ${this.sid || 'none'}`]
+    const out = [`Provider: ${this.dialect === 'metered' ? 'Metered' : 'Cloudflare'} SFU, one connection (${this.pc.connectionState}, ICE ${this.pc.iceConnectionState}), session ${this.sid || 'none'}`]
     if (this.error) out.push(`Last error: ${this.error}`)
     const stats = await this.pc.getStats().catch(() => null)
     stats?.forEach((s: any) => { if (s.type === 'transport' && s.selectedCandidatePairId) { const p = (stats as any).get(s.selectedCandidatePairId); if (p) out.push(`Selected path: ${p.currentRoundTripTime ? Math.round(p.currentRoundTripTime * 1000) + ' ms' : ''}, sent ${p.bytesSent ?? 0} B, received ${p.bytesReceived ?? 0} B`) } })
