@@ -42,6 +42,7 @@ function Tile({ call, peer, kind, pinned, spotlight, onPin, onTalk, onMessage, b
         {peer.host && kind === 'cam' && <Crown size={13} aria-label="Host" />}
         {peer.cohost && kind === 'cam' && <Star size={13} aria-label="Co-host" />}
         {spotlight && kind === 'cam' && <i className="meet-tag">Spotlight</i>}
+        {peer.guest && kind === 'cam' && <i className="meet-tag">Guest</i>}
       </div>
     </div>
   )

@@ -90,11 +90,11 @@ export class Session extends Emitter implements Call {
   peers(): Peer[] {
     const c = this.ctl, v = this.media?.self()
     const hand = (id: string) => c.hands.indexOf(id) + 1
-    const me: Peer = { id: c.me.id || 'self', cid: c.me.cid, name: this.ticket.name, self: true, host: c.me.owner, cohost: c.me.cohost, manager: c.me.manager,
+    const me: Peer = { id: c.me.id || 'self', cid: c.me.cid, name: this.ticket.name, self: true, host: c.me.owner, cohost: c.me.cohost, guest: false, manager: c.me.manager,
       audio: !!v?.audio, video: !!v?.video, screen: !!v?.screen, hand: hand(c.me.id), stream: v?.stream ?? null, screenStream: v?.screenStream ?? null, mic: v?.mic ?? null }
     const others = [...c.peers.values()].map((p) => {
       const m = this.media?.peer(p)
-      return { id: p.id, cid: p.cid, name: p.name, self: false, host: p.host, cohost: p.cohost, manager: p.host || p.cohost, audio: m?.audio ?? p.audio, video: m?.video ?? p.video,
+      return { id: p.id, cid: p.cid, name: p.name, self: false, host: p.host, cohost: p.cohost, guest: !!p.guest, manager: p.host || p.cohost, audio: m?.audio ?? p.audio, video: m?.video ?? p.video,
         screen: m?.screen ?? p.screen, hand: hand(p.id), stream: m?.stream ?? null, screenStream: m?.screenStream ?? null, mic: null } as Peer
     })
     return [me, ...others]

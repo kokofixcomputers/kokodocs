@@ -234,7 +234,7 @@ PROVIDERS = {"mesh": Mesh, "realtimekit": RealtimeKit}
 DEFAULTS = {
     "approval": False,        # the host (or a co-host) must let each person in
     "host_first": False,      # people wait until the host or a co-host is in
-    "guests": True,           # people without an account may join
+    "guests": False,          # people without an account may join (the host turns this on: it is off for a new meeting)
     "mute_on_entry": False,   # people join with the microphone off
     "cam_off_on_entry": False,
     "chat": "all",            # who can write in the chat: all | host | off
@@ -403,7 +403,7 @@ def create_meeting(body: NewMeeting, user=Depends(must_user), db=Depends(get_db)
     _check_passcode(body.passcode)
     cohosts = resolve_cohosts(db, body.cohosts, user["id"])
     s = body.settings.model_dump(exclude_none=True)
-    guests = 1 if (s.pop("guests", True) and c["guests"]) else 0
+    guests = 1 if (s.pop("guests", False) and c["guests"]) else 0
     code = new_code()
     title = body.title.strip() or f"{user['name']}'s meeting"
     now = time.time()

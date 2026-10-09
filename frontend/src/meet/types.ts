@@ -11,6 +11,7 @@ export interface Peer {
   self: boolean
   host: boolean
   cohost: boolean
+  guest: boolean                    // joined without an account
   manager: boolean
   audio: boolean
   video: boolean
@@ -24,7 +25,7 @@ export interface Peer {
 export interface ChatMsg { id: string; from: string; name: string; text: string; ts: number; self: boolean; private?: boolean; to?: string; to_name?: string }
 export interface PollView { id: string; q: string; options: string[]; multi: boolean; anonymous: boolean; open: boolean; counts: number[]; total: number; mine: number[]; names?: string[][] }
 export interface Caption { id: string; from: string; name: string; text: string; ts: number }
-export interface Waiting { id: string; name: string; reason: 'approval' | 'host' }
+export interface Waiting { id: string; name: string; reason: 'approval' | 'host'; guest?: boolean }
 export type RoomSettings = MeetSettings & { locked?: boolean; captions_on?: boolean }
 
 export type CallStatus = 'connecting' | 'waiting' | 'connected' | 'reconnecting' | 'closed'

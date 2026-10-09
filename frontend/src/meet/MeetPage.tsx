@@ -126,7 +126,7 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
   }
 
   if (!user && info.can_join === false) {
-    return <Notice title="Sign in to join" text={`${info.host_name || 'The host'} only lets signed-in people into this meeting.`}>
+    return <Notice title="Sign in to join" text={`${info.host_name || 'The host'} hasn't allowed people without an account into this meeting. Sign in, or ask them to allow guests.`}>
       <Link className="btn btn-primary btn-pill" to="/login" state={{ from: `/m/${code}` }}>Sign in</Link></Notice>
   }
   const who = user?.name ?? name
@@ -149,8 +149,9 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
           <p className="muted">Hosted by {info.host_name || 'someone'}{info.permanent ? ' · permanent meeting' : ''}{info.is_cohost ? ' · you are a co-host' : ''}</p>
           {info.approval && !info.is_host && !info.is_cohost && <p className="meet-hint"><Clock size={14} />The host will let you in.</p>}
           {user ? <p className="meet-as">Joining as <b>{user.name}</b></p> : (
-            <label className="meet-name"><span>Your name</span>
-              <span className="field"><input value={name} maxLength={60} placeholder="Name" autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void join()} /></span></label>)}
+            <label className="meet-name"><span>What should we call you?</span>
+              <span className="field"><input value={name} maxLength={60} placeholder="Your name" autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void join()} /></span>
+              <span className="muted small">You're joining without an account. The host and everyone else will see this name.</span></label>)}
           {askPass && (
             <label className="meet-name"><span>Meeting passcode</span>
               <span className="field"><input type="password" value={passcode} maxLength={64} placeholder="Passcode" autoComplete="off" onChange={(e) => setPasscode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void join()} /></span></label>)}

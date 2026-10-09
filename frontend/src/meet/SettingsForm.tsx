@@ -18,7 +18,7 @@ export function AccessSettings({ s, onChange, guestsAllowed = true }: P) {
     <>
       <Row on={s.approval} set={(v) => onChange({ approval: v })} label="Host approves everyone who joins" hint="People wait until you (or a co-host) let them in." />
       <Row on={s.host_first} set={(v) => onChange({ host_first: v })} label="Wait for the host" hint="Nobody gets in before you or a co-host arrive." />
-      <Row on={s.guests && guestsAllowed} disabled={!guestsAllowed} set={(v) => onChange({ guests: v })} label="People without an account can join" hint={guestsAllowed ? undefined : 'Turned off for the whole server.'} />
+      <Row on={s.guests && guestsAllowed} disabled={!guestsAllowed} set={(v) => onChange({ guests: v })} label="People without an account can join" hint={guestsAllowed ? 'Anyone with the link can join by typing a name. You see them marked as guests. Off: only signed-in people can join.' : 'Turned off for the whole server.'} />
       <Pick label="Most people at once" value={String(s.max)} options={SIZES} onChange={(v) => onChange({ max: Number(v) })} />
     </>)
 }
@@ -51,5 +51,5 @@ export function SettingsForm(p: P) {
 }
 
 export const DEFAULT_SETTINGS: MeetSettings = {
-  approval: false, host_first: false, guests: true, mute_on_entry: false, cam_off_on_entry: false, chat: 'all', share: 'all', reactions: true, unmute: true, captions: true, max: 0,
+  approval: false, host_first: false, guests: false, mute_on_entry: false, cam_off_on_entry: false, chat: 'all', share: 'all', reactions: true, unmute: true, captions: true, max: 0,
 }

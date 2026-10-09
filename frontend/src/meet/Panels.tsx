@@ -86,7 +86,7 @@ export function PeoplePanel({ call, peers, onMessage }: { call: Call; peers: Pee
         <section className="meet-wait-list">
           <header><b>Waiting to join ({waiting.length})</b>{waiting.length > 1 && <button className="btn btn-soft btn-sm" onClick={() => call.admit('all')}>Admit all</button>}</header>
           {waiting.map((w) => (
-            <div key={w.id} className="meet-person"><Avatar name={w.name} /><span className="name">{w.name}{w.reason === 'host' && <i className="meet-tag">waiting for the host</i>}</span>
+            <div key={w.id} className="meet-person"><Avatar name={w.name} /><span className="name">{w.name}{w.guest && <i className="meet-tag">guest</i>}{w.reason === 'host' && <i className="meet-tag">waiting for the host</i>}</span>
               <button className="icon-btn sm ok" title="Let in" aria-label={`Let ${w.name} in`} onClick={() => call.admit(w.id)}><UserCheck size={16} /></button>
               <button className="icon-btn sm" title="Turn away" aria-label={`Turn ${w.name} away`} onClick={() => call.deny(w.id)}><X size={16} /></button></div>))}
         </section>)}
@@ -108,7 +108,7 @@ function Row({ call, p, onMessage }: { call: Call; p: Peer; onMessage: (id: stri
         <div className="meet-person" {...ctx.bind(items)}>
           {ctx.node}
           <Avatar name={p.name} />
-          <span className="name">{p.self ? `${p.name} (you)` : p.name}{p.host && <Crown size={13} aria-label="Host" />}{p.cohost && <Star size={13} aria-label="Co-host" />}</span>
+          <span className="name">{p.self ? `${p.name} (you)` : p.name}{p.host && <Crown size={13} aria-label="Host" />}{p.cohost && <Star size={13} aria-label="Co-host" />}{p.guest && <i className="meet-tag">guest</i>}</span>
           {!p.audio && <MicOff size={15} className="muted" />}
           {!p.self && (
             <Popover align="end" trigger={({ toggle }) => <button className="icon-btn sm" onClick={toggle} aria-label={`Options for ${p.name}`}><MoreHorizontal size={16} /></button>}>

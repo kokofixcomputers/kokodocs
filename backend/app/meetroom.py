@@ -54,6 +54,10 @@ class Peer:
         return self.owner or self.cohost
 
     @property
+    def guest(self) -> bool:
+        return self.uid is None
+
+    @property
     def key(self) -> str:
         return self.uid or self.cid
 
@@ -130,11 +134,15 @@ async def broadcast(room: Room, msg: dict, exclude: str | None = None, managers_
 
 
 def public(room: Room, p: Peer) -> dict:
-    return {"id": p.id, "cid": p.cid, "name": p.name, "host": p.owner, "cohost": p.cohost, "audio": p.audio, "video": p.video, "screen": p.screen}
+    return {"id": p.id, "cid": p.cid, "name": p.name, "host": p.owner, "cohost": p.cohost, "guest": p.guest, "audio": p.audio, "video": p.video, "screen": p.screen}
 
 
 def settings_view(room: Room) -> dict:
     return {**room.settings, "locked": room.locked, "captions_on": room.captions_on and bool(room.settings.get("captions"))}
+
+
+def waiting_dicts(room: Room) -> list[dict]:
+    return [{"id": w.id, "name": w.name, "reason": w.waiting, "guest": w.guest} for w in room.waiting.values()]
 
 
 def poll_view(poll: Poll, viewer: Peer) -> dict:
@@ -157,8 +165,7 @@ async def send_polls(room: Room) -> None:
 
 
 async def send_waiting(room: Room) -> None:
-    lst = [{"id": p.id, "name": p.name, "reason": p.waiting} for p in room.waiting.values()]
-    await broadcast(room, {"t": "waiting-list", "list": lst}, managers_only=True)
+    await broadcast(room, {"t": "waiting-list", "list": waiting_dicts(room)}, managers_only=True)
 
 
 async def send_hands(room: Room) -> None:
@@ -189,7 +196,7 @@ async def admit(room: Room, p: Peer) -> bool:
                "started": int(room.started * 1000), "provider": room.provider, "emojis": EMOJIS,
                "polls": [poll_view(x, p) for x in room.polls]}
     if p.manager:
-        welcome["waiting"] = [{"id": w.id, "name": w.name, "reason": w.waiting} for w in room.waiting.values()]
+        welcome["waiting"] = waiting_dicts(room)
     await send(p, welcome)
     await broadcast(room, {"t": "joined", "peer": public(room, p)}, exclude=p.id)
     if p.manager:
@@ -241,7 +248,7 @@ async def push_settings(code: str, settings: dict, title: str, fixed: list[str] 
             if not p.owner and want != p.cohost:
                 p.cohost = want
                 await broadcast(room, {"t": "cohost", "id": p.id, "on": want})
-                await send(p, {"t": "role", "manager": p.manager, "cohost": want, "waiting": [{"id": w.id, "name": w.name, "reason": w.waiting} for w in room.waiting.values()] if want else []})
+                await send(p, {"t": "role", "manager": p.manager, "cohost": want, "waiting": waiting_dicts(room) if want else []})
                 if want:
                     await release_host_waiters(room)
     await broadcast(room, {"t": "settings", "settings": settings_view(room), "title": title})
@@ -480,7 +487,7 @@ async def handle(room: Room, me: Peer, msg: dict) -> None:
             target.cohost = on
             (room.cohosts.add if on else room.cohosts.discard)(target.key)
             await broadcast(room, {"t": "cohost", "id": target.id, "on": on})
-            await send(target, {"t": "role", "manager": target.manager, "cohost": on, "waiting": [{"id": w.id, "name": w.name, "reason": w.waiting} for w in room.waiting.values()] if on else []})
+            await send(target, {"t": "role", "manager": target.manager, "cohost": on, "waiting": waiting_dicts(room) if on else []})
             if on:
                 await release_host_waiters(room)
 

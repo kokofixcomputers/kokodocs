@@ -36,6 +36,12 @@ _, a = call('POST', '/api/auth/signup', {'email': 'koko@kokodev.cc', 'name': 'Ko
 _, u = call('POST', '/api/auth/signup', {'email': 'bob@x.io', 'name': 'Bob', 'password': 'password123'}); U = u['token']
 _, u2 = call('POST', '/api/auth/signup', {'email': 'cat@x.io', 'name': 'Cat', 'password': 'password123'}); C = u2['token']
 
+_call = call
+def call(m, p, body=None, tok=None):   # most of these tests have guests join, so meetings are made with guests allowed unless a test says otherwise
+    if m == 'POST' and p == '/api/meet' and isinstance(body, dict) and 'guests' not in body.get('settings', {}):
+        body = {**body, 'settings': {**body.get('settings', {}), 'guests': True}}
+    return _call(m, p, body, tok)
+
 SOCKS = []
 def ws(code, jt, gid=''):
     w = wsconnect(f'ws://127.0.0.1:8000/ws/meet/{code}?jt={jt}' + (f'&gid={gid}' if gid else ''), open_timeout=5, legacy=True); SOCKS.append(w); return w
@@ -71,6 +77,24 @@ def welcomed(code, tok=None, name=None):
     w, j, first = enter(code, tok, name)
     assert first and first['t'] == 'welcome', first
     return w, j, first
+
+# ---- people without an account join only when the host allows it
+s, nog = _call('POST', '/api/meet', {'title': 'Members only'}, A)
+ok('a new meeting does not allow people without an account', s == 200 and nog['settings']['guests'] is False, nog)
+s, i = call('GET', f"/api/meet/{nog['code']}"); ok('and says so before anyone tries', i['can_join'] is False and i['guests'] is False, i)
+s, r = join(nog['code'], None, 'Anon'); ok('a guest is turned away, and asked to sign in', s == 401 and r['detail']['code'] == 'login_required', s, r)
+ok('a signed-in person is fine', join(nog['code'], U)[0] == 200)
+call('PUT', f"/api/meet/{nog['code']}", {'settings': {'guests': True}}, A)
+s, r = join(nog['code'], None, 'Anon'); ok('once the host allows it, a name is all a guest needs', s == 200 and r['name'] == 'Anon' and not r['host'], s, r)
+anon, ja, fa = None, None, None
+ha0, _, fh0 = welcomed(nog['code'], A); an_ws = ws(nog['code'], r['jt']); wa = rx(an_ws, 'welcome')
+ok('the host sees them marked as a guest, and signed-in people not', any(p['guest'] and p['name'] == 'Anon' for p in [*wa['peers'], (rx(ha0, 'joined') or {}).get('peer', {})]) and not fh0['me'].get('guest') and not wa['peers'][0]['guest'], wa['peers'])
+call('PUT', f"/api/meet/{nog['code']}", {'settings': {'guests': False, 'approval': True}}, A)
+s, r = join(nog['code'], None, 'Anon2'); ok('and it can be switched off again', s == 401)
+s, r = join(nog['code'], U); w_ = ws(nog['code'], r['jt']); rx(w_)
+s, r2 = join(nog['code'], C); w2 = ws(nog['code'], r2['jt']); rx(w2)
+wl = rxp(ha0, 'waiting-list', lambda m: len(m['list']) >= 1)
+ok('waiting entries say whether they are guests', wl and all('guest' in x for x in wl['list']), wl)
 
 # ---- creating, finding, joining
 s, c = call('GET', '/api/meet/config')

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Captions, Check, Copy, Hand, LayoutGrid, Lock, LockOpen, Maximize, MessageSquare, Mic, MicOff, MonitorUp, MonitorX, MoreVertical, PhoneOff, Settings2, Smile, SquareUser, Users, Video, VideoOff, Volume2, X, Keyboard, Download, EyeOff, Info } from 'lucide-react'
+import { BarChart3, Captions, UserRound, Check, Copy, Hand, LayoutGrid, Lock, LockOpen, Maximize, MessageSquare, Mic, MicOff, MonitorUp, MonitorX, MoreVertical, PhoneOff, Settings2, Smile, SquareUser, Users, Video, VideoOff, Volume2, X, Keyboard, Download, EyeOff, Info } from 'lucide-react'
 import { api, type MeetInfo, type MeetSettings } from '../api'
 import { Modal } from '../ui/Modal'
 import { Popover } from '../ui/Popover'
@@ -160,6 +160,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
           <div className="menu-sep" />
           <button onClick={go(() => call.lock(!s.locked))}>{s.locked ? <LockOpen size={17} /> : <Lock size={17} />}{s.locked ? 'Unlock the meeting' : 'Lock the meeting'}</button>
           <button onClick={go(() => void askConfirm({ title: 'Mute everyone?', text: "Everyone except hosts is muted. They can unmute themselves unless you change that in the meeting settings.", label: 'Mute everyone' }).then((y) => y && call.muteAll(s.unmute)))}><MicOff size={17} />Mute everyone</button>
+          {me.owner && <button onClick={go(() => { api.meetEdit(code, { settings: { guests: !s.guests } }).then(() => toast(s.guests ? 'Only signed-in people can join now.' : 'People without an account can join now.')).catch((e) => toast((e as Error).message)) })}><UserRound size={17} />{s.guests ? 'Stop allowing people without an account' : 'Allow people without an account'}</button>}
           {me.owner && <button onClick={go(() => setModal('settings'))}><Settings2 size={17} />Meeting settings</button>}
         </>)}
         <div className="menu-sep" />

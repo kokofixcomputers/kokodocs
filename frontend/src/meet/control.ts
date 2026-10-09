@@ -1,7 +1,7 @@
 import type { MeetTicket } from '../api'
 import { Emitter, type Caption, type CallEnd, type CallStatus, type ChatMsg, type PollView, type RoomSettings, type Waiting } from './types'
 
-export interface CPeer { id: string; cid: string; name: string; host: boolean; cohost: boolean; audio: boolean; video: boolean; screen: boolean }
+export interface CPeer { id: string; cid: string; name: string; host: boolean; cohost: boolean; guest?: boolean; audio: boolean; video: boolean; screen: boolean }
 export interface Me { id: string; cid: string; owner: boolean; cohost: boolean; manager: boolean }
 
 const RETRY = [1000, 2000, 4000, 8000, 8000, 15000]
