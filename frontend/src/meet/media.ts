@@ -10,6 +10,7 @@ export interface MediaView {
   screenStream: MediaStream | null
   mic?: MediaStream | null            // your own microphone (for "who is talking" and captions)
   net?: 'connecting' | 'connected' | 'failed'   // the link to this person: are their audio and video actually arriving?
+  path?: 'direct' | 'relay' | null              // how the packets travel: straight between the browsers, or through a relay (TURN) server
 }
 
 export interface Media {

@@ -17,6 +17,7 @@ import { SettingsForm } from './SettingsForm'
 import { Stage } from './Stage'
 import type { Call, Peer } from './types'
 import { canShare, clock, download, inviteText, useCall } from './util'
+import { Radio, Server } from 'lucide-react'
 
 type Panel = 'chat' | 'people' | 'polls' | null
 
@@ -228,7 +229,16 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
         {rec && (inCharge
           ? <span className="meet-chip rec" title={rec.mine ? 'You are recording this meeting' : `${rec.by} is recording this meeting`}><i />Recording {clock(Date.now() - rec.since)}</span>
           : <button className="meet-chip rec" onClick={() => setReask(true)} title="Click to change your answer"><i />Recording · {call.consent() === 'yes' ? "you're in it" : call.consent() === 'no' ? "you're not in it" : 'waiting for your answer'}</button>)}
-        <span className="meet-chip" title="Audio and video aren't end-to-end encrypted: the call service can carry them."><LockOpen size={13} />Not encrypted</span>
+        {(() => {
+          const others = peers.filter((p) => !p.self && p.path)
+          const relayed = others.filter((p) => p.path === 'relay')
+          return others.length > 0 && (
+            <span className="meet-chip" title={relayed.length ? `Through a relay (TURN) server: ${relayed.map((p) => p.name).join(', ')}.${others.length > relayed.length ? ` Straight between browsers: ${others.filter((p) => p.path === 'direct').map((p) => p.name).join(', ')}.` : ''} Either way the audio and video are encrypted, and a relay can't read them.` : 'Straight between the browsers (peer to peer): no server in the middle.'}>
+              {relayed.length ? <Server size={13} /> : <Radio size={13} />}{relayed.length ? (relayed.length === others.length ? 'Via relay' : `Via relay (${relayed.length} of ${others.length})`) : 'Direct'}</span>)
+        })()}
+        {call.provider() === 'mesh'
+          ? <span className="meet-chip enc" title="Audio and video are encrypted between the browsers (WebRTC's built-in encryption), including when a relay server passes them along: a relay can't read them. The server running this meeting only sets the call up."><Lock size={13} />Encrypted</span>
+          : <span className="meet-chip enc" title="Audio and video are encrypted on their way to and from Cloudflare's call servers, which carry the call and can access it."><Lock size={13} />Encrypted in transit</span>}
         {status === 'reconnecting' && <span className="meet-chip warn"><span className="spinner sm" />Reconnecting…</span>}
       </header>
 

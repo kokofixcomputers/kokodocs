@@ -83,6 +83,7 @@ export class Session extends Emitter implements Call {
 
   // ---- what the page reads
   status(): CallStatus { return this.ctl.status }
+  provider() { return this.ticket.provider }
   waitReason() { return this.ctl.waitReason }
   endReason(): CallEnd | null { return this.ctl.end }
   permanent() { return this.ticket.permanent }
@@ -134,7 +135,7 @@ export class Session extends Emitter implements Call {
     const others = [...c.peers.values()].map((p) => {
       const m = this.media?.peer(p)
       return { id: p.id, cid: p.cid, name: p.name, self: false, host: p.host, cohost: p.cohost, guest: !!p.guest, manager: p.host || p.cohost, audio: m?.audio ?? p.audio, video: m?.video ?? p.video,
-        screen: m?.screen ?? p.screen, hand: hand(p.id), stream: m?.stream ?? null, screenStream: m?.screenStream ?? null, mic: null, net: m?.net } as Peer
+        screen: m?.screen ?? p.screen, hand: hand(p.id), stream: m?.stream ?? null, screenStream: m?.screenStream ?? null, mic: null, net: m?.net, path: m?.path } as Peer
     })
     return [me, ...others]
   }

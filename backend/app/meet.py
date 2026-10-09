@@ -16,7 +16,7 @@ each meeting, so switching later never breaks a meeting that is already running:
 Joining is two steps so that approval can't be skipped: a *ticket* (a short-lived signed token, issued after the meeting's checks such as the passcode)
 opens the control socket, where the host's waiting room decides; only once admitted does the person ask for *media credentials* (/media), which this
 server hands out only to people who are in the room. A new provider is one class here (`creds`, `end`, `problem`, `test`) plus one adapter in
-frontend/src/meet/. Calls are not end-to-end encrypted, and the meeting page says so.
+frontend/src/meet/. Audio and video are always encrypted by the browsers themselves (between them, or to Cloudflare's call servers for that provider), and the meeting page says which.
 """
 import json
 import os

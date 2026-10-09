@@ -20,6 +20,7 @@ export interface Peer {
   stream: MediaStream | null        // camera and microphone (the local one has no audio, so you never hear yourself)
   screenStream: MediaStream | null
   net?: 'connecting' | 'connected' | 'failed'   // is their audio and video getting through? (direct calls can be blocked by a network)
+  path?: 'direct' | 'relay' | null              // straight between browsers, or through a relay server
   mic: MediaStream | null           // the person's own microphone, to see when they talk (only for yourself; others are measured from `stream`)
 }
 
@@ -59,6 +60,7 @@ export interface Call {
   readonly code: string
   readonly name: string
   status(): CallStatus
+  provider(): 'mesh' | 'realtimekit'
   waitReason(): 'approval' | 'host' | null
   endReason(): CallEnd | null
   permanent(): boolean

@@ -21,6 +21,7 @@ interface Link {
   since: number                 // when this connection was started
   tries: number                 // automatic retries so far
   remoteFp: string              // the other side's certificate fingerprint (a fresh connection from them has a new one)
+  path: 'direct' | 'relay' | null
 }
 
 const STUCK_MS = 12000
@@ -41,6 +42,8 @@ export class MeshMedia extends Emitter implements Media {
   private failed = new Set<string>()   // people we could not reach: stays so until they connect (the automatic retries in the background don't flip it back and forth)
   private seen = new Map<string, number>()   // when each person was first waited for (a person who never connects at all is reported too)
 
+  private pathTimer: ReturnType<typeof setInterval> | null = null
+
   constructor(private ctl: Control, private ice: RTCIceServer[], local: LocalTracks) {
     super()
     this.audio = local.audio; this.video = local.video
@@ -49,6 +52,7 @@ export class MeshMedia extends Emitter implements Media {
   }
 
   async start() {
+    this.pathTimer = setInterval(() => void this.refreshPaths(), 3000)
     this.ctl.onSignal((from, data) => void this.onSignal(from, data))
     this.ctl.onLeft((id) => { this.closeLink(id); this.changed() })
     this.ctl.onForce((f) => { if (f.screen === false) this.stopScreen(); if (f.audio === false) void this.setMic(false); if (f.video === false) void this.setCam(false) })
@@ -69,7 +73,7 @@ export class MeshMedia extends Emitter implements Media {
   self(): MediaView { return { audio: !!this.audio, video: !!this.video, screen: !!this.screenTrack, stream: this.selfStream, screenStream: this.selfScreen, mic: this.selfMic } }
   peer(p: CPeer): MediaView | null {
     const l = this.links.get(p.id)
-    return { audio: p.audio, video: p.video, screen: p.screen, stream: l?.stream ?? null, screenStream: l?.screenStream ?? null, net: this.net(p.id, l) }
+    return { audio: p.audio, video: p.video, screen: p.screen, stream: l?.stream ?? null, screenStream: l?.screenStream ?? null, net: this.net(p.id, l), path: l?.path ?? null }
   }
 
   private net(id: string, l?: Link): 'connecting' | 'connected' | 'failed' {
@@ -124,11 +128,30 @@ export class MeshMedia extends Emitter implements Media {
         })
       }
       const kb = (n: number) => `${Math.round(n / 1000)} kB`
-      out.push(`${names[id] ?? id} (${l.initiator ? 'you called them' : 'they called you'}): ${l.pc.connectionState}, ice ${l.pc.iceConnectionState}, path ${local ? `${local} to ${remote}` : 'none yet'}, verdict ${this.net(id, l)}`)
+      out.push(`${names[id] ?? id} (${l.initiator ? 'you called them' : 'they called you'}): ${l.pc.connectionState}, ice ${l.pc.iceConnectionState}, path ${local ? `${local} to ${remote}` : 'none yet'}, verdict ${this.net(id, l)}, travelling ${l.path === 'relay' ? 'through a relay' : l.path === 'direct' ? 'directly' : 'unknown'}`)
       out.push(`   they send you: audio ${kb(inA)} (energy ${energy.toFixed(2)}), video ${kb(inV)}   you send them: audio ${kb(outA)}, video ${kb(outV)}`)
     }
     for (const id of this.ctl.peers.keys()) if (!this.links.has(id)) out.push(`${names[id] ?? id}: no connection started (${this.waiting(id)})`)
     return out.join('\n')
+  }
+
+  /** Is this link straight between the browsers, or through a relay? (A relay on either end means the packets pass through that server.) */
+  private async refreshPaths() {
+    let changed = false
+    for (const l of this.links.values()) {
+      if (l.pc.connectionState !== 'connected') continue
+      try {
+        const stats = await l.pc.getStats()
+        const byId = new Map<string, any>()
+        stats.forEach((r) => byId.set(r.id, r))
+        const sel = [...byId.values()].find((r) => r.type === 'transport' && r.selectedCandidatePairId)
+        const pair = sel ? byId.get(sel.selectedCandidatePairId) : [...byId.values()].find((r) => r.type === 'candidate-pair' && r.state === 'succeeded')
+        const a = pair && byId.get(pair.localCandidateId), b = pair && byId.get(pair.remoteCandidateId)
+        const path = !pair ? null : a?.candidateType === 'relay' || b?.candidateType === 'relay' ? 'relay' : 'direct'
+        if (path !== l.path) { l.path = path; changed = true }
+      } catch { /* the link went away */ }
+    }
+    if (changed) this.changed()
   }
 
   /** The loudness of what the other person's microphone is sending, from the audio levels carried in the call itself. (Feeding a remote call into the browser's audio analysis does not work in Chrome.) */
@@ -158,7 +181,7 @@ export class MeshMedia extends Emitter implements Media {
     const existing = this.links.get(id)
     if (existing) return existing
     const pc = new RTCPeerConnection({ iceServers: this.ice })
-    const l: Link = { id, pc, initiator, slots: [], media: [], queued: [], stream: null, screenStream: null, since: Date.now(), tries: 0, remoteFp: '' }
+    const l: Link = { id, pc, initiator, slots: [], media: [], queued: [], stream: null, screenStream: null, since: Date.now(), tries: 0, remoteFp: '', path: null }
     this.links.set(id, l)
     if (initiator) {
       l.slots = [pc.addTransceiver('audio', { direction: 'sendrecv' }), pc.addTransceiver('video', { direction: 'sendrecv' }), pc.addTransceiver('video', { direction: 'sendrecv' })]
@@ -291,6 +314,7 @@ export class MeshMedia extends Emitter implements Media {
 
   stop() {
     this.stopped = true
+    if (this.pathTimer) clearInterval(this.pathTimer)
     this.dropLinks()
     this.audio?.stop(); this.video?.stop(); this.screenMedia?.getTracks().forEach((t) => t.stop())
     this.audio = this.video = this.screenTrack = null
