@@ -1,6 +1,6 @@
 // KokoDocs desktop: a window around your KokoDocs server. The website itself keeps the offline copy (service worker + IndexedDB),
 // so this only adds the native parts: the title bar, menus, screen sharing, links, and remembering which server to open.
-const { app, BrowserWindow, Menu, shell, session, ipcMain, nativeTheme, desktopCapturer, dialog } = require('electron')
+const { app, BrowserWindow, Menu, shell, session, ipcMain, nativeTheme, desktopCapturer, protocol, net } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
@@ -15,6 +15,58 @@ const writeCfg = (c) => { fs.mkdirSync(path.dirname(cfgFile()), { recursive: tru
 const SERVER = 'https://docs.kokodev.cc'
 const server = (!app.isPackaged && process.env.KOKO_DEV_URL) || SERVER
 let win = null
+
+// ── the app's own files, kept on disk ──
+// The website also keeps itself in a service worker, but this doesn't depend on that: every app file that loads is saved here, and when the
+// server can't be reached the saved copy is served instead, so the window always opens. (Documents are kept by the page itself, in IndexedDB.)
+const crypto = require('crypto')
+const cacheDir = () => path.join(app.getPath('userData'), 'appfiles')
+const slot = (p) => path.join(cacheDir(), crypto.createHash('sha1').update(p).digest('hex'))
+const cacheable = (p) => /^\/(assets|twemoji|shots)\//.test(p) || p === '/favicon.svg' || p.startsWith('/api/images/')
+const store = (p, type, buf) => { try { fs.mkdirSync(cacheDir(), { recursive: true }); fs.writeFileSync(slot(p) + '.bin', buf); fs.writeFileSync(slot(p) + '.type', type || 'application/octet-stream') } catch { /* disk full or read-only: just no copy */ } }
+const saved = (p) => { try { return { body: fs.readFileSync(slot(p) + '.bin'), type: fs.readFileSync(slot(p) + '.type', 'utf8') } } catch { return null } }
+const have = (p) => fs.existsSync(slot(p) + '.bin')
+
+function offlineFiles() {
+  const scheme = new URL(server).protocol.slice(0, -1)
+  protocol.handle(scheme, async (req) => {
+    const u = new URL(req.url)
+    const pass = () => net.fetch(req, { bypassCustomProtocolHandlers: true })
+    if (u.origin !== server || req.method !== 'GET' || u.pathname.startsWith('/api/') && !u.pathname.startsWith('/api/images/') || u.pathname.startsWith('/ws/')) return pass()
+    const p = u.pathname
+    const isNav = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')
+    try {
+      const res = await pass()
+      if (res.ok && res.status === 200 && (cacheable(p) || isNav)) {
+        const type = res.headers.get('content-type') || ''
+        if (cacheable(p)) store(p, type, Buffer.from(await res.clone().arrayBuffer()))
+        else if (type.includes('text/html')) store('/index.html', type, Buffer.from(await res.clone().arrayBuffer()))   // every page address is the same app
+      }
+      return res
+    } catch (e) {
+      const c = cacheable(p) ? saved(p) : isNav ? saved('/index.html') : null
+      if (c) return new Response(c.body, { headers: { 'content-type': c.type, 'cache-control': 'no-store' } })
+      throw e
+    }
+  })
+}
+
+/** after a normal load: fetch the rest of the app (every file the service worker's list names), so the editors work offline too */
+let prefetching = false
+async function prefetch() {
+  if (prefetching) return; prefetching = true
+  try {
+    const sw = await (await net.fetch(server + '/sw.js', { cache: 'no-store' })).text()
+    const list = JSON.parse(/const PRECACHE = (\[.*\])/.exec(sw)?.[1] || '[]').filter((p) => cacheable(p) && !have(p))
+    let i = 0
+    await Promise.all([1, 2, 3, 4].map(async () => {
+      while (i < list.length) {
+        const p = list[i++]
+        try { const r = await net.fetch(server + p, { bypassCustomProtocolHandlers: true }); if (r.ok) store(p, r.headers.get('content-type') || '', Buffer.from(await r.arrayBuffer())) } catch { /* next time */ }
+      }
+    }))
+  } catch { /* offline, or an older server */ } finally { prefetching = false }
+}
 
 const themeBar = () => ({ color: nativeTheme.shouldUseDarkColors ? '#1b1b1f' : '#ffffff', symbolColor: nativeTheme.shouldUseDarkColors ? '#e6e6ea' : '#1a1a1e', height: BAR })
 
@@ -32,7 +84,7 @@ function createWindow() {
   win.on('closed', () => { win = null })
   win.on('enter-full-screen', () => win?.webContents.send('desktop:fullscreen', true))
   win.on('leave-full-screen', () => win?.webContents.send('desktop:fullscreen', false))
-  win.webContents.on('did-finish-load', () => win?.webContents.send('desktop:fullscreen', win.isFullScreen()))
+  win.webContents.on('did-finish-load', () => { win?.webContents.send('desktop:fullscreen', win.isFullScreen()); if (win?.webContents.getURL().startsWith(server)) setTimeout(prefetch, 4000) })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (new URL(url).origin === server) return { action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 720, parent: win ?? undefined, autoHideMenuBar: true, titleBarStyle: 'default', minimizable: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } } }   // the app's own pop-ups (single sign-on)
     if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url)
@@ -105,8 +157,9 @@ ipcMain.handle('setup:retry', () => { load() })
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus() } })
-  app.whenReady().then(() => {
-    secure(); buildMenu(); createWindow()
+  app.whenReady().then(async () => {
+    if (!app.isPackaged && process.env.KOKO_TEST_NOSW) await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] })   // (testing: prove the saved files work without the service worker)
+    offlineFiles(); secure(); buildMenu(); createWindow()
     nativeTheme.on('updated', () => { if (!isMac && win) win.setTitleBarOverlay(themeBar()) })
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow() })
   })
