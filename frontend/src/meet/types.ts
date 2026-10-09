@@ -26,11 +26,13 @@ export interface ChatMsg { id: string; from: string; name: string; text: string;
 export interface PollView { id: string; q: string; options: string[]; multi: boolean; anonymous: boolean; open: boolean; counts: number[]; total: number; mine: number[]; names?: string[][] }
 export interface Caption { id: string; from: string; name: string; text: string; ts: number }
 export interface Waiting { id: string; name: string; reason: 'approval' | 'host'; guest?: boolean }
-export type RoomSettings = MeetSettings & { locked?: boolean; captions_on?: boolean }
+export type RoomSettings = MeetSettings & { locked?: boolean; captions_on?: boolean; recording_now?: { by: string; since: number; required: boolean } | null }
+export interface Consents { yes: string[]; no: string[]; pending: string[] }
+export type Answer = 'yes' | 'no' | null
 
 export type CallStatus = 'connecting' | 'waiting' | 'connected' | 'reconnecting' | 'closed'
 /** Why a call stopped. */
-export type CallEnd = 'ended' | 'kicked' | 'blocked' | 'denied' | 'left' | 'failed' | 'full' | 'locked' | 'replaced'
+export type CallEnd = 'ended' | 'kicked' | 'blocked' | 'denied' | 'left' | 'failed' | 'full' | 'locked' | 'replaced' | 'declined'
 
 export interface LocalTracks { audio: MediaStreamTrack | null; video: MediaStreamTrack | null; micId?: string; camId?: string }
 export interface Devices { mics: MediaDeviceInfo[]; cams: MediaDeviceInfo[]; speakers: MediaDeviceInfo[]; mic: string; cam: string }
@@ -53,6 +55,14 @@ export interface Call {
   polls(): PollView[]
   waiting(): Waiting[]
   captions(): Caption[]
+  /** Is the meeting being recorded, and was it me who pressed record? */
+  recording(): { by: string; since: number; required: boolean; mine: boolean } | null
+  /** My answer to "may we record you?" (null: not asked or not answered yet). The recorder and the host never need to answer. */
+  consent(): Answer
+  /** What the recorder knows about everyone's answers (managers only). */
+  consents(): Consents | null
+  answer(agree: boolean): void
+  record(on: boolean): Promise<void>
   devices(): Promise<Devices>
   /** Called whenever anything above changes. Returns the unsubscribe function. */
   subscribe(fn: () => void): () => void

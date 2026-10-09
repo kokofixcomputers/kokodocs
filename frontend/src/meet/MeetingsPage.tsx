@@ -5,6 +5,7 @@ import { api, type MeetInfo } from '../api'
 import { Popover } from '../ui/Popover'
 import { askConfirm } from '../ui/Dialogs'
 import { toast } from '../ui/Toast'
+import { Recordings } from './Recordings'
 import { inviteText } from './util'
 import './meet.css'
 
@@ -58,6 +59,7 @@ export function MeetingsPage() {
   const [list, setList] = useState<MeetInfo[] | null>(null)
   const nav = useNavigate()
   const [on, setOn] = useState(true)
+  const [tab, setTab] = useState<'meetings' | 'recordings'>(window.location.hash === '#recordings' ? 'recordings' : 'meetings')
   const load = useCallback(() => { api.meetMine().then(setList).catch(() => setList([])) }, [])
   useEffect(() => { load(); void api.meetConfig().then((c) => setOn(c.enabled)); const t = setInterval(load, 10000); return () => clearInterval(t) }, [load])
   useEffect(() => { document.title = 'Meetings' }, [])
@@ -70,7 +72,12 @@ export function MeetingsPage() {
         <h1>Meetings</h1>
         <button className="btn btn-primary btn-pill" onClick={() => nav('/meetings/new')} disabled={!on}><Plus size={17} />New meeting</button>
       </header>
+      <div className="meet-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'meetings'} className={tab === 'meetings' ? 'on' : ''} onClick={() => { setTab('meetings'); history.replaceState(null, '', '#') }}>Meetings</button>
+        <button role="tab" aria-selected={tab === 'recordings'} className={tab === 'recordings' ? 'on' : ''} onClick={() => { setTab('recordings'); history.replaceState(null, '', '#recordings') }}>Recordings</button>
+      </div>
       <main>
+        {tab === 'recordings' ? <Recordings /> : <>
         {!on && <p className="form-error">Meetings are turned off on this server.</p>}
         {list === null ? <span className="spinner" /> : list.length === 0 ? (
           <div className="meet-empty"><Video size={34} /><h3>No meetings yet</h3><p className="muted">Make a permanent meeting for the people you meet with often: it keeps its link and settings, and you can end it whenever you like.</p>
@@ -80,6 +87,7 @@ export function MeetingsPage() {
           {helping.length > 0 && <section><h2>Co-hosting</h2><div className="grid">{helping.map((m) => <Card key={m.code} m={m} onEdit={() => {}} onChanged={load} />)}</div></section>}
           {once.length > 0 && <section><h2>One-time</h2><div className="grid">{once.map((m) => <Card key={m.code} m={m} onEdit={() => nav(`/meetings/${m.code}`)} onChanged={load} />)}</div></section>}
         </>)}
+        </>}
       </main>
     </div>)
 }

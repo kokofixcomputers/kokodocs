@@ -12,6 +12,7 @@ provider), not through this server, so a modified browser could still send them.
 """
 import asyncio
 import json
+import os
 import secrets
 import time
 from dataclasses import dataclass, field
@@ -29,6 +30,8 @@ HISTORY = 80
 MAX_SIGNAL = 24_000          # a session description is a few KB
 EMOJIS = ["👍", "👏", "❤️", "😂", "😮", "🎉", "🙏", "🔥"]
 MAX_POLLS = 20
+CONSENT_GRACE = float(os.environ.get("KOKO_CONSENT_GRACE", "60"))     # seconds someone may take to answer when everyone must agree to a recording
+RECORDER_GRACE = float(os.environ.get("KOKO_RECORDER_GRACE", "20"))   # seconds the recording browser may be gone before the recording ends
 
 
 @dataclass
@@ -92,6 +95,8 @@ class Room:
     hands: list = field(default_factory=list)       # peer ids, in the order hands went up
     polls: list[Poll] = field(default_factory=list)
     history: list = field(default_factory=list)
+    recording: dict | None = None                   # {id, by, cid, since, required}: the meeting is being recorded
+    consents: dict = field(default_factory=dict)    # cid -> True/False: who agreed to the recording that is running
     started: float = field(default_factory=time.time)
 
     def cap(self) -> int:
@@ -115,8 +120,13 @@ def member(code: str, cid: str) -> dict | None:
         return None
     for p in r.peers.values():
         if p.cid == cid:
-            return {"manager": p.manager}
+            return {"manager": p.manager, "owner": p.owner}
     return None
+
+
+def recording_public(code: str) -> dict | None:
+    r = rooms.get(code)
+    return {"required": bool(r.recording["required"])} if r and r.recording else None
 
 
 # ---------------------------------------------------------------- sending
@@ -138,7 +148,9 @@ def public(room: Room, p: Peer) -> dict:
 
 
 def settings_view(room: Room) -> dict:
-    return {**room.settings, "locked": room.locked, "captions_on": room.captions_on and bool(room.settings.get("captions"))}
+    rec = room.recording
+    return {**room.settings, "locked": room.locked, "captions_on": room.captions_on and bool(room.settings.get("captions")),
+            "recording_now": {"by": rec["by"], "since": int(rec["since"] * 1000), "required": rec["required"]} if rec else None}
 
 
 def waiting_dicts(room: Room) -> list[dict]:
@@ -172,6 +184,61 @@ async def send_hands(room: Room) -> None:
     await broadcast(room, {"t": "hands", "order": room.hands})
 
 
+def implied_consent(room: Room, p: Peer) -> bool:
+    """The person recording, and the host (whose storage it is), don't need to be asked."""
+    return bool(room.recording and (p.cid == room.recording["cid"] or p.owner))
+
+
+def consent_of(room: Room, p: Peer) -> str:
+    if implied_consent(room, p):
+        return "yes"
+    v = room.consents.get(p.cid)
+    return "pending" if v is None else ("yes" if v else "no")
+
+
+async def send_consents(room: Room) -> None:
+    """Tell the managers (the recorder is one) who is in the recording, who said no and who has not answered yet."""
+    groups: dict[str, list[str]] = {"yes": [], "no": [], "pending": []}
+    if room.recording:
+        for p in room.peers.values():
+            groups[consent_of(room, p)].append(p.id)
+    await broadcast(room, {"t": "consents", **groups}, managers_only=True)
+
+
+async def decline_removal(room: Room, p: Peer) -> None:
+    await send(p, {"t": "declined"})
+    await close_peer(p, 4415)
+
+
+async def insist_on_consent(room: Room, p: Peer, delay: float | None = None) -> None:
+    """When everyone must agree, someone who never answers is removed after a minute."""
+    rec = room.recording
+    if not rec or not rec["required"] or implied_consent(room, p) or room.consents.get(p.cid) is not None:
+        return
+
+    async def later():
+        await asyncio.sleep(CONSENT_GRACE if delay is None else delay)
+        if room.recording is rec and p.id in room.peers and room.consents.get(p.cid) is None and not implied_consent(room, p):
+            await decline_removal(room, p)
+    asyncio.create_task(later())
+
+
+async def set_recording(code: str, info: dict | None) -> None:
+    """A recording starts (everyone is asked to agree) or ends."""
+    room = rooms.get(code)
+    if not room:
+        return
+    room.recording = info
+    room.consents.clear()
+    await broadcast(room, {"t": "settings", "settings": settings_view(room), "title": room.title})
+    await send_consents(room)
+    if info:
+        for p in list(room.peers.values()):
+            await insist_on_consent(room, p)
+    elif not room.peers and not room.waiting and rooms.get(code) is room:
+        rooms.pop(code, None)
+
+
 def managers_present(room: Room) -> bool:
     return any(p.manager for p in room.peers.values())
 
@@ -193,7 +260,7 @@ async def admit(room: Room, p: Peer) -> bool:
     room.peers[p.id] = p
     welcome = {"t": "welcome", "me": {"id": p.id, "cid": p.cid, "owner": p.owner, "cohost": p.cohost, "manager": p.manager}, "peers": existing,
                "chat": room.history[-HISTORY:], "settings": settings_view(room), "title": room.title, "spotlight": room.spotlight, "hands": room.hands,
-               "started": int(room.started * 1000), "provider": room.provider, "emojis": EMOJIS,
+               "started": int(room.started * 1000), "provider": room.provider, "emojis": EMOJIS, "consent": room.consents.get(p.cid),
                "polls": [poll_view(x, p) for x in room.polls]}
     if p.manager:
         welcome["waiting"] = waiting_dicts(room)
@@ -201,6 +268,9 @@ async def admit(room: Room, p: Peer) -> bool:
     await broadcast(room, {"t": "joined", "peer": public(room, p)}, exclude=p.id)
     if p.manager:
         await release_host_waiters(room)
+    if room.recording:
+        await send_consents(room)
+        await insist_on_consent(room, p)
     return True
 
 
@@ -226,6 +296,9 @@ async def close_room(code: str, msg: dict) -> None:
     room = rooms.get(code)
     if not room:
         return
+    if room.recording:
+        from . import recordings
+        await recordings.finish(room.recording["id"], tell_room=False)
     everyone = [*room.peers.values(), *room.waiting.values()]
     await asyncio.gather(*(send(p, msg) for p in everyone))
     for p in everyone:
@@ -357,7 +430,17 @@ async def leave(room: Room, me: Peer) -> None:
         await send_hands(room)
     if was_waiting:
         await send_waiting(room)
-    if not room.peers and not room.waiting and rooms.get(room.code) is room:
+    rec = room.recording
+    if present and rec and rec["cid"] == me.cid:
+        async def stop_if_gone():   # a dropped connection that comes back within a moment keeps recording
+            await asyncio.sleep(RECORDER_GRACE)
+            if room.recording is rec and not any(x.cid == rec["cid"] for x in room.peers.values()):
+                from . import recordings
+                await recordings.finish(rec["id"])
+        asyncio.create_task(stop_if_gone())
+    if present and rec:
+        await send_consents(room)
+    if not room.peers and not room.waiting and rooms.get(room.code) is room and not rec:
         rooms.pop(room.code, None)
 
 
@@ -470,6 +553,14 @@ async def handle(room: Room, me: Peer, msg: dict) -> None:
     elif t == "lock" and me.manager:
         room.locked = bool(msg.get("on"))
         await broadcast(room, {"t": "settings", "settings": settings_view(room), "title": room.title})
+
+    elif t == "consent":
+        if room.recording and not implied_consent(room, me):
+            agree = bool(msg.get("agree"))
+            room.consents[me.cid] = agree
+            if not agree and room.recording["required"]:
+                await decline_removal(room, me)
+            await send_consents(room)
 
     elif t == "captions" and me.manager and st.get("captions"):
         room.captions_on = bool(msg.get("on"))

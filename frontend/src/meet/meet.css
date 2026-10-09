@@ -167,3 +167,18 @@
   .ms-top { padding: 10px 14px; } .ms-body { grid-template-columns: 1fr; gap: 14px; padding: 14px 14px 80px; }
   .ms-nav { position: static; display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; } .ms-nav button { white-space: nowrap; padding: 8px 14px; background: var(--accent-soft); } .ms-nav button span { flex: none; }
 }
+
+/* recording */
+.meet-chip.rec { background: rgba(217, 58, 64, .22); color: #ffb4b7; border: 0; font: inherit; font-size: 12px; } button.meet-chip.rec { cursor: pointer; } .meet-chip.rec i { width: 8px; height: 8px; border-radius: 50%; background: #ff4d55; animation: meet-blink 1.4s infinite; }
+@keyframes meet-blink { 50% { opacity: .25; } }
+.meet-ctl.recording { background: #d93a40; } .meet-ctl.recording:hover { background: #e24b51; }
+.meet-hint.rec { color: #d93a40; font-weight: 600; }
+.meet-consent { gap: 12px; } .meet-consent p { margin: 0; } .meet-consent .rec-line { display: flex; align-items: center; gap: 8px; color: #d93a40; font-weight: 600; } .meet-consent .check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.meet-consent .modal-actions { justify-content: flex-end; margin-top: 6px; }
+
+.meet-tabs { display: flex; gap: 6px; max-width: 980px; margin: 0 auto; width: 100%; padding: 16px 28px 0; } .meet-tabs button { border: 0; background: none; padding: 8px 16px; border-radius: 999px; font-weight: 600; color: var(--muted); } .meet-tabs button.on { background: var(--accent-soft); color: var(--ink); }
+.rec-list { display: grid; gap: 8px; } .rec-list > p { margin: 0 0 4px; }
+.rec-row { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 16px; flex-wrap: wrap; }
+.rec-row .ic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); display: grid; place-items: center; flex: none; } .rec-row .txt { flex: 1; min-width: 180px; display: grid; } .rec-row .txt small { color: var(--muted); }
+.rec-player { padding: 0 20px 22px; display: grid; place-items: center; min-height: 200px; } .rec-player video { width: 100%; max-height: 70vh; border-radius: 14px; background: #000; }
+@media (max-width: 760px) { .meet-tabs { padding: 12px 16px 0; } }

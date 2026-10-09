@@ -196,6 +196,7 @@ async def delete_account(b: DeleteAccount, user=Depends(must_user), db=Depends(g
     if user["email"].lower() in access.admin_emails():
         raise HTTPException(400, "This is a built-in admin account and can't be deleted here")
     quota.drop_uploads(db, "owner_id = ?", (user["id"],))
+    quota.drop_recordings(db, "owner_id = ?", (user["id"],))
     db.execute("DELETE FROM users WHERE id = ?", (user["id"],))   # documents, folders, versions, comments, settings cascade
     db.commit()
     await refresh_all()

@@ -23,6 +23,7 @@ from .zk import router as zk_router
 from .ocr import router as ocr_router
 from .meet import router as meet_router
 from .meetroom import ws_router as meet_ws_router
+from .recordings import router as recordings_router
 from .collab import router as collab_router
 from .library import router as library_router
 from .versions import router as versions_router
@@ -85,6 +86,7 @@ app.include_router(zk_router)
 app.include_router(ocr_router)
 app.include_router(meet_router)
 app.include_router(meet_ws_router)
+app.include_router(recordings_router)
 app.include_router(collab_router)
 
 # Serve the built React app from this same process (run `npm run build` in ../frontend).

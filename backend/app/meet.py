@@ -243,6 +243,8 @@ DEFAULTS = {
     "unmute": True,           # people may unmute themselves
     "captions": True,         # live captions can be switched on (when the server can transcribe speech)
     "max": 0,                 # most people at once; 0 = as many as the provider allows
+    "recording": "host",      # who may record the meeting: off | host | managers
+    "record_consent": False,  # everyone must agree to being recorded (those who don't are removed); otherwise people can decline and are left out of the recording
 }
 
 
@@ -258,6 +260,8 @@ class SettingsIn(BaseModel):
     unmute: bool | None = None
     captions: bool | None = None
     max: int | None = Field(None, ge=0, le=RTK_MAX)
+    recording: Literal["off", "host", "managers"] | None = None
+    record_consent: bool | None = None
 
 
 def load_settings(m) -> dict:
@@ -332,7 +336,8 @@ def public_info(db, m, user) -> dict:
     s = load_settings(m)
     return {"code": m["code"], "title": m["title"], "host_name": host["name"] if host else "", "is_host": bool(user and user["id"] == m["host_id"]),
             "ended": closed(m), "permanent": bool(m["permanent"]), "guests": s["guests"], "has_passcode": bool(m["passcode_enc"]), "approval": s["approval"],
-            "is_cohost": bool(user and user["id"] in cohost_ids(m)), "provider": m["provider"], "created_at": m["created_at"], "live": _room().live_count(m["code"])}
+            "is_cohost": bool(user and user["id"] in cohost_ids(m)), "provider": m["provider"], "created_at": m["created_at"], "live": _room().live_count(m["code"]),
+            "recording": _room().recording_public(m["code"])}
 
 
 def full_info(db, m, user) -> dict:

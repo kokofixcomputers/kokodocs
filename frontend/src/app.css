@@ -455,7 +455,7 @@ a.brand { color: var(--ink); text-decoration: none; }
 .st-card:empty { display: none; }
 
 /* storage breakdown */
-.sg-text { --sg: #6366f1; } .sg-images { --sg: #0d9488; } .sg-files { --sg: #d97706; } .sg-versions { --sg: #ec4899; } .sg-free { --sg: var(--accent-soft-2); }
+.sg-text { --sg: #6366f1; } .sg-images { --sg: #0d9488; } .sg-files { --sg: #d97706; } .sg-versions { --sg: #ec4899; } .sg-recordings { --sg: #ef4444; } .sg-free { --sg: var(--accent-soft-2); }
 :root[data-theme='dark'] .sg-text { --sg: #818cf8; } :root[data-theme='dark'] .sg-images { --sg: #2dd4bf; } :root[data-theme='dark'] .sg-files { --sg: #fbbf24; } :root[data-theme='dark'] .sg-versions { --sg: #f472b6; }
 .sg-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--accent-soft); gap: 1px; } .sg-bar.tall { height: 14px; background: transparent; }
 .sg-bar i { display: block; height: 100%; background: var(--sg); min-width: 2px; }

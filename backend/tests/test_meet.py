@@ -1,5 +1,5 @@
 """Meetings: rooms, guests, passcodes, the waiting room, co-hosts, reactions, polls, permanent meetings, and both providers (RealtimeKit and TURN against a mock
-Cloudflare). Needs the server on :8000 with a fresh data dir, started with KOKO_CF_API=http://127.0.0.1:8767/client/v4 KOKO_TURN_API=http://127.0.0.1:8767/v1/turn/keys"""
+Cloudflare). Needs the server on :8000 with a fresh data dir, started with KOKO_CONSENT_GRACE=2 KOKO_RECORDER_GRACE=1 KOKO_CF_API=http://127.0.0.1:8767/client/v4 KOKO_TURN_API=http://127.0.0.1:8767/v1/turn/keys"""
 import json, os, re, sys, threading, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from websockets.sync.client import connect as wsconnect
@@ -324,6 +324,95 @@ ok('deleting removes it for good and closes the room', s == 200 and call('GET', 
 for k in range(MAXP := 24): call('POST', '/api/meet', {'permanent': True}, C)
 s, r = call('POST', '/api/meet', {'permanent': True}, C); s2_, r2 = call('POST', '/api/meet', {'permanent': True}, C)
 ok('there is a limit on permanent meetings per person', s2_ == 409 or s == 409, s, s2_)
+
+# ---- recording
+def recording_total(tok): return call('GET', '/api/me/storage', None, tok)[1]
+s, rm = call('POST', '/api/meet', {'title': 'Recorded', 'permanent': True}, A); rcode = rm['code']
+ok('recording is allowed for the host only, by default', rm['settings']['recording'] == 'host' and rm['settings']['record_consent'] is False, rm['settings'])
+rh, jrh, frh = welcomed(rcode, A); rg, jrg, frg = welcomed(rcode, None, 'Gail')
+s, jrb = join(rcode, U); rb = ws(rcode, jrb['jt']); frb = rx(rb, 'welcome')
+tx(rh, t='cohost', to=frb['me']['id'], on=True); rxp(rb, 'role', lambda m: m['cohost'])
+s, r = call('POST', f'/api/meet/{rcode}/recordings', {'jt': jrg['jt']}); ok('a guest cannot record', s == 403, s, r)
+s, r = call('POST', f'/api/meet/{rcode}/recordings', {'jt': jrb['jt']}); ok('and neither can a co-host when only the host may', s == 403 and 'Only the host' in json.dumps(r), s, r)
+s, r = call('POST', f'/api/meet/{rcode}/recordings', {'jt': jrh['jt'], 'mime': 'application/pdf'}); ok('only video formats are accepted', s == 422, s)
+drain(rg); drain(rh)
+s, rec = call('POST', f'/api/meet/{rcode}/recordings', {'jt': jrh['jt'], 'mime': 'video/webm;codecs=vp8,opus'}); rid = rec['id']
+ok('the host starts a recording', s == 200 and rid and rec['required'] is False, s, rec)
+st = rxp(rg, 'settings', lambda m: m['settings'].get('recording_now'), 2)
+ok('everyone is told, with who started it and whether agreeing is required', st and st['settings']['recording_now']['by'] == 'Koko' and st['settings']['recording_now']['required'] is False, st)
+ok('a second recording is refused', call('POST', f'/api/meet/{rcode}/recordings', {'jt': jrh['jt']})[0] == 409)
+ok('the public page says it is being recorded', call('GET', f'/api/meet/{rcode}')[1]['recording'] == {'required': False})
+def put_chunk(rid_, seq, data, jt, code_=None):
+    import urllib.request, urllib.error
+    q = urllib.request.Request(f'{B}/api/meet/{code_ or rcode}/recordings/{rid_}/chunk?seq={seq}', data, {'x-meet-ticket': jt, 'content-type': 'application/octet-stream'}, method='PUT')
+    try: x = urllib.request.urlopen(q); return x.status, json.loads(x.read())
+    except urllib.error.HTTPError as e:
+        try: return e.code, json.loads(e.read())
+        except Exception: return e.code, {}
+c0 = b'\x1a\x45\xdf\xa3' + b'A' * 2000; c1 = b'B' * 3000
+ok('pieces are stored in order', put_chunk(rid, 0, c0, jrh['jt'])[0] == 200 and put_chunk(rid, 1, c1, jrh['jt'])[1]['size'] == 5004)
+ok('a retried piece is not stored twice', put_chunk(rid, 1, c1, jrh['jt'])[1]['size'] == 5004)
+ok('a piece that skips ahead is refused', put_chunk(rid, 5, c1, jrh['jt'])[0] == 409)
+ok("someone else's ticket cannot add to it", put_chunk(rid, 2, c1, jrg['jt'])[0] == 403)
+sto = recording_total(A)
+ok("it counts against the host's storage", sto['recordings'] == 5004 and sto['total'] >= 5004, sto)
+sl = call('GET', '/api/me/storage/items', None, A)[1]; ok('and shows in the by-file list', sl['recordings'] == 5004 and sl['recording_count'] == 1, sl)
+# consent: optional mode
+tx(rg, t='consent', agree=False); cs = rxp(rh, 'consents', lambda m: rg and len(m['no']) == 1, 2)
+ok('when agreeing is optional, saying no only leaves you out of the recording (not removed)', cs is not None and rx(rg, 'declined', 0.5) is None, cs)
+tx(rg, t='consent', agree=True); cs = rxp(rh, 'consents', lambda m: not m['no'] and len(m['yes']) >= 2, 2)
+ok('and you can change your mind', cs is not None, cs)
+ok("the recorder and the host count as agreed, nobody has to ask", frh['me']['owner'])
+tx(rg, t='consent', agree=False); rxp(rh, 'consents', lambda m: m['no'])
+# stop
+s, _ = call('POST', f'/api/meet/{rcode}/recordings/{rid}/stop', {'jt': jrh['jt'], 'duration_ms': 7500})
+ok('stopping ends it for everyone', s == 200 and rxp(rg, 'settings', lambda m: m['settings'].get('recording_now') is None, 2) is not None)
+ok('and further pieces are refused', put_chunk(rid, 2, c1, jrh['jt'])[0] == 410)
+items = call('GET', '/api/recordings', None, A)[1]
+ok('it is listed for the host with its size and length', items['items'][0]['id'] == rid and items['items'][0]['size'] == 5004 and items['items'][0]['duration_ms'] == 7500 and items['items'][0]['status'] == 'done' and items['items'][0]['code'] == rcode, items)
+ok("others do not see it", call('GET', '/api/recordings', None, U)[1]['items'] == [] and call('GET', f'/api/recordings/{rid}', None, U)[0] == 403)
+info_ = call('GET', f'/api/recordings/{rid}', None, A)[1]
+import urllib.request as ur
+body = ur.urlopen(B + info_['url']).read()
+ok('it is played and downloaded through a signed address', body == c0 + c1)
+rq = ur.Request(B + info_['url'], headers={'Range': 'bytes=0-9'}); rr = ur.urlopen(rq)
+ok('with seeking (ranges)', rr.status == 206 and len(rr.read()) == 10)
+ok('the download has a proper name', 'attachment' in ur.urlopen(B + info_['url'] + '&download=1').headers['content-disposition'] and 'Recorded' in ur.urlopen(B + info_['url'] + '&download=1').headers['content-disposition'])
+try: ur.urlopen(B + info_['url'][:-6] + 'abcdef'); forged = False
+except Exception as e: forged = getattr(e, 'code', 0) == 403
+ok('a forged address is refused', forged)
+s, _ = call('DELETE', f'/api/recordings/{rid}', None, U); ok("only the owner can delete", s == 403)
+s, _ = call('DELETE', f'/api/recordings/{rid}', None, A); ok('deleting frees the space', s == 200 and recording_total(A)['recordings'] == 0 and call('GET', '/api/recordings', None, A)[1]['items'] == [])
+# consent required: saying no removes you
+call('PUT', f'/api/meet/{rcode}', {'settings': {'record_consent': True, 'recording': 'managers'}}, A)
+rxp(rg, 'settings', lambda m: m['settings'].get('record_consent'), 2)
+s, rec2 = call('POST', f'/api/meet/{rcode}/recordings', {'jt': jrb['jt']}); ok('with "managers", a co-host can record too', s == 200 and rec2['required'] is True, s, rec2)
+rid2 = rec2['id']
+tx(rg, t='consent', agree=False)
+ok('when everyone must agree, saying no removes you from the meeting', (rxp(rg, 'declined', lambda m: True, 2) or {}).get('t') == 'declined' and closed_with(rg) == 4415)
+rxp(rh, 'consents', lambda m: True, 1)
+# the host never has to answer, and the co-host recorder neither; an extra person who ignores the question is removed after the grace
+s, jlate = join(rcode, None, 'Late'); wl_ = ws(rcode, jlate['jt']); rx(wl_, 'welcome')
+ok('someone who ignores the question is removed after a short time', rxp(wl_, 'declined', lambda m: True, 5) is not None)
+put_chunk(rid2, 0, b'C' * 100, jrb['jt']); 
+rb.close(); time.sleep(2.5)
+ok('if the recording browser disappears the recording ends and keeps what arrived', call('GET', '/api/recordings', None, A)[1]['items'][0]['status'] == 'done' and call('GET', '/api/recordings', None, A)[1]['items'][0]['size'] == 100)
+call('DELETE', f"/api/recordings/{rid2}", None, A)
+call('PUT', f'/api/meet/{rcode}', {'settings': {'recording': 'off'}}, A)
+ok('recording can be turned off for the meeting', call('POST', f'/api/meet/{rcode}/recordings', {'jt': jrh['jt']})[0] == 403)
+call('PUT', f'/api/meet/{rcode}', {'settings': {'recording': 'host', 'record_consent': False}}, A)
+# out of storage
+s, bm = call('POST', '/api/meet', {'title': 'Bobs'}, U); bcode = bm['code']
+_, bu = call('GET', '/api/auth/me', None, U)
+call('PATCH', f"/api/admin/users/{bu['id']}", {'quota_mb': 1}, A)
+bh, jbh, _ = welcomed(bcode, U); s, brec = call('POST', f'/api/meet/{bcode}/recordings', {'jt': jbh['jt']})
+ok('a host with no storage left cannot start (checked up front only when already full)', s == 200, s, brec)
+s, r = put_chunk(brec['id'], 0, b'D' * (1024 * 1024 + 500), jbh['jt'], bcode)
+ok('when the host runs out of space the piece is refused, the (empty) recording is discarded and everyone is told it ended', s == 413 and call('GET', '/api/recordings', None, U)[1]['items'] == [] and rxp(bh, 'settings', lambda m: m['settings'].get('recording_now') is None, 2) is not None, s, r)
+s, brec2 = call('POST', f'/api/meet/{bcode}/recordings', {'jt': jbh['jt']}); put_chunk(brec2['id'], 0, b'E' * 600_000, jbh['jt'], bcode)
+put_chunk(brec2['id'], 1, b'F' * 600_000, jbh['jt'], bcode)
+ok('and when some of it had arrived, that part is kept', call('GET', '/api/recordings', None, U)[1]['items'][0]['size'] == 600_000 and call('GET', '/api/recordings', None, U)[1]['items'][0]['status'] == 'done')
+call('PATCH', f"/api/admin/users/{bu['id']}", {'clear_quota': True}, A)
 
 # ---- end for everyone (one-off)
 ok('only the host can end it', call('POST', f'/api/meet/{code}/end', {}, U)[0] == 403)

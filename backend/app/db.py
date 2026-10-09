@@ -6,6 +6,7 @@ from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("KOKO_DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
 UPLOAD_DIR = DATA_DIR / "uploads"
+RECORDINGS_DIR = DATA_DIR / "recordings"   # meeting recordings, counted against the host's storage
 FORM_FILES_DIR = DATA_DIR / "form-files"   # files people attach to form responses (never served inline)
 DB_PATH = DATA_DIR / "kokodocs.sqlite3"
 
@@ -193,6 +194,7 @@ def init_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     FORM_FILES_DIR.mkdir(parents=True, exist_ok=True)
+    RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     with connect() as db:
         db.executescript(SCHEMA)
         migrate(db)
@@ -210,6 +212,12 @@ def migrate(db: sqlite3.Connection) -> None:
         created_at REAL NOT NULL, ended_at REAL, permanent INTEGER NOT NULL DEFAULT 0, settings TEXT NOT NULL DEFAULT '{}',
         passcode_enc TEXT NOT NULL DEFAULT '', last_used REAL, cohosts TEXT NOT NULL DEFAULT '[]')""")
     db.execute("CREATE INDEX IF NOT EXISTS idx_meetings_host ON meetings(host_id, created_at)")
+    db.execute("""CREATE TABLE IF NOT EXISTS recordings (
+        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, meeting_code TEXT NOT NULL, title TEXT NOT NULL DEFAULT '',
+        started_by TEXT NOT NULL DEFAULT '', cid TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'recording', mime TEXT NOT NULL DEFAULT 'video/webm',
+        size INTEGER NOT NULL DEFAULT 0, chunks INTEGER NOT NULL DEFAULT 0, duration_ms INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL, updated_at REAL NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_recordings_owner ON recordings(owner_id, created_at)")
+    db.execute("UPDATE recordings SET status = 'done' WHERE status = 'recording'")   # the server stopped while one was running: what arrived is kept
     have = {r["name"] for r in db.execute("PRAGMA table_info(meetings)")}
     for col, ddl in (("permanent", "INTEGER NOT NULL DEFAULT 0"), ("settings", "TEXT NOT NULL DEFAULT '{}'"), ("passcode_enc", "TEXT NOT NULL DEFAULT ''"), ("last_used", "REAL"), ("cohosts", "TEXT NOT NULL DEFAULT '[]'")):
         if col not in have:

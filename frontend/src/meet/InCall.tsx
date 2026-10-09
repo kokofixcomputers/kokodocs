@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Captions, UserRound, Check, Copy, Hand, LayoutGrid, Lock, LockOpen, Maximize, MessageSquare, Mic, MicOff, MonitorUp, MonitorX, MoreVertical, PhoneOff, Settings2, Smile, SquareUser, Users, Video, VideoOff, Volume2, X, Keyboard, Download, EyeOff, Info } from 'lucide-react'
+import { BarChart3, Captions, Circle, UserRound, Check, Copy, Hand, LayoutGrid, Lock, LockOpen, Maximize, MessageSquare, Mic, MicOff, MonitorUp, MonitorX, MoreVertical, PhoneOff, Settings2, Smile, SquareUser, Users, Video, VideoOff, Volume2, X, Keyboard, Download, EyeOff, Info } from 'lucide-react'
 import { api, type MeetInfo, type MeetSettings } from '../api'
 import { Modal } from '../ui/Modal'
 import { Popover } from '../ui/Popover'
 import { askConfirm } from '../ui/Dialogs'
 import { toast } from '../ui/Toast'
+import { ConsentModal } from './Consent'
 import { DevicePicker } from './Devices'
 import { ChatPanel, PeoplePanel, PollsPanel } from './Panels'
 import { SettingsForm } from './SettingsForm'
@@ -66,7 +67,10 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
   const [layout, setLayout] = useState<'gallery' | 'speaker'>('gallery')
   const [hideSelf, setHideSelf] = useState(false)
   const [showCaps, setShowCaps] = useState(true)
-  const [modal, setModal] = useState<null | 'settings' | 'keys' | 'devices'>(null)
+  const [modal, setModal] = useState<null | 'settings' | 'keys' | 'devices' | 'record'>(null)
+  const [reask, setReask] = useState(false)
+  const [recBusy, setRecBusy] = useState(false)
+  const [needAll, setNeedAll] = useState(false)
   const [copied, setCopied] = useState(false)
   const seen = useRef({ chat: 0, polls: 0, waiting: 0 })
   const [unread, setUnread] = useState({ chat: 0, polls: 0 })
@@ -75,6 +79,11 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
   const self = peers[0]
   const msgs = call.chat(), polls = call.polls(), waiting = call.waiting()
   const code = call.code
+  const rec = call.recording()
+  const mode = s.recording
+  const canRecord = mode === 'managers' ? me.manager : mode === 'host' ? me.owner : false
+  const inCharge = !!rec?.mine || me.owner   // the recorder and the host are never asked to agree
+  const mustAnswer = !!rec && !inCharge && call.consent() === null
 
   // unread counters and the waiting-room alert
   useEffect(() => {
@@ -135,6 +144,14 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
 
   const recent = useMemo(() => call.captions().filter((c) => Date.now() - c.ts < 7000).slice(-3), [call.captions().length, Math.floor(Date.now() / 1000)]) // eslint-disable-line react-hooks/exhaustive-deps
   const capsOn = !!s.captions_on
+  const startRecording = async () => {
+    setRecBusy(true)
+    try {
+      if (me.owner && needAll !== !!s.record_consent) await api.meetEdit(code, { settings: { record_consent: needAll } })
+      await call.record(true)
+      setModal(null)
+    } catch (e) { toast((e as Error).message) } finally { setRecBusy(false) }
+  }
   const transcript = () => {
     const t0 = call.started()
     download(`${call.title() || 'meeting'} transcript.txt`, call.captions().map((c) => `[${clock(c.ts - t0)}] ${c.name}: ${c.text}`).join('\n'))
@@ -150,6 +167,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
         <button onClick={go(() => setHideSelf(!hideSelf))}><EyeOff size={17} />{hideSelf ? 'Show my video' : 'Hide my video from me'}</button>
         <button onClick={go(fullscreen)}><Maximize size={17} />Full screen</button>
         <button onClick={go(() => setModal('devices'))}><Volume2 size={17} />Microphone, camera and speaker</button>
+        {canRecord && (rec ? (rec.mine ? <button onClick={go(() => void call.record(false))}><Circle size={17} />Stop recording</button> : null) : <button onClick={go(() => { setNeedAll(!!s.record_consent); setModal('record') })}><Circle size={17} />Record the meeting</button>)}
         {s.captions && captionsAvailable && (<>
           <div className="menu-sep" />
           {me.manager && <button onClick={go(() => call.captionsOn(!capsOn))}><Captions size={17} />{capsOn ? 'Stop live captions' : 'Start live captions for everyone'}</button>}
@@ -178,6 +196,9 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
         <span className="meet-chip" title="How long the meeting has run">{clock(Date.now() - call.started())}</span>
         {s.locked && <span className="meet-chip warn"><Lock size={13} />Locked</span>}
         {capsOn && <span className="meet-chip"><Captions size={13} />Captions</span>}
+        {rec && (inCharge
+          ? <span className="meet-chip rec" title={rec.mine ? 'You are recording this meeting' : `${rec.by} is recording this meeting`}><i />Recording {clock(Date.now() - rec.since)}</span>
+          : <button className="meet-chip rec" onClick={() => setReask(true)} title="Click to change your answer"><i />Recording · {call.consent() === 'yes' ? "you're in it" : call.consent() === 'no' ? "you're not in it" : 'waiting for your answer'}</button>)}
         <span className="meet-chip" title="Audio and video aren't end-to-end encrypted: the call service can carry them."><LockOpen size={13} />Not encrypted</span>
         {status === 'reconnecting' && <span className="meet-chip warn"><span className="spinner sm" />Reconnecting…</span>}
       </header>
@@ -215,6 +236,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
             {(close) => <div className="meet-emojis">{call.emojis().map((e) => <button key={e} onClick={() => { call.react(e); close() }} aria-label={`React ${e}`}>{e}</button>)}</div>}
           </Popover>)}
         <button className={`meet-ctl meet-hide-m ${self?.hand ? 'on' : ''}`} onClick={toggleHand} aria-label={self?.hand ? 'Lower your hand' : 'Raise your hand'} title="Raise or lower your hand (H)"><Hand size={20} /></button>
+        {canRecord && <button className={`meet-ctl meet-hide-m ${rec?.mine ? 'recording' : ''}`} disabled={!!rec && !rec.mine} onClick={() => (rec?.mine ? void call.record(false) : (setNeedAll(!!s.record_consent), setModal('record')))} aria-label={rec?.mine ? 'Stop recording' : 'Record the meeting'} title={rec?.mine ? 'Stop recording' : rec ? `${rec.by} is recording` : 'Record the meeting'}><Circle size={18} fill={rec?.mine ? 'currentColor' : 'none'} /></button>}
         <button className={`meet-ctl ${panel === 'chat' ? 'on' : ''}`} onClick={() => open('chat')} aria-label="Chat" title="Chat (C)"><MessageSquare size={20} />{unread.chat > 0 && panel !== 'chat' && <i className="meet-dot">{unread.chat > 9 ? '9+' : unread.chat}</i>}</button>
         <button className={`meet-ctl ${panel === 'people' ? 'on' : ''}`} onClick={() => open('people')} aria-label="People" title="People (P)"><Users size={20} />{waitingBadge > 0 && <i className="meet-dot">{waitingBadge}</i>}</button>
         <button className={`meet-ctl meet-hide-m ${panel === 'polls' ? 'on' : ''}`} onClick={() => open('polls')} aria-label="Polls" title="Polls"><BarChart3 size={20} />{unread.polls > 0 && panel !== 'polls' && <i className="meet-dot">{unread.polls}</i>}</button>
@@ -232,6 +254,16 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
 
       {modal === 'settings' && <MeetingSettings code={code} call={call} onClose={() => setModal(null)} />}
       {modal === 'keys' && <Shortcuts onClose={() => setModal(null)} />}
+      {modal === 'record' && (
+        <Modal title="Record this meeting?" onClose={() => setModal(null)} width={460}>
+          <div className="share-body meet-consent">
+            <p>Your browser records the call (everyone's video and voice, or the spotlighted person, or a shared screen) and uploads it as it goes. Keep this tab open while recording. It is saved to <b>{me.owner ? 'your' : `${info.host_name}'s`} storage</b> and counts against it.</p>
+            <p>Everyone is told and asked to agree. People who don't agree are left out of the recording.</p>
+            <label className="check"><input type="checkbox" checked={needAll} disabled={!me.owner} onChange={(e) => setNeedAll(e.target.checked)} />Remove people who don't agree{!me.owner && ' (only the host can change this)'}</label>
+            <div className="modal-actions"><button className="btn btn-pill btn-ghost" onClick={() => setModal(null)}>Cancel</button><button className="btn btn-pill btn-primary" disabled={recBusy} onClick={() => void startRecording()}>{recBusy ? <span className="spinner sm" /> : <><Circle size={14} fill="currentColor" />Start recording</>}</button></div>
+          </div>
+        </Modal>)}
+      {rec && (mustAnswer || reask) && <ConsentModal by={rec.by} required={rec.required} again={reask && !mustAnswer} onAnswer={(a) => { call.answer(a); setReask(false) }} />}
       {modal === 'devices' && (
         <Modal title="Microphone, camera and speaker" onClose={() => setModal(null)} width={440}>
           <div className="share-body"><DevicePicker load={() => call.devices()} onMic={(id) => void call.setDevice('mic', id)} onCam={(id) => void call.setDevice('cam', id)} /></div>

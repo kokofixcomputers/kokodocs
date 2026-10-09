@@ -16,9 +16,9 @@ export interface SsoProvider { id: string; preset: string; name: string; enabled
 export interface SsoAdmin { providers: SsoProvider[]; public_url: string; presets: { id: string; name: string; hint: string }[] }
 export interface AdminSettings { stt: SttAdmin; ai: AiAdmin; signup_enabled: boolean; public_url: string; default_quota_mb: number; smtp_host: string; smtp_port: number; smtp_security: 'starttls' | 'ssl' | 'none'; smtp_user: string; smtp_password_set: boolean; smtp_from: string; email_active: boolean }
 export type LoginResult = { token: string; user: User } | { mfa_required: true; mfa_token: string }
-export interface Storage { used: number; limit: number; documents: number; versions: number; images: number; files?: number }
+export interface Storage { used: number; limit: number; documents: number; versions: number; images: number; files?: number; recordings?: number }
 export interface StorageItem { id: string; title: string; kind: DocKind; trashed: boolean; text: number; versions: number; images: number; files: number; total: number }
-export interface StorageItems { items: StorageItem[]; unattached_images: number }
+export interface StorageItems { items: StorageItem[]; unattached_images: number; recordings?: number; recording_count?: number }
 export interface AdminStats { users: number; documents: number; spreadsheets: number; trashed: number; comments: number; versions: number; upload_bytes: number }
 /** May the assistant read this person's other files: not at all, only after asking each time, or freely. */
 export type AiFilesMode = 'off' | 'ask' | 'allow'
@@ -70,13 +70,16 @@ export interface FormResponse { id: string; created_at: number; name: string | n
 export interface MeetSettings {
   approval: boolean; host_first: boolean; guests: boolean; mute_on_entry: boolean; cam_off_on_entry: boolean
   chat: 'all' | 'host' | 'off'; share: 'all' | 'host'; reactions: boolean; unmute: boolean; captions: boolean; max: number
+  recording: 'off' | 'host' | 'managers'; record_consent: boolean
 }
 export interface MeetInfo {
   code: string; title: string; host_name: string; is_host: boolean; ended: boolean; permanent: boolean; guests: boolean; has_passcode: boolean; approval: boolean
   provider: string; created_at: number; live: number; is_cohost?: boolean; signed_in?: boolean; can_join?: boolean
   settings?: MeetSettings; passcode?: string   // only the host sees these (a co-host sees the passcode)
   cohosts?: { id: string; name: string; email: string }[]; role?: 'host' | 'cohost'
+  recording?: { required: boolean } | null   // the meeting is being recorded right now
 }
+export interface RecordingItem { id: string; title: string; code: string; by: string; status: 'recording' | 'done'; mime: string; size: number; duration_ms: number; created_at: number }
 export interface MeetTicket { jt: string; cid: string; name: string; host: boolean; title: string; provider: 'mesh' | 'realtimekit'; permanent: boolean }
 export interface MeetMedia { provider: 'mesh' | 'realtimekit'; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
 export interface MeetCreate { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
@@ -341,6 +344,9 @@ export const api = {
   meetDelete: (code: string) => request<{ ok: true }>(`/api/meet/${encodeURIComponent(code)}`, { method: 'DELETE' }),
   meetJoin: (code: string, name: string, passcode = '') => request<MeetTicket>(`/api/meet/${encodeURIComponent(code)}/join`, { method: 'POST', ...json({ name, passcode }) }),
   meetMedia: (code: string, jt: string) => request<MeetMedia>(`/api/meet/${encodeURIComponent(code)}/media`, { method: 'POST', ...json({ jt }) }),
+  recordings: () => request<{ items: RecordingItem[]; total: number }>('/api/recordings'),
+  recording: (id: string) => request<RecordingItem & { url: string }>(`/api/recordings/${id}`),
+  deleteRecording: (id: string) => request<{ ok: true }>(`/api/recordings/${id}`, { method: 'DELETE' }),
   meetEnd: (code: string) => request<{ ok: true; permanent: boolean }>(`/api/meet/${encodeURIComponent(code)}/end`, { method: 'POST' }),
   meetCaption: (code: string, jt: string, wav: Blob) => { const fd = new FormData(); fd.append('jt', jt); fd.append('file', wav, 'speech.wav'); return request<{ text: string }>(`/api/meet/${encodeURIComponent(code)}/caption`, { method: 'POST', body: fd }) },
   adminMeet: () => request<MeetAdmin>('/api/admin/meet'),

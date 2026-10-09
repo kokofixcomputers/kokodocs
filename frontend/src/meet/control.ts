@@ -1,5 +1,5 @@
 import type { MeetTicket } from '../api'
-import { Emitter, type Caption, type CallEnd, type CallStatus, type ChatMsg, type PollView, type RoomSettings, type Waiting } from './types'
+import { Emitter, type Answer, type Caption, type CallEnd, type CallStatus, type ChatMsg, type Consents, type PollView, type RoomSettings, type Waiting } from './types'
 
 export interface CPeer { id: string; cid: string; name: string; host: boolean; cohost: boolean; guest?: boolean; audio: boolean; video: boolean; screen: boolean }
 export interface Me { id: string; cid: string; owner: boolean; cohost: boolean; manager: boolean }
@@ -26,6 +26,8 @@ export class Control extends Emitter {
   polls: PollView[] = []
   waiting: Waiting[] = []
   captions: Caption[] = []
+  consents: Consents | null = null
+  myConsent: Answer = null
   emojis: string[] = []
   private ws: WebSocket | null = null
   private retries = 0
@@ -67,7 +69,7 @@ export class Control extends Emitter {
     ws.onclose = (e) => {
       if (ws !== this.ws || this.done) return
       if (this.ping) clearInterval(this.ping)
-      const why: Record<number, CallEnd> = { 4410: 'ended', 4411: 'kicked', 4412: this.end ?? 'denied', 4413: 'locked', 4409: 'full', 4414: 'replaced', 4403: 'failed' }
+      const why: Record<number, CallEnd> = { 4410: 'ended', 4411: 'kicked', 4412: this.end ?? 'denied', 4413: 'locked', 4415: 'declined', 4409: 'full', 4414: 'replaced', 4403: 'failed' }
       if (why[e.code]) return this.finish(why[e.code])
       this.status = 'reconnecting'; this.peers.clear(); this.changed()
       if (this.retries >= RETRY.length) return this.finish('failed')
@@ -87,6 +89,7 @@ export class Control extends Emitter {
         this.welcomePeers = [...this.peers.keys()]
         this.settings = m.settings; this.title = m.title; this.started = m.started; this.spotlight = m.spotlight; this.hands = m.hands; this.emojis = m.emojis
         this.polls = m.polls; this.waiting = m.waiting ?? []
+        this.myConsent = m.consent === true ? 'yes' : m.consent === false ? 'no' : null
         if (!this.chat.length) this.chat = (m.chat as any[]).map(this.toChat)
         this.changed(); this.welcomeFns.forEach((f) => f()); break
       }
@@ -97,7 +100,14 @@ export class Control extends Emitter {
       case 'chat': { const c = this.toChat(m); this.chat = [...this.chat, c].slice(-300); this.changed(); break }
       case 'react': this.reactFns.forEach((f) => f(m.from, m.emoji)); break
       case 'hands': this.hands = m.order; this.changed(); break
-      case 'settings': this.settings = m.settings; if (m.title) this.title = m.title; this.changed(); break
+      case 'settings': {
+        const was = this.settings.recording_now?.since
+        this.settings = m.settings; if (m.title) this.title = m.title
+        if (was !== this.settings.recording_now?.since) { this.myConsent = null; if (!this.settings.recording_now) this.consents = null }   // a new recording asks everyone again
+        this.changed(); break
+      }
+      case 'consents': this.consents = { yes: m.yes, no: m.no, pending: m.pending }; this.changed(); break
+      case 'declined': this.finish('declined'); break
       case 'spotlight': this.spotlight = m.id; this.changed(); break
       case 'waiting-list': this.waiting = m.list; this.changed(); break
       case 'polls': this.polls = m.polls; this.changed(); break

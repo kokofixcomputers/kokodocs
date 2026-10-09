@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronLeft, FileQuestion, Copy, Lock, LogOut, Monitor, Mic, Moon, Palette, ShieldCheck, Sparkles, Sun, Trash2, User as UserIcon, Bell, HardDrive, X, Keyboard } from 'lucide-react'
+import { Check, ChevronLeft, Circle, FileQuestion, Copy, Lock, LogOut, Monitor, Mic, Moon, Palette, ShieldCheck, Sparkles, Sun, Trash2, User as UserIcon, Bell, HardDrive, X, Keyboard } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, getToken, type AiSettings, type Storage, type StorageItems } from '../api'
 import { KindIcon } from '../ui/KindIcon'
@@ -208,6 +208,7 @@ const PARTS = [
   { key: 'images', label: 'Images', hint: 'Pictures added to files' },
   { key: 'files', label: 'Form uploads', hint: 'Files people attached to forms' },
   { key: 'versions', label: 'Version history', hint: 'Saved earlier versions' },
+  { key: 'recordings', label: 'Meeting recordings', hint: 'Meetings you recorded' },
 ] as const
 type PartKey = (typeof PARTS)[number]['key']
 
@@ -227,7 +228,7 @@ function StorageSection() {
   const [showTrashed, setShowTrashed] = useState(true)
   useEffect(() => { api.myStorage().then(setSt).catch(() => {}); api.myStorageItems().then(setList).catch((e) => setErr(e.message)) }, [])
   if (!st) return <Section title="Storage"><span className="spinner" /></Section>
-  const parts: Record<PartKey, number> = { text: st.documents, images: st.images, files: st.files ?? 0, versions: st.versions }
+  const parts: Record<PartKey, number> = { text: st.documents, images: st.images, files: st.files ?? 0, versions: st.versions, recordings: st.recordings ?? 0 }
   const scale = st.limit || st.used || 1
   const free = st.limit ? Math.max(0, st.limit - st.used) : 0
   const items = (list?.items ?? []).filter((i) => showTrashed || !i.trashed)
@@ -253,7 +254,7 @@ function StorageSection() {
         {!list && !err && <span className="spinner" />}
         <div className="sg-list">
           {items.map((i) => {
-            const p: Record<PartKey, number> = { text: i.text, images: i.images, files: i.files, versions: i.versions }
+            const p: Record<PartKey, number> = { text: i.text, images: i.images, files: i.files, versions: i.versions, recordings: 0 }
             const row = (
               <>
                 <span className="sg-top"><KindIcon kind={i.kind} size={16} /><span className="sg-title">{i.title || 'Untitled'}</span>{i.trashed && <em className="sg-tag">In bin</em>}<b>{fmtBytes(i.total)}</b></span>
@@ -265,10 +266,15 @@ function StorageSection() {
           {list && list.unattached_images > 0 && (
             <div className="sg-item">
               <span className="sg-top"><FileQuestion size={16} /><span className="sg-title">Pictures not in any file</span><b>{fmtBytes(list.unattached_images)}</b></span>
-              <Segments parts={{ text: 0, images: list.unattached_images, files: 0, versions: 0 }} scale={biggest} />
+              <Segments parts={{ text: 0, images: list.unattached_images, files: 0, versions: 0, recordings: 0 }} scale={biggest} />
               <span className="sg-detail"><span><i className="sg-dot sg-images" />Images {fmtBytes(list.unattached_images)}</span></span>
             </div>)}
-          {list && !items.length && !list.unattached_images && <p className="muted" style={{ margin: 0 }}>You don’t have any files yet.</p>}
+          {list && (list.recordings ?? 0) > 0 && (
+            <Link to="/meetings#recordings" className="sg-item link" onClick={closeSettings}>
+              <span className="sg-top"><Circle size={16} /><span className="sg-title">Meeting recordings ({list.recording_count})</span><b>{fmtBytes(list.recordings ?? 0)}</b></span>
+              <Segments parts={{ text: 0, images: 0, files: 0, versions: 0, recordings: list.recordings ?? 0 }} scale={biggest} />
+            </Link>)}
+          {list && !items.length && !list.unattached_images && !(list.recordings ?? 0) && <p className="muted" style={{ margin: 0 }}>You don’t have any files yet.</p>}
         </div>
       </Card>
     </Section>

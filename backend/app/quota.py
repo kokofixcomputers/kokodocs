@@ -33,7 +33,8 @@ def breakdown(db, uid: str) -> dict:
     versions = db.execute("SELECT COALESCE(SUM(LENGTH(v.ydoc)), 0) FROM versions v JOIN documents d ON d.id = v.doc_id WHERE d.owner_id = ?", (uid,)).fetchone()[0]
     images = db.execute("SELECT COALESCE(SUM(size), 0) FROM uploads WHERE owner_id = ?", (uid,)).fetchone()[0]
     files = db.execute("SELECT COALESCE(SUM(f.size), 0) FROM form_files f JOIN documents d ON d.id = f.form_id WHERE d.owner_id = ?", (uid,)).fetchone()[0]
-    return {"documents": docs, "versions": versions, "images": images, "files": files, "total": docs + versions + images + files}
+    recordings = db.execute("SELECT COALESCE(SUM(size), 0) FROM recordings WHERE owner_id = ?", (uid,)).fetchone()[0]
+    return {"documents": docs, "versions": versions, "images": images, "files": files, "recordings": recordings, "total": docs + versions + images + files + recordings}
 
 
 def per_document(db, uid: str) -> dict:
@@ -47,7 +48,8 @@ def per_document(db, uid: str) -> dict:
               "total": r["text"] + r["versions"] + r["images"] + r["files"]} for r in rows]
     items.sort(key=lambda i: i["total"], reverse=True)
     total_images = db.execute("SELECT COALESCE(SUM(size), 0) FROM uploads WHERE owner_id = ?", (uid,)).fetchone()[0]
-    return {"items": items, "unattached_images": max(0, total_images - sum(i["images"] for i in items))}
+    rec = db.execute("SELECT COALESCE(SUM(size), 0) AS n, COUNT(*) AS c FROM recordings WHERE owner_id = ?", (uid,)).fetchone()
+    return {"items": items, "unattached_images": max(0, total_images - sum(i["images"] for i in items)), "recordings": rec["n"], "recording_count": rec["c"]}
 
 
 def usage_all(db) -> dict[str, int]:
@@ -57,7 +59,8 @@ def usage_all(db) -> dict[str, int]:
               "SELECT owner_id AS u, SUM(size) AS n FROM uploads GROUP BY owner_id",
               "SELECT d.owner_id AS u, SUM(LENGTH(z.blob)) AS n FROM zk_updates z JOIN documents d ON d.id = z.doc_id GROUP BY d.owner_id",
               "SELECT d.owner_id AS u, SUM(LENGTH(z.blob)) AS n FROM zk_checkpoints z JOIN documents d ON d.id = z.doc_id GROUP BY d.owner_id",
-              "SELECT d.owner_id AS u, SUM(f.size) AS n FROM form_files f JOIN documents d ON d.id = f.form_id GROUP BY d.owner_id"):
+              "SELECT d.owner_id AS u, SUM(f.size) AS n FROM form_files f JOIN documents d ON d.id = f.form_id GROUP BY d.owner_id",
+              "SELECT owner_id AS u, SUM(size) AS n FROM recordings GROUP BY owner_id"):
         for r in db.execute(q):
             out[r["u"]] = out.get(r["u"], 0) + (r["n"] or 0)
     return out
@@ -102,3 +105,15 @@ def drop_uploads(db, where: str, args: tuple = ()) -> None:
             pass
         db.execute("DELETE FROM uploads WHERE name = ?", (n,))
         db.execute("DELETE FROM image_aliases WHERE target = ?", (n,))
+
+
+def drop_recordings(db, where: str = "owner_id = ?", args: tuple = ()) -> None:
+    """Delete meeting recordings (files and rows) matching `where`. Call before deleting the account that owns them."""
+    from .db import RECORDINGS_DIR
+    for r in db.execute(f"SELECT id FROM recordings WHERE {where}", args).fetchall():
+        for f in RECORDINGS_DIR.glob(f"{r['id']}.*"):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+    db.execute(f"DELETE FROM recordings WHERE {where}", args)

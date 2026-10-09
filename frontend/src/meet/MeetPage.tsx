@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Clock, LockOpen, Mic, MicOff, Settings2, Video, VideoOff } from 'lucide-react'
+import { ArrowLeft, Circle, Clock, LockOpen, Mic, MicOff, Settings2, Video, VideoOff } from 'lucide-react'
 import { api, ApiError, type MeetInfo } from '../api'
 import { useAuth } from '../auth'
 import { Modal } from '../ui/Modal'
 import { toast } from '../ui/Toast'
 import { Logo } from '../ui/Logo'
+import { ConsentModal } from './Consent'
 import { DevicePicker } from './Devices'
 import { InCall } from './InCall'
 import { Session } from './session'
@@ -84,6 +85,7 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [devices, setDevices] = useState(false)
+  const [asking, setAsking] = useState(false)
   const tracks = useRef<LocalTracks>({ audio: null, video: null })
   const ids = useRef({ mic: '', cam: '' })
   const [preview, setPreview] = useState<MediaStream | null>(null)
@@ -106,9 +108,11 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
     try { await getCam() } catch (e) { toast(deviceProblem(e, 'camera')) }
   })())
 
-  const join = async () => {
+  const join = async (agreed?: boolean) => {
     const who = (user?.name ?? name).trim()
     if (!who) { setError('Enter your name'); return }
+    const watched = !!info.recording && !info.is_host && agreed === undefined
+    if (watched) { setError(''); setAsking(true); return }   // the meeting is being recorded: ask before they even join
     setBusy(true); setError('')
     try {
       await Promise.allSettled(pending.current)
@@ -117,7 +121,7 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
       const local: LocalTracks = { ...tracks.current, micId: ids.current.mic, camId: ids.current.cam }
       tracks.current = { audio: null, video: null }   // handed over: the call owns them now
       setPreview(null)
-      onJoined(new Session(code, ticket, local))
+      onJoined(new Session(code, ticket, local, agreed))
     } catch (e) {
       if (e instanceof ApiError && e.code === 'passcode') setAskPass(true)
       setError(e instanceof Error ? e.message : 'Could not join')
@@ -147,6 +151,7 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
         <div className="meet-join">
           <h1>{info.title}</h1>
           <p className="muted">Hosted by {info.host_name || 'someone'}{info.permanent ? ' · permanent meeting' : ''}{info.is_cohost ? ' · you are a co-host' : ''}</p>
+          {info.recording && !info.is_host && <p className="meet-hint rec"><Circle size={12} fill="currentColor" />This meeting is being recorded.</p>}
           {info.approval && !info.is_host && !info.is_cohost && <p className="meet-hint"><Clock size={14} />The host will let you in.</p>}
           {user ? <p className="meet-as">Joining as <b>{user.name}</b></p> : (
             <label className="meet-name"><span>What should we call you?</span>
@@ -156,11 +161,12 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
             <label className="meet-name"><span>Meeting passcode</span>
               <span className="field"><input type="password" value={passcode} maxLength={64} placeholder="Passcode" autoComplete="off" onChange={(e) => setPasscode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void join()} /></span></label>)}
           {error && <p className="form-error">{error}</p>}
-          <button className="btn btn-primary btn-pill btn-lg" disabled={busy} onClick={join}>{busy ? <span className="spinner sm" /> : info.approval && !info.is_host && !info.is_cohost ? 'Ask to join' : 'Join now'}</button>
+          <button className="btn btn-primary btn-pill btn-lg" disabled={busy} onClick={() => void join()}>{busy ? <span className="spinner sm" /> : info.approval && !info.is_host && !info.is_cohost ? 'Ask to join' : 'Join now'}</button>
           {!user && <p className="muted small">Have an account? <Link to="/login" state={{ from: `/m/${code}` }}>Sign in</Link></p>}
           <p className="meet-enc"><LockOpen size={14} />Calls aren't end-to-end encrypted.</p>
         </div>
       </div>
+      {asking && <ConsentModal required={info.recording?.required ?? false} onAnswer={(a) => { setAsking(false); if (!a && info.recording?.required) setError("You can't join this meeting without agreeing to be recorded."); else void join(a) }} />}
       {devices && (
         <Modal title="Microphone, camera and speaker" onClose={() => setDevices(false)} width={440}>
           <div className="share-body">
@@ -183,6 +189,7 @@ const ENDS: Record<string, [string, string, boolean]> = {
   kicked: ['You were removed from this meeting', '', true],
   blocked: ['You were removed from this meeting', "You can't come back to it during this session.", false],
   denied: ["The host didn't let you in", '', false],
+  declined: ['You left the meeting', "You didn't agree to be recorded, and this meeting requires everyone to.", false],
   locked: ['This meeting is locked', 'The host has stopped new people from joining.', true],
   full: ['This meeting is full', 'Try again in a moment.', true],
   failed: ['The connection was lost', "We couldn't reconnect you.", true],

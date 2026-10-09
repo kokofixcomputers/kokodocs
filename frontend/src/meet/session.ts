@@ -4,7 +4,8 @@ import { Control } from './control'
 import { listDevices, type Media } from './media'
 import { MeshMedia } from './mesh'
 import { RtkMedia } from './rtk'
-import { Emitter, type Call, type Caption, type CallEnd, type CallStatus, type ChatMsg, type Devices, type LocalTracks, type Peer, type PollView, type RoomSettings, type Waiting } from './types'
+import { MeetingRecorder } from './record'
+import { Emitter, type Answer, type Call, type Caption, type CallEnd, type CallStatus, type ChatMsg, type Consents, type Devices, type LocalTracks, type Peer, type PollView, type RoomSettings, type Waiting } from './types'
 
 /** A call as the meeting page sees it: the control channel (who is here, the waiting room, chat, reactions, polls, ...) joined to the audio-and-video
  *  part (direct between browsers, or Cloudflare RealtimeKit). Audio and video only start once the room has let you in. */
@@ -17,12 +18,22 @@ export class Session extends Emitter implements Call {
   private captionMic: MediaStream | null = null
   private ended = false
 
-  constructor(readonly code: string, private ticket: MeetTicket, private local: LocalTracks) {
+  private recorder: MeetingRecorder | null = null
+
+  /** `answeredEarly`: what the person said in the lobby when asked about a recording that was already running. */
+  constructor(readonly code: string, private ticket: MeetTicket, private local: LocalTracks, private answeredEarly?: boolean) {
     super()
     const ctl = (this.ctl = new Control(code, ticket))
-    ctl.subscribe(() => { this.changed(); void this.syncCaptions() })
+    ctl.subscribe(() => {
+      if (this.recorder && !ctl.settings.recording_now && this.recorder.seconds > 3) { this.recorder.abandon(); this.recorder = null }   // the server ended it (the host left, or storage ran out)
+      this.changed(); void this.syncCaptions()
+    })
     ctl.onNoticeFrom = (m) => this.notice(m)
-    ctl.onWelcome(() => { this.sent = ''; void this.startMedia(); this.syncState() })
+    ctl.onWelcome(() => {
+      this.sent = ''; void this.startMedia(); this.syncState()
+      if (this.answeredEarly !== undefined && ctl.settings.recording_now && ctl.myConsent === null && !ctl.me.owner) this.answer(this.answeredEarly)
+      this.answeredEarly = undefined
+    })
   }
 
   get name() { return this.ticket.name }
@@ -85,6 +96,23 @@ export class Session extends Emitter implements Call {
   polls(): PollView[] { return this.ctl.polls }
   waiting(): Waiting[] { return this.ctl.waiting }
   captions(): Caption[] { return this.ctl.captions }
+  recording() { const r = this.ctl.settings.recording_now; return r ? { ...r, mine: !!this.recorder } : null }
+  consent(): Answer { return this.ctl.myConsent }
+  consents(): Consents | null { return this.ctl.consents }
+  answer(agree: boolean) { this.ctl.myConsent = agree ? 'yes' : 'no'; this.ctl.send({ t: 'consent', agree }); this.changed() }
+  async record(on: boolean) {
+    if (on) {
+      if (this.recorder) return
+      const r = new MeetingRecorder(this.code, this.ticket.jt, () => ({ peers: this.peers(), spotlight: this.ctl.spotlight, consents: this.ctl.consents }), (m) => { this.notice(m); this.recorder = null; this.changed() })
+      this.recorder = r
+      try { await r.start() } catch (e) { this.recorder = null; this.changed(); throw e }
+      this.changed()
+    } else {
+      const r = this.recorder
+      this.recorder = null; this.changed()
+      await r?.stop()
+    }
+  }
   devices(): Promise<Devices> { return this.media?.devices() ?? listDevices({ mic: '', cam: '' }) }
 
   peers(): Peer[] {
@@ -133,6 +161,7 @@ export class Session extends Emitter implements Call {
 
   leave() {
     this.ended = true
+    void this.recorder?.stop(); this.recorder = null
     this.captioner?.stop(); this.captioner = null
     this.media?.stop()
     this.local.audio?.stop(); this.local.video?.stop()

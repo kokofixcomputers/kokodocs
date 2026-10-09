@@ -103,12 +103,14 @@ export function PeoplePanel({ call, peers, onMessage }: { call: Call; peers: Pee
 
 function Row({ call, p, onMessage }: { call: Call; p: Peer; onMessage: (id: string) => void }) {
   const ctx = useContextMenu()
+  const cs = call.recording() && call.me().manager ? call.consents() : null
+  const answer = cs ? (cs.no.includes(p.id) ? 'not in the recording' : cs.pending.includes(p.id) ? 'asked about recording' : '') : ''
   const items = () => personItems(call, p, { onMessage })
   return (
         <div className="meet-person" {...ctx.bind(items)}>
           {ctx.node}
           <Avatar name={p.name} />
-          <span className="name">{p.self ? `${p.name} (you)` : p.name}{p.host && <Crown size={13} aria-label="Host" />}{p.cohost && <Star size={13} aria-label="Co-host" />}{p.guest && <i className="meet-tag">guest</i>}</span>
+          <span className="name">{p.self ? `${p.name} (you)` : p.name}{p.host && <Crown size={13} aria-label="Host" />}{p.cohost && <Star size={13} aria-label="Co-host" />}{p.guest && <i className="meet-tag">guest</i>}{answer && <i className="meet-tag">{answer}</i>}</span>
           {!p.audio && <MicOff size={15} className="muted" />}
           {!p.self && (
             <Popover align="end" trigger={({ toggle }) => <button className="icon-btn sm" onClick={toggle} aria-label={`Options for ${p.name}`}><MoreHorizontal size={16} /></button>}>
