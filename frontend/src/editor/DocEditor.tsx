@@ -38,6 +38,7 @@ import { DocExportMenu } from '../export/ExportMenu'
 import { useVoiceTyping } from '../voice/useVoiceTyping'
 import { VoicePill } from '../voice/VoicePill'
 import { VoiceFab } from '../voice/VoiceControl'
+import { ReadAloud } from '../tts/ReadAloud'
 import { LinkHover } from './LinkHover'
 import { useBatchedRerender } from './useBatchedRerender'
 import { DocContextMenu } from './TextContextMenu'
@@ -354,6 +355,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
               <MessageSquare size={19} />{openThreads > 0 && <b className="badge">{openThreads}</b>}
             </button>
           )}
+          <ReadAloud plain={!!info.zk} />
           {user && !preview && (
             <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'assistant' ? 'none' : 'assistant'))}><Sparkles size={17} /><span className="lbl">Assistant</span></button>
           )}

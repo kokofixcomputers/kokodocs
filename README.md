@@ -485,6 +485,15 @@ Same admin page, same one-upload-for-everyone idea.
 
 Tests: `backend/tests/test_sfu.py` (Cloudflare and Metered, against mocks) and `backend/tests/test_livekit.py`.
 
+## Read aloud (text to speech)
+
+The speaker button in the top bar of a document or wiki reads the page aloud, or just what you have selected. A floating pill (like the voice typing one) has play and pause, a sentence back and forward, and slower and faster (0.75× to 2×); the sentence being read is highlighted and scrolled into view.
+
+- **Default: each device's own voices.** Free, instant, works offline (and in the desktop app), and the text never leaves the device, so encrypted documents work too. Quality depends on the device: very good on Apple devices, plainer on some others. A voice can be chosen from the button's menu.
+- **Optional: Cloudflare MeloTTS, one voice for everyone.** Admin → Voice typing → *Read aloud*: choose it and enter the Cloudflare account id and an API token with Workers AI access (or set `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`). It costs about $0.0002 per minute of speech, roughly a cent an hour. A sentence at a time is sent to the server, which asks Cloudflare and keeps recent results in memory so repeats cost nothing; English, Spanish, French, Chinese, Japanese and Korean are picked from the text. Encrypted documents never use it. If it fails, reading carries on with the device's voice.
+
+Tests: `backend/tests/test_tts.py`.
+
 ## Scan a page (reading text from a photo)
 
 In a document or wiki, the toolbar's **Scan a page** button lets you choose a photo or scan (or drop one in) and adds the text on it where your cursor is. Undo works like any other edit. Two ways to read it, remembered per browser:

@@ -1,3 +1,4 @@
+import { TtsAdmin } from './TtsAdmin'
 import { useEffect, useMemo, useState } from 'react'
 import { OcrAdminSection } from './OcrAdmin'
 import { MeetAdminSection } from './MeetAdmin'
@@ -628,7 +629,7 @@ export function AdminPage() {
           {sec === 'assistant' && <AssistantSection />}
           {sec === 'ocr' && <OcrAdminSection />}
           {sec === 'meet' && <MeetAdminSection />}
-          {sec === 'voice' && settingsBody((x) => <div className="ad-card ad-form"><VoiceSettings s={x} apply={setS} /></div>)}
+          {sec === 'voice' && <>{settingsBody((x) => <div className="ad-card ad-form"><VoiceSettings s={x} apply={setS} /></div>)}<div className="ad-card ad-form" style={{ marginTop: 16 }}><TtsAdmin /></div></>}
         </div>
       </main>
     </div>

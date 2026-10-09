@@ -1,0 +1,12 @@
+/* read aloud: the sentence being read, and the floating pill (it looks like the voice typing one, with buttons you can press) */
+::highlight(tts) { background-color: color-mix(in srgb, var(--accent, #4f46e5) 22%, transparent); }
+.tts-menu { width: 300px; } .tts-body { display: grid; gap: 12px; padding: 6px; } .tts-title { display: flex; align-items: center; gap: 10px; } .tts-title h4 { font-size: 15px; margin: 0; }
+.tts-hint { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); } .tts-go { width: 100%; justify-content: center; gap: 8px; }
+.tts-field { display: grid; gap: 6px; } .tts-field > span { font-size: 12.5px; color: var(--muted); }
+.tts-pill { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 50000; display: flex; align-items: center; gap: 14px; height: 54px; padding: 0 12px 0 14px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); box-shadow: 0 10px 36px rgba(0, 0, 0, .3); animation: pill-in .28s var(--ease); user-select: none; max-width: calc(100vw - 16px); box-sizing: border-box; }
+.tts-pill button { border: 0; background: transparent; color: inherit; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; padding: 0; }
+.tts-pill button:hover { background: rgba(255, 255, 255, .16); } .tts-pill button.main { width: 40px; height: 40px; background: rgba(255, 255, 255, .2); } .tts-pill button.main:hover { background: rgba(255, 255, 255, .3); }
+.tp-btns, .tp-speed { display: flex; align-items: center; gap: 2px; } .tp-speed { padding-left: 12px; border-left: 1px solid rgba(255, 255, 255, .22); } .tp-speed b { min-width: 42px; text-align: center; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.tp-text { display: grid; line-height: 1.2; min-width: 96px; } .tp-text b { font-size: 14px; font-weight: 600; } .tp-text em { font-style: normal; font-size: 12px; opacity: .72; }
+@media (max-width: 720px) { .tts-pill { bottom: calc(86px + var(--kb, 0px) + env(safe-area-inset-bottom)); gap: 8px; padding: 0 8px 0 10px; } .tp-text { display: none; } .tp-speed { padding-left: 8px; } }

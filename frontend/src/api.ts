@@ -388,6 +388,16 @@ export const api = {
   adminMeet: () => request<MeetAdmin>('/api/admin/meet'),
   adminMeetSave: (b: MeetAdminIn) => request<MeetAdmin>('/api/admin/meet', { method: 'PUT', ...json(b) }),
   adminMeetTest: () => request<{ ok: boolean; message: string; turn?: boolean }>('/api/admin/meet/test', { method: 'POST' }),
+  ttsConfig: () => request<{ engine: 'browser' | 'cloudflare'; langs: string[] }>('/api/tts/config'),
+  /** the server's voice reading one sentence (only when the administrator has switched it on) */
+  ttsSpeak: async (text: string, lang: string): Promise<Blob> => {
+    const res = await rawFetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, lang }) })
+    if (!res.ok) { let d = ''; try { d = (await res.json()).detail } catch { /* ignore */ } throw new ApiError(res.status, null, typeof d === 'string' && d ? d : res.statusText) }
+    return res.blob()
+  },
+  adminTts: () => request<{ engine: 'browser' | 'cloudflare'; account: string; token_set: boolean; problem: string | null; model: string }>('/api/admin/tts'),
+  adminTtsSave: (b: Partial<{ engine: string; account: string; token: string }>) => request<{ engine: 'browser' | 'cloudflare'; account: string; token_set: boolean; problem: string | null; model: string }>('/api/admin/tts', { method: 'PUT', ...json(b) }),
+  adminTtsTest: () => request<{ ok: boolean; message: string }>('/api/admin/tts/test', { method: 'POST' }),
   ocrConfig: () => request<OcrConfig>('/api/ocr/config'),
   adminOcr: () => request<OcrAdmin>('/api/admin/ocr'),
   adminOcrSave: (b: Partial<{ model_id: string; prompt: string; lock: boolean; default: string }>) => request<OcrAdmin>('/api/admin/ocr', { method: 'PUT', ...json(b) }),

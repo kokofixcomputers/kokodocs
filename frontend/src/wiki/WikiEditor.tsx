@@ -34,6 +34,7 @@ import { Toolbar } from '../editor/Toolbar'
 import { useVoiceTyping } from '../voice/useVoiceTyping'
 import { VoicePill } from '../voice/VoicePill'
 import { VoiceFab } from '../voice/VoiceControl'
+import { ReadAloud } from '../tts/ReadAloud'
 import { Outline } from '../editor/Outline'
 import { ShareDialog } from '../editor/ShareDialog'
 import { VersionHistory, fullLabel } from '../editor/VersionHistory'
@@ -293,6 +294,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
               {people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}
             </div>
             {!readOnly && <button className={`icon-btn ${panel === 'history' ? 'active' : ''}`} title="Version history" aria-label="Version history" onClick={() => { setPreview(null); setPanel((p) => (p === 'history' ? 'none' : 'history')) }}><History size={19} /></button>}
+            <ReadAloud plain={!!info.zk} />
             {user && !preview && <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'assistant' ? 'none' : 'assistant'))}><Sparkles size={17} /><span className="lbl">Assistant</span></button>}
             {!preview && <button className={`btn btn-pill btn-soft proof-btn ${panel === 'proof' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'proof' ? 'none' : 'proof'))}>
               <SpellCheck size={17} /><span className="lbl">Proofread</span>{proof.issues.length > 0 && <b className="badge">{proof.issues.length}</b>}

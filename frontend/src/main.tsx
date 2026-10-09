@@ -24,6 +24,7 @@ import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
 import { ssoPopupLanding } from './ui/ssoPopup'
 import { Crash } from './ui/Crash'
+import { TtsPill } from './tts/ReadAloud'
 import { NetPill } from './ui/NetStatus'
 import { DesktopBar, installDesktop, isDesktop } from './ui/DesktopBar'
 import { KeyboardFit } from './ui/KeyboardFit'
@@ -89,6 +90,7 @@ if (!ssoPopupLanding()) ReactDOM.createRoot(document.getElementById('root')!).re
         <ShortcutsSheet />
         <SyncNotices />
         <NetPill />
+        <TtsPill />
         <DesktopBar />
         <KeyboardFit />
         <SettingsHost />
