@@ -36,14 +36,14 @@ self.addEventListener('fetch', (e) => {
   if (req.mode === 'navigate') {
     e.respondWith((async () => {
       try { return await fetch(req) } catch {
-        return (await caches.match('/index.html')) || Response.error()
+        return (await caches.match('/index.html', { ignoreVary: true })) || Response.error()
       }
     })())
     return
   }
   if (RUNTIME.test(p) || PRECACHE.includes(p)) {
     e.respondWith((async () => {
-      const hit = await caches.match(req)
+      const hit = await caches.match(req, { ignoreVary: true })   // (the server says Vary: Origin; module scripts send one, the precache's own fetches don't)
       if (hit) return hit
       const r = await fetch(req)
       if (r.ok && r.status === 200) { const c = await caches.open(CACHE); c.put(req, r.clone()) }

@@ -25,7 +25,7 @@ function buildStamp(): Plugin {
 }
 
 /** Writes `sw.js` (the service worker that keeps the app on the device): the template with this build's id and the list of files to keep.
- *  The emoji, text-recognition and screenshot folders and very large files are left out; those are kept the first time they're used. */
+ *  The emoji, text-recognition and screenshot folders and wasm files are left out; those are kept the first time they're used. */
 function serviceWorker(): Plugin {
   let out = ''
   return {
@@ -38,7 +38,7 @@ function serviceWorker(): Plugin {
         for (const n of readdirSync(join(dir))) {
           const full = join(dir, n), r = rel + '/' + n
           if (statSync(full).isDirectory()) { if (!/^\/(twemoji|ocr|shots)$/.test(r)) walk(full, r) }
-          else if (statSync(full).size < 3_000_000 && !['/sw.js', '/version.js', '/index.html'].includes(r)) files.push(r)
+          else if (!r.endsWith('.wasm') && statSync(full).size < 16_000_000 && !['/sw.js', '/version.js', '/index.html'].includes(r)) files.push(r)   // (editors load some big files; only the wasm of the page reader is left to be kept when first used)
         }
       }
       walk(out, '')
