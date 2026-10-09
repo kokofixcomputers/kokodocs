@@ -90,6 +90,7 @@ export class Session extends Emitter implements Call {
   // ---- what the page reads
   status(): CallStatus { return this.ctl.status }
   provider() { return this.ticket.provider }
+  mediaProblem() { return this.media?.problem?.() ?? '' }
   waitReason() { return this.ctl.waitReason }
   endReason(): CallEnd | null { return this.ctl.end }
   permanent() { return this.ticket.permanent }

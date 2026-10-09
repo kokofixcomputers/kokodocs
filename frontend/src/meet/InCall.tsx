@@ -246,8 +246,9 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
       {soundBlocked && (
         <div className="meet-banner" role="alert">Your browser blocked the sound from this meeting. <button className="btn btn-soft btn-sm btn-pill" onClick={() => { window.dispatchEvent(new Event('koko:sound-retry')); setSoundBlocked(false) }}>Turn the sound on</button></div>)}
       {peers.some((p) => !p.self && p.net === 'failed') && (
-        <div className="meet-banner" role="alert">Can't connect to {peers.filter((p) => !p.self && p.net === 'failed').map((p) => p.name).join(', ')}. Direct calls are blocked between your networks.
-          {user?.is_admin ? <> Turn on the free relay in <a href="/admin#meet" target="_blank" rel="noreferrer">Admin → Meetings</a> to fix this for everyone.</> : <> Ask the person who runs this site to turn on a relay server for meetings.</>}</div>)}
+        <div className="meet-banner" role="alert">Can't connect to {peers.filter((p) => !p.self && p.net === 'failed').map((p) => p.name).join(', ')}.
+          {call.provider() !== 'mesh' ? <> {call.mediaProblem() ? `The call service said: ${call.mediaProblem()}` : 'The call service did not deliver their audio and video.'}</> : <> Direct calls are blocked between your networks.</>}
+          {call.provider() !== 'mesh' ? null : user?.is_admin ? <> Turn on the free relay in <a href="/admin#meet" target="_blank" rel="noreferrer">Admin → Meetings</a> to fix this for everyone.</> : <> Ask the person who runs this site to turn on a relay server for meetings.</>}</div>)}
       <div className="meet-body">
         <main className="meet-stage">
           <Stage call={call} peers={peers} spotlight={call.spotlight()} layout={layout} hideSelf={hideSelf} onMessage={(id) => { setChatTo(id); setPanel('chat') }} onPerms={setPermsFor} />

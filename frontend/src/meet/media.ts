@@ -31,6 +31,8 @@ export interface Media {
   retry?(peerId: string): void
   /** How loud this person is right now (0 to 1), from the call itself; null if this provider can't say. */
   level?(peerId: string): number | null
+  /** The last thing that went wrong with the provider's service (empty if nothing). */
+  problem?(): string
   /** A plain-text account of how this provider's connections are doing (for support). */
   report?(names: Record<string, string>): Promise<string>
 }

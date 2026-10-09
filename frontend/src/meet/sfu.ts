@@ -187,6 +187,8 @@ export class SfuMedia extends Emitter implements Media {
     return { audio: p.audio, video: p.video, screen: p.screen, stream: r?.stream ?? null, screenStream: r?.screenStream ?? null, net, path: null }
   }
 
+  problem() { return this.error }
+
   level(id: string): number | null {
     const rx = this.remotes.get(id)?.mids.mic?.receiver
     const s = rx?.getSynchronizationSources?.()[0]
