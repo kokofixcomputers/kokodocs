@@ -214,7 +214,7 @@ export const api = {
   putFolderSharing: (id: string, b: { shares: { email: string; role: string }[]; link_access: string; link_role: string }) =>
     request<FolderSharing>(`/api/folders/${id}/sharing`, { method: 'PUT', ...json(b) }),
   listSharedFolders: () => cached('sfolders', () => request<SharedFolder[]>('/api/shared/folders')),
-  openSharedFolder: async (id: string) => { const r = await request<SharedFolderView>(`/api/shared/folders/${id}`); await decorateAll(r.docs); return r },
+  openSharedFolder: (id: string) => cached(`sfolder:${id}`, async () => { const r = await request<SharedFolderView>(`/api/shared/folders/${id}`); await decorateAll(r.docs); return r }, (r) => ({ ...r, docs: keepPlain(r.docs) })),
   listTrash: async () => { const r = await request<{ purge_days: number; docs: DocSummary[] }>('/api/trash'); await decorateAll(r.docs); return r },
   restoreDoc: (id: string) => request(`/api/docs/${id}/restore`, { method: 'POST' }),
   deleteForever: (id: string) => request(`/api/docs/${id}/permanent`, { method: 'DELETE' }),

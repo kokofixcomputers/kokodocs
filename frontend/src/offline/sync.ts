@@ -49,7 +49,18 @@ async function pushDirty() {
 async function copyAll() {
   const { mine, shared } = await api.listDocs()
   await Promise.all([api.listFolders().catch(() => null), api.listSharedFolders().catch(() => null), api.recent().catch(() => null)])
-  const docs = [...mine, ...shared].filter((d) => !d.zk && !d.deleted_at && d.link_access !== 'password')
+  // documents that are only reachable through a folder someone shared with me aren't in the lists above: walk those folders too
+  const all = new Map([...mine, ...shared].map((d) => [d.id, d]))
+  const roots = await api.listSharedFolders().catch(() => [])
+  const queue = roots.map((r) => r.id), visited = new Set<string>()
+  while (queue.length && visited.size < 500) {
+    const id = queue.shift()!; if (visited.has(id)) continue; visited.add(id)
+    const v = await api.openSharedFolder(id).catch(() => null); if (!v) continue
+    for (const d of v.docs) if (!all.has(d.id)) all.set(d.id, d)
+    for (const f of v.folders) queue.push(f.id)
+  }
+  // (password-protected links need the password, but my own documents don't)
+  const docs = [...all.values()].filter((d) => !d.zk && !d.deleted_at && (d.link_access !== 'password' || d.role === 'owner'))
   const seen = (await idb.get<Record<string, number>>('kv', 'seen')) ?? {}
   const todo: typeof docs = []
   for (const d of docs) if (!seen[d.id] || seen[d.id] < d.updated_at || !(await hasYState(d.id))) todo.push(d)
