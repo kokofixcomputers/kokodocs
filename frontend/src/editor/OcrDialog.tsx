@@ -5,7 +5,7 @@ import { api, type AiSettings } from '../api'
 import { Modal } from '../ui/Modal'
 import { Select } from '../ui/Select'
 import { toast } from '../ui/Toast'
-import { LANGS, loadPrefs, prepare, readLocally, savePrefs, textToHtml, type OcrPrefs } from '../ocr/ocr'
+import { LANGS, describe, loadPrefs, prepare, readLocally, savePrefs, textToHtml, type OcrPrefs } from '../ocr/ocr'
 import { docKeyOf } from '../zk/session'
 import { ensureConsent } from '../zk/consent'
 
@@ -50,7 +50,7 @@ export function OcrDialog({ editor, docId, onClose }: { editor: Editor; docId: s
       const words = (html.replace(/<[^>]+>/g, ' ').match(/\S+/g) ?? []).length
       toast(`Added ${words} word${words === 1 ? '' : 's'} from the page. Undo with ${isMac ? '⌘Z' : 'Ctrl+Z'}.`)
       onClose()
-    } catch (e) { setErr((e as Error).message || 'That page couldn’t be read') } finally { setBusy(false) }
+    } catch (e) { setErr((e as Error)?.message || describe(e) || 'That page couldn’t be read') } finally { setBusy(false) }
   }
 
   const way = (via: 'local' | 'ai', icon: React.ReactNode, title: string, sub: string, off = false) => (
