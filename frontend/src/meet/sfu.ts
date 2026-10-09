@@ -128,7 +128,7 @@ export class SfuMedia extends Emitter implements Media {
     if (!s.ack) this.announce([from], true)
   }
 
-  private pull(peer: string, sid: string, ids: Ids) {
+  private pull(peer: string, sid: string, ids: Ids) {   // (ids: what the other side announced; Metered's own list is used for subscribing)
     this.failed.delete(peer)
     this.remotes.set(peer, { sid, tracks: {}, stream: null, screenStream: null, since: Date.now(), mids: {} })
     window.setTimeout(() => { if (!this.stopped) this.changed() }, STUCK_MS + 100)
@@ -137,8 +137,22 @@ export class SfuMedia extends Emitter implements Media {
       try {
         if (this.dialect === 'metered') {
           // one track at a time: the connection line each one arrives on is then the new one in the server's offer
+          // the ids to ask for are the ones Metered itself lists for that session (found by the names we gave the tracks)
+          const listed = await api.meetSfu<{ items?: { trackId?: string; customTrackName?: string }[] }>(this.code, this.jt, `${this.sid}/tracks`, 'POST', { op: 'list', sessionId: sid })
+          const found: Ids = {}
+          for (const t of listed.items ?? []) if (t.trackId && NAMES.includes(t.customTrackName as Kind)) found[t.customTrackName as Kind] = t.trackId
+          if (!Object.keys(found).length) {   // the names weren't kept: they were published in order (microphone, camera, screen), so the order of the lines says which is which
+            const all = (listed.items ?? []).filter((t: any) => t.trackId).sort((x: any, y: any) => Number(x.mid) - Number(y.mid)) as { trackId: string; trackKind?: string }[]
+            const vids = all.filter((t) => t.trackKind !== 'audio')
+            const au = all.find((t) => t.trackKind === 'audio')
+            if (au) found.mic = au.trackId
+            if (vids[0]) found.cam = vids[0].trackId
+            if (vids[1]) found.screen = vids[1].trackId
+          }
+          if (!Object.keys(found).length) throw new Error(`Metered lists no tracks for that person (it said: ${JSON.stringify(listed).slice(0, 200)})`)
           for (const kind of NAMES) {
-            if (!ids[kind]) continue
+            if (!found[kind]) continue
+            ids = { ...ids, [kind]: found[kind] }
             const r = await api.meetSfu<{ immediateRenegotiationRequired?: boolean; sessionDescription?: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.sid}/tracks`, 'POST',
               { op: 'subscribe', tracks: [{ remoteSessionId: sid, remoteTrackId: ids[kind] }] })
             if (r.sessionDescription && r.immediateRenegotiationRequired !== false) {

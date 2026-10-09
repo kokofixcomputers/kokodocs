@@ -422,12 +422,16 @@ class MeteredSfu:
     async def tracks(c, sid: str, body: dict) -> dict:
         op = body.get("op")
         rest = {k: v for k, v in body.items() if k != "op"}
+        if op == "list":   # the tracks another session has published (their ids are what subscribing needs)
+            return await MeteredSfu._req(c, "GET", f"/session/{body.get('sessionId')}/tracks")
         if op not in ("publish", "subscribe"):
             raise HTTPException(422, "Unknown track operation.")
         return await MeteredSfu._req(c, "POST", f"/session/{sid}/track/{op}", rest)
 
     @staticmethod
     def remote_sessions(body: dict) -> list[str]:
+        if body.get("op") == "list":
+            return [str(body.get("sessionId"))]
         return [str(t.get("remoteSessionId")) for t in (body.get("tracks") or []) if isinstance(t, dict) and body.get("op") == "subscribe"]
 
     @staticmethod

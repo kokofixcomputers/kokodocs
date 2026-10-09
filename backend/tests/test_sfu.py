@@ -23,6 +23,7 @@ class CF(BaseHTTPRequestHandler):
             elif self.command == 'POST' and re.fullmatch(r'/api/sfu/mapp/session/msess-\d+/track/(publish|subscribe)', self.path): code, out = 200, {'sessionDescription': {'type': 'answer', 'sdp': 'x'}, 'immediateRenegotiationRequired': True}
             elif self.command == 'PUT' and self.path.endswith('/renegotiate'): code, out = 200, {}
             elif self.command == 'GET' and self.path == '/api/sfu/mapp/sessions': code, out = 200, []
+            elif self.command == 'GET' and re.fullmatch(r'/api/sfu/mapp/session/msess-\d+/tracks', self.path): code, out = 200, [{'trackId': 'tid-1', 'customTrackName': 'mic', 'mid': '1', 'trackKind': 'audio'}]
             else: code, out = 404, {}
         else: code, out = 404, {'errorCode': 'nope'}
         self.send_response(code); self.send_header('content-type', 'application/json'); self.end_headers(); self.wfile.write(json.dumps(out).encode())
@@ -88,6 +89,9 @@ sub = {'op': 'subscribe', 'tracks': [{'remoteSessionId': a['sessionId'], 'remote
 ok('subscribing to someone in the meeting works', call('POST', f"/api/meet/{cm}/sfu/{b['sessionId']}/tracks", {'jt': jm2['jt'], 'body': sub})[0] == 200 and SEEN[-1][1].endswith('/track/subscribe'))
 ok('but not to a stranger', call('POST', f"/api/meet/{cm}/sfu/{b['sessionId']}/tracks", {'jt': jm2['jt'], 'body': {'op': 'subscribe', 'tracks': [{'remoteSessionId': 'guess', 'remoteTrackId': 't'}]}})[0] == 403)
 ok("or with someone else's session", call('POST', f"/api/meet/{cm}/sfu/{a['sessionId']}/tracks", {'jt': jm2['jt'], 'body': sub})[0] == 403)
+s, r = call('POST', f"/api/meet/{cm}/sfu/{b['sessionId']}/tracks", {'jt': jm2['jt'], 'body': {'op': 'list', 'sessionId': a['sessionId']}})
+ok("listing someone's tracks works (an array comes back as items)", s == 200 and r['items'][0]['trackId'] == 'tid-1' and SEEN[-1][0] == 'GET', s, r)
+ok("but not a stranger's", call('POST', f"/api/meet/{cm}/sfu/{b['sessionId']}/tracks", {'jt': jm2['jt'], 'body': {'op': 'list', 'sessionId': 'guess'}})[0] == 403)
 ok('an unknown operation is refused', call('POST', f"/api/meet/{cm}/sfu/{a['sessionId']}/tracks", {'jt': jm['jt'], 'body': {'op': 'delete'}})[0] == 422)
 ok('renegotiating works', call('PUT', f"/api/meet/{cm}/sfu/{b['sessionId']}/renegotiate", {'jt': jm2['jt'], 'body': {'sessionDescription': {'type': 'answer', 'sdp': 'v=0'}}})[0] == 200 and SEEN[-1][1].endswith('/session/' + b['sessionId'] + '/renegotiate'))
 call('PUT', '/api/admin/meet', {'provider': 'mesh'}, A)
