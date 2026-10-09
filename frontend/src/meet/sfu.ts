@@ -17,6 +17,20 @@ interface Remote { sid: string; tracks: Partial<Record<Kind, MediaStreamTrack>>;
 
 const STUCK_MS = 15000
 
+/** Metered's server refuses a description that repeats an `a=msid:` line (Safari writes some twice). Only the copy that is sent is changed: a repeat inside one
+ *  media section, or the same line in a later section, is dropped. */
+export function tidy(sdp: string): string {
+  const out: string[] = []
+  const before = new Set<string>()   // lines of earlier media sections
+  let mine = new Set<string>()
+  for (const l of sdp.split(/\r?\n/)) {
+    if (l.startsWith('m=')) { mine.forEach((x) => before.add(x)); mine = new Set() }
+    if (l.startsWith('a=msid:')) { if (mine.has(l) || before.has(l)) continue; mine.add(l) }
+    out.push(l)
+  }
+  return out.join('\r\n')
+}
+
 function silence(): MediaStreamTrack {
   const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
   if (!AC) throw new Error("this browser can't make the silent audio the call service needs (no AudioContext)")
@@ -112,7 +126,7 @@ export class SfuMedia extends Emitter implements Media {
       pc.addTransceiver('video')
       at('creating the session')
       await pc.setLocalDescription(await pc.createOffer())
-      const first = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp } })
+      const first = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: tidy(pc.localDescription!.sdp) } })
       this.sid = first.sessionId
       await pc.setRemoteDescription(first.sessionDescription)
       for (const t of pc.getTransceivers()) if (t.mid) this.known.add(t.mid)
@@ -122,7 +136,7 @@ export class SfuMedia extends Emitter implements Media {
       this.slots.forEach((t, i) => { this.ids[NAMES[i]] = t.sender.track?.id })
       at('publishing your tracks')
       const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.sid}/tracks`, 'POST', {
-        op: 'publish', sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp },
+        op: 'publish', sessionDescription: { type: 'offer', sdp: tidy(pc.localDescription!.sdp) },
         tracks: this.slots.map((t, i) => ({ trackId: t.sender.track?.id, mid: t.mid, customTrackName: NAMES[i] })),
       })
       await pc.setRemoteDescription(r.sessionDescription)
@@ -132,7 +146,7 @@ export class SfuMedia extends Emitter implements Media {
       this.wire(rx)
       rx.addTransceiver('video', { direction: 'recvonly' })
       await rx.setLocalDescription(await rx.createOffer())
-      const second = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: rx.localDescription!.sdp } })
+      const second = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: tidy(rx.localDescription!.sdp) } })
       this.rxSid = second.sessionId
       await rx.setRemoteDescription(second.sessionDescription)
       for (const t of rx.getTransceivers()) if (t.mid) this.known.add(t.mid)
@@ -143,7 +157,7 @@ export class SfuMedia extends Emitter implements Media {
       const { sessionId } = await api.meetSfu<{ sessionId: string }>(this.code, this.jt, 'session')
       this.sid = this.rxSid = sessionId
       const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${sessionId}/tracks`, 'POST', {
-        sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp },
+        sessionDescription: { type: 'offer', sdp: tidy(pc.localDescription!.sdp) },
         tracks: this.slots.map((t, i) => ({ location: 'local', mid: t.mid, trackName: NAMES[i] })),
       })
       await pc.setRemoteDescription(r.sessionDescription)
@@ -245,7 +259,7 @@ export class SfuMedia extends Emitter implements Media {
               this.expect = { peer, kind }
               try { await this.rx.setRemoteDescription(r.sessionDescription) } finally { this.expect = null }
               await this.rx.setLocalDescription(await this.rx.createAnswer())
-              await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.rx.localDescription!.sdp } })
+              await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: tidy(this.rx.localDescription!.sdp) } })
             }
           }
         } else {
@@ -255,7 +269,7 @@ export class SfuMedia extends Emitter implements Media {
           if (r.requiresImmediateRenegotiation && r.sessionDescription) {
             await this.rx.setRemoteDescription(r.sessionDescription)
             await this.rx.setLocalDescription(await this.rx.createAnswer())
-            await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: this.rx.localDescription!.sdp } })
+            await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: tidy(this.rx.localDescription!.sdp) } })
           }
         }
       } catch (e) {
