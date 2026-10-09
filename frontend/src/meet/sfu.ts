@@ -249,19 +249,29 @@ export class SfuMedia extends Emitter implements Media {
             if (vids[1]) found.screen = vids[1].trackId
           }
           if (!Object.keys(found).length) throw new Error(`Metered lists no tracks for that person (it said: ${JSON.stringify(listed).slice(0, 200)})`)
+          const failures: string[] = []
+          let got = 0
           for (const kind of NAMES) {
             if (!found[kind]) continue
             ids = { ...ids, [kind]: found[kind] }
-            const r = await api.meetSfu<{ immediateRenegotiationRequired?: boolean; sessionDescription?: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.rxSid}/tracks`, 'POST',
-              { op: 'subscribe', tracks: [{ remoteSessionId: sid, remoteTrackId: ids[kind] }] })
-            if (r.sessionDescription && r.immediateRenegotiationRequired !== false) {
-              for (const m of r.sessionDescription.sdp!.matchAll(/^a=mid:(\S+)/gm)) if (!this.known.has(m[1])) { this.known.add(m[1]); this.byMid.set(m[1], { peer, kind }) }
-              this.expect = { peer, kind }
-              try { await this.rx.setRemoteDescription(r.sessionDescription) } finally { this.expect = null }
-              await this.rx.setLocalDescription(await this.rx.createAnswer())
-              await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: tidy(this.rx.localDescription!.sdp) } })
-            }
+            try {
+              // right after they publish, Metered can fail (500) to find media that hasn't started flowing yet: ask again for a few seconds
+              let r: { immediateRenegotiationRequired?: boolean; sessionDescription?: RTCSessionDescriptionInit } | null = null
+              for (let i = 0; ; i++) {
+                try { r = await api.meetSfu(this.code, this.jt, `${this.rxSid}/tracks`, 'POST', { op: 'subscribe', tracks: [{ remoteSessionId: sid, remoteTrackId: ids[kind] }] }); break }
+                catch (e) { if (i >= 5) throw e; await new Promise((x) => setTimeout(x, 1000 + i * 700)) }
+              }
+              if (r && r.sessionDescription && r.immediateRenegotiationRequired !== false) {
+                this.expect = { peer, kind }
+                try { await this.rx.setRemoteDescription(r.sessionDescription) } finally { this.expect = null }
+                await this.rx.setLocalDescription(await this.rx.createAnswer())
+                await api.meetSfu(this.code, this.jt, `${this.rxSid}/renegotiate`, 'PUT', { sessionDescription: { type: 'answer', sdp: tidy(this.rx.localDescription!.sdp) } })
+              }
+              got++
+            } catch (e) { failures.push(`${kind}: ${(e as Error).message}`) }   // the other tracks are still worth having
           }
+          if (!got) throw new Error(failures.join('; '))
+          if (failures.length) { this.error = `some tracks could not be received (${failures.join('; ')})`; this.changed() }
         } else {
           const r = await api.meetSfu<{ requiresImmediateRenegotiation?: boolean; sessionDescription?: RTCSessionDescriptionInit; tracks?: { mid?: string; trackName?: string; errorCode?: string }[] }>(
             this.code, this.jt, `${this.rxSid}/tracks`, 'POST', { tracks: NAMES.map((n) => ({ location: 'remote', sessionId: sid, trackName: n })) })
