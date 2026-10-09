@@ -12,6 +12,7 @@ import { InCall } from './InCall'
 import { Session } from './session'
 import { deviceProblem, type Call, type LocalTracks } from './types'
 import { hue, initials, useCall } from './util'
+import { nextCamera, useBlackCamera, useMicLevel } from './diagnose'
 import './meet.css'
 
 export { parseMeetCode } from './util'
@@ -90,6 +91,9 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
   const ids = useRef({ mic: '', cam: '' })
   const [preview, setPreview] = useState<MediaStream | null>(null)
   const video = useRef<HTMLVideoElement>(null)
+  const black = useBlackCamera(preview)
+  const micMeter = useMicLevel(mic ? tracks.current.audio : null)
+  const nextCam = async () => { const n = await nextCamera(ids.current.cam || tracks.current.video?.getSettings().deviceId || ''); if (n) { ids.current.cam = n; void run(getCam().catch((e) => toast(deviceProblem(e, 'camera')))) } }
   const pending = useRef<Promise<unknown>[]>([])   // devices still starting: joining waits for them so they aren't lost
 
   useEffect(() => { if (video.current) video.current.srcObject = preview }, [preview])
@@ -142,11 +146,13 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
             <video ref={video} autoPlay playsInline muted className={preview ? '' : 'off'} />
             {!preview && <div className="meet-avatar big" style={{ '--h': hue(who || 'x') } as React.CSSProperties}>{initials(who)}</div>}
             <div className="meet-preview-bar">
-              <button className={`meet-ctl ${mic ? '' : 'off'}`} onClick={toggleMic} aria-label={mic ? 'Turn off microphone' : 'Turn on microphone'}>{mic ? <Mic size={20} /> : <MicOff size={20} />}</button>
+              <button className={`meet-ctl ${mic ? '' : 'off'}`} onClick={toggleMic} aria-label={mic ? 'Turn off microphone' : 'Turn on microphone'}>{mic ? <Mic size={20} /> : <MicOff size={20} />}{mic && <span className="meet-lvl" aria-hidden><i style={{ height: `${Math.round(micMeter.level * 100)}%` }} /></span>}</button>
               <button className={`meet-ctl ${cam ? '' : 'off'}`} onClick={toggleCam} aria-label={cam ? 'Turn off camera' : 'Turn on camera'}>{cam ? <Video size={20} /> : <VideoOff size={20} />}</button>
               <button className="meet-ctl" onClick={() => setDevices(true)} aria-label="Choose microphone, camera and speaker" title="Devices"><Settings2 size={20} /></button>
             </div>
           </div>
+          {black && <p className="meet-warn" role="alert">Your camera is sending a black picture. It may be the wrong camera (some laptops list an infrared camera first), covered, or in use by another app. <button className="link-btn" onClick={() => void nextCam()}>Try another camera</button></p>}
+          {mic && micMeter.silent && <p className="meet-warn" role="alert">We can't hear your microphone yet. Say something: the bar on the button should move. If it doesn't, choose another microphone with the settings button.</p>}
         </div>
         <div className="meet-join">
           <h1>{info.title}</h1>

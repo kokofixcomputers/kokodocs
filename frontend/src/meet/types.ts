@@ -19,6 +19,7 @@ export interface Peer {
   hand: number                      // 0 = hand down; otherwise the place in the queue (1 = first)
   stream: MediaStream | null        // camera and microphone (the local one has no audio, so you never hear yourself)
   screenStream: MediaStream | null
+  net?: 'connecting' | 'connected' | 'failed'   // is their audio and video getting through? (direct calls can be blocked by a network)
   mic: MediaStream | null           // the person's own microphone, to see when they talk (only for yourself; others are measured from `stream`)
 }
 
@@ -107,6 +108,10 @@ export interface Call {
   setDevice(kind: 'mic' | 'cam', id: string): Promise<void>
   react(emoji: string): void
   hand(up: boolean): void
+  /** Try the connection to this person again. */
+  retryPeer(id: string): void
+  /** How loud this person is right now (0 to 1), or null if the call can't tell. */
+  level(id: string): number | null
   lowerHand(id: string | 'all'): void
   send(text: string, to?: string): void
   mute(id: string): void

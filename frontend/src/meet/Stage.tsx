@@ -5,6 +5,7 @@ import { personItems } from './Panels'
 import { SharedStage } from './SharedStage'
 import { getSpeaker, hue, initials, onSpeaker } from './util'
 import { watchSpeaking, type Call, type Peer } from './types'
+import { nextCamera, useBlackCamera } from './diagnose'
 
 type Kind = 'cam' | 'screen'
 
@@ -17,8 +18,11 @@ function Tile({ call, peer, kind, pinned, spotlight, onPin, onTalk, onMessage, o
     const v = el.current
     if (!v) return
     if (v.srcObject !== stream) v.srcObject = stream
-    if (stream) void v.play().catch(() => {})
-  }, [stream])
+    const go = () => { if (stream) void v.play().catch(() => { if (!peer.self) window.dispatchEvent(new Event('koko:sound-blocked')) }) }
+    go()
+    window.addEventListener('koko:sound-retry', go)
+    return () => window.removeEventListener('koko:sound-retry', go)
+  }, [stream, peer.self])
   useEffect(() => {   // sound out of the speaker picked in the call
     const apply = () => { const v = el.current as (HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> }) | null; if (v?.setSinkId && !peer.self) void v.setSinkId(getSpeaker()).catch(() => {}) }
     apply()
@@ -27,14 +31,39 @@ function Tile({ call, peer, kind, pinned, spotlight, onPin, onTalk, onMessage, o
   const heard = kind === 'cam' ? (peer.self ? peer.mic : peer.audio ? peer.stream : null) : null
   useEffect(() => {
     if (!heard) { setTalking(false); onTalk(peer.id, false); return }
-    return watchSpeaking(heard, (v) => { setTalking(v); onTalk(peer.id, v) })
-  }, [heard, peer.id])
+    const flip = (v: boolean) => { setTalking(v); onTalk(peer.id, v) }
+    if (!peer.self && call.level(peer.id) !== null) {   // someone else: the call tells us how loud they are
+      let last = false, quiet = 0
+      const t = setInterval(() => {
+        const loud = (call.level(peer.id) ?? 0) > 0.02
+        quiet = loud ? 0 : quiet + 1
+        const now = loud || (last && quiet < 4)
+        if (now !== last) { last = now; flip(now) }
+      }, 150)
+      return () => { clearInterval(t); flip(false) }
+    }
+    return watchSpeaking(heard, flip)
+  }, [heard, peer.id, call])
   const showVideo = kind === 'screen' ? !!stream : peer.video && !!stream
+  const black = useBlackCamera(peer.self && kind === 'cam' && peer.video ? peer.stream : null)
+  const switchCam = async () => { const d = await call.devices(); const next = await nextCamera(d.cam); if (next) await call.setDevice('cam', next) }
+  const net = !peer.self && kind === 'cam' ? peer.net : undefined
+  const [late, setLate] = useState(false)
+  useEffect(() => { setLate(false); if (net !== 'connecting') return; const t = setTimeout(() => setLate(true), 3000); return () => clearTimeout(t) }, [net])
   return (
     <div {...ctx.bind(() => personItems(call, peer, { onMessage, onPerms, pin: { pinned, toggle: onPin } }))} className={`meet-tile ${kind} ${talking ? 'talking' : ''} ${peer.self && kind === 'cam' ? 'self' : ''} ${big ? 'big' : ''}`}>
       {ctx.node}
       <video ref={el} autoPlay playsInline muted={peer.self || kind === 'screen'} className={showVideo ? '' : 'off'} />
       {!showVideo && <div className="meet-avatar" style={{ '--h': hue(peer.name) } as React.CSSProperties}>{initials(peer.name)}</div>}
+      {net === 'failed' && (
+        <div className="meet-netfail" role="alert"><b>Can't connect to {peer.name}</b>
+          <span>Their network or yours is blocking direct calls, so their video and voice can't get through.</span>
+          <button className="btn btn-soft btn-sm btn-pill" onClick={(e) => { e.stopPropagation(); call.retryPeer(peer.id) }}>Try again</button></div>)}
+      {net === 'connecting' && late && <span className="meet-connecting"><span className="spinner sm" />Connecting to {peer.name}…</span>}
+      {black && (
+        <div className="meet-blackcam" role="alert"><b>Your camera is sending a black picture</b>
+          <span>It may be the wrong camera, covered, or in use by another app.</span>
+          <button className="btn btn-soft btn-sm btn-pill" onClick={(e) => { e.stopPropagation(); void switchCam() }}>Try another camera</button></div>)}
       {peer.hand > 0 && kind === 'cam' && <span className="meet-hand" title="Hand raised"><Hand size={15} />{peer.hand}</span>}
       <button className={`meet-pin ${pinned ? 'on' : ''}`} onClick={onPin} aria-label={pinned ? 'Unpin' : 'Pin to the main view'} title={pinned ? 'Unpin' : 'Pin to the main view'}><Pin size={14} /></button>
       <div className="meet-label">

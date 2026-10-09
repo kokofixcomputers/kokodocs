@@ -18,8 +18,12 @@ interface Link {
   queued: RTCIceCandidateInit[]
   stream: MediaStream | null
   screenStream: MediaStream | null
+  since: number                 // when this connection was started
+  tries: number                 // automatic retries so far
+  remoteFp: string              // the other side's certificate fingerprint (a fresh connection from them has a new one)
 }
 
+const STUCK_MS = 12000
 const SLOT = { mic: 0, cam: 1, screen: 2 }
 
 export class MeshMedia extends Emitter implements Media {
@@ -34,6 +38,8 @@ export class MeshMedia extends Emitter implements Media {
   private micId: string
   private camId: string
   private stopped = false
+  private failed = new Set<string>()   // people we could not reach: stays so until they connect (the automatic retries in the background don't flip it back and forth)
+  private seen = new Map<string, number>()   // when each person was first waited for (a person who never connects at all is reported too)
 
   constructor(private ctl: Control, private ice: RTCIceServer[], local: LocalTracks) {
     super()
@@ -63,7 +69,63 @@ export class MeshMedia extends Emitter implements Media {
   self(): MediaView { return { audio: !!this.audio, video: !!this.video, screen: !!this.screenTrack, stream: this.selfStream, screenStream: this.selfScreen, mic: this.selfMic } }
   peer(p: CPeer): MediaView | null {
     const l = this.links.get(p.id)
-    return { audio: p.audio, video: p.video, screen: p.screen, stream: l?.stream ?? null, screenStream: l?.screenStream ?? null }
+    return { audio: p.audio, video: p.video, screen: p.screen, stream: l?.stream ?? null, screenStream: l?.screenStream ?? null, net: this.net(p.id, l) }
+  }
+
+  private net(id: string, l?: Link): 'connecting' | 'connected' | 'failed' {
+    const s = l ? this.state(l) : this.waiting(id)
+    if (s === 'connected') { this.failed.delete(id); return s }
+    if (s === 'failed') this.failed.add(id)
+    return this.failed.has(id) ? 'failed' : s
+  }
+
+  private waiting(id: string): 'connecting' | 'failed' {
+    let t = this.seen.get(id)
+    if (t === undefined) { t = Date.now(); this.seen.set(id, t); window.setTimeout(() => { if (!this.stopped) this.changed() }, STUCK_MS + 100) }
+    return Date.now() - t > STUCK_MS ? 'failed' : 'connecting'
+  }
+
+  /** Is this person's audio and video getting through? A link that hasn't connected within a few seconds is called failed (the networks in between often block direct calls). */
+  private state(l: Link): 'connecting' | 'connected' | 'failed' {
+    const s = l.pc.connectionState
+    if (s === 'connected') return 'connected'
+    if (s === 'failed' || s === 'closed') return 'failed'
+    return Date.now() - l.since > STUCK_MS ? 'failed' : 'connecting'
+  }
+
+  /** Called a little after a link starts: if it still isn't connected, try once more by itself (a fresh offer with new network candidates), then a whole new connection. */
+  private watch(l: Link) {
+    window.setTimeout(() => {
+      if (this.stopped || this.links.get(l.id) !== l) return
+      if (l.pc.connectionState === 'connected') return
+      this.changed()   // the page shows it as failed now
+      if (!l.initiator || l.tries >= 3) return
+      l.tries++
+      if (l.tries === 1) void this.offer(l, true)
+      else this.retry(l.id, false)
+    }, STUCK_MS)
+  }
+
+  /** The loudness of what the other person's microphone is sending, from the audio levels carried in the call itself. (Feeding a remote call into the browser's audio analysis does not work in Chrome.) */
+  level(peerId: string): number | null {
+    const l = this.links.get(peerId)
+    const rx = l?.slots[SLOT.mic]?.receiver
+    if (!rx || !('getSynchronizationSources' in rx)) return null
+    const s = rx.getSynchronizationSources()[0]
+    return s && performance.now() - s.timestamp < 1500 ? s.audioLevel ?? 0 : 0
+  }
+
+  /** Start over with this person. */
+  retry(id: string, manual = true) {
+    if (manual) this.failed.delete(id)
+    const l = this.links.get(id)
+    if (!l) return
+    const tries = l.tries + 1
+    this.seen.delete(id)
+    this.closeLink(id)
+    if (l.initiator) { const n = this.link(id, true); n.tries = tries }
+    else this.ctl.send({ t: 'signal', to: id, data: { retry: true } })   // they are the one who calls: ask them to start over
+    this.changed()
   }
 
   // ---- connections to each other person
@@ -71,7 +133,7 @@ export class MeshMedia extends Emitter implements Media {
     const existing = this.links.get(id)
     if (existing) return existing
     const pc = new RTCPeerConnection({ iceServers: this.ice })
-    const l: Link = { id, pc, initiator, slots: [], media: [], queued: [], stream: null, screenStream: null }
+    const l: Link = { id, pc, initiator, slots: [], media: [], queued: [], stream: null, screenStream: null, since: Date.now(), tries: 0, remoteFp: '' }
     this.links.set(id, l)
     if (initiator) {
       l.slots = [pc.addTransceiver('audio', { direction: 'sendrecv' }), pc.addTransceiver('video', { direction: 'sendrecv' }), pc.addTransceiver('video', { direction: 'sendrecv' })]
@@ -89,6 +151,7 @@ export class MeshMedia extends Emitter implements Media {
       this.changed()
     }
     if (initiator) void this.offer(l)
+    this.watch(l)
     return l
   }
 
@@ -107,9 +170,16 @@ export class MeshMedia extends Emitter implements Media {
 
   private async onSignal(from: string, data: any) {
     if (this.stopped || !this.ctl.peers.has(from)) return
+    if (data.retry) { const old = this.links.get(from); if (old?.initiator) this.retry(from, false); return }   // they asked us to call them again
+    if (data.type === 'offer') {   // a brand new connection from them (their certificate differs): drop ours, which was waiting on the old one
+      const fp = /a=fingerprint:(\S+ \S+)/.exec(data.sdp ?? '')?.[1] ?? ''
+      const old = this.links.get(from)
+      if (old && !old.initiator && old.remoteFp && fp && old.remoteFp !== fp) this.closeLink(from)
+    }
     const l = this.link(from, false)
     try {
       if (data.type === 'offer') {
+        l.remoteFp = /a=fingerprint:(\S+ \S+)/.exec(data.sdp ?? '')?.[1] ?? l.remoteFp
         await l.pc.setRemoteDescription({ type: 'offer', sdp: data.sdp })
         if (!l.slots.length) {
           l.slots = l.pc.getTransceivers().slice(0, 3)

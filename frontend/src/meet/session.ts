@@ -134,12 +134,14 @@ export class Session extends Emitter implements Call {
     const others = [...c.peers.values()].map((p) => {
       const m = this.media?.peer(p)
       return { id: p.id, cid: p.cid, name: p.name, self: false, host: p.host, cohost: p.cohost, guest: !!p.guest, manager: p.host || p.cohost, audio: m?.audio ?? p.audio, video: m?.video ?? p.video,
-        screen: m?.screen ?? p.screen, hand: hand(p.id), stream: m?.stream ?? null, screenStream: m?.screenStream ?? null, mic: null } as Peer
+        screen: m?.screen ?? p.screen, hand: hand(p.id), stream: m?.stream ?? null, screenStream: m?.screenStream ?? null, mic: null, net: m?.net } as Peer
     })
     return [me, ...others]
   }
 
   // ---- what the person does
+  retryPeer(id: string) { this.media?.retry?.(id) }
+  level(id: string): number | null { return this.media?.level?.(id) ?? null }
   async setMic(on: boolean) {
     if (on && !this.ctl.perms.mic) { this.notice("You can't unmute yourself in this meeting. Raise your hand to ask."); return }
     await this.media?.setMic(on)

@@ -9,6 +9,7 @@ export interface MediaView {
   stream: MediaStream | null          // camera + microphone for others; camera only for yourself
   screenStream: MediaStream | null
   mic?: MediaStream | null            // your own microphone (for "who is talking" and captions)
+  net?: 'connecting' | 'connected' | 'failed'   // the link to this person: are their audio and video actually arriving?
 }
 
 export interface Media {
@@ -25,6 +26,10 @@ export interface Media {
   setDevice(kind: 'mic' | 'cam', id: string): Promise<void>
   devices(): Promise<Devices>
   stop(): void
+  /** Try the connection to someone again from scratch. */
+  retry?(peerId: string): void
+  /** How loud this person is right now (0 to 1), from the call itself; null if this provider can't say. */
+  level?(peerId: string): number | null
 }
 
 export async function listDevices(current: { mic: string; cam: string }): Promise<Devices> {

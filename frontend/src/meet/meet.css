@@ -218,3 +218,12 @@
 .hands-pip .row i { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; color: #fff; font: 600 11px 'Inter', sans-serif; font-style: normal; flex: none; } .hands-pip .row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .hands-pip .row em { font-style: normal; font-weight: 700; color: #b8860b; }
 .hands-pip button { border: 0; border-radius: 999px; padding: 5px 12px; background: var(--accent-soft); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; } .hands-pip button.primary { background: var(--accent); color: var(--accent-ink); }
 .hands-pip footer { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 12px; border-top: 1px solid var(--line); }
+
+/* when something is wrong: say so */
+.meet-netfail, .meet-blackcam { position: absolute; inset: 0; z-index: 4; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 18px; text-align: center; background: rgba(13, 13, 15, .82); backdrop-filter: blur(3px); }
+.meet-netfail b, .meet-blackcam b { font-weight: 600; } .meet-netfail span, .meet-blackcam span { font-size: 13px; color: #c8c8c8; max-width: 320px; }
+.meet-connecting { position: absolute; top: 10px; left: 10px; z-index: 3; display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 12px 4px 8px; border-radius: 999px; background: rgba(0, 0, 0, .65); }
+.meet-banner { margin: 0 12px 8px; padding: 9px 14px; border-radius: 12px; background: #5a4310; color: #ffe9a8; font-size: 13.5px; } .meet-banner a { color: #fff; font-weight: 600; }
+.meet-muted-pill { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 6; display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 999px; background: rgba(0, 0, 0, .78); color: #fff; font-size: 13px; pointer-events: none; animation: fade .3s; }
+.meet-warn { margin: 10px 0 0; padding: 9px 12px; border-radius: 12px; background: #fff3d6; color: #5a4310; font-size: 13.5px; } :root[data-theme='dark'] .meet-warn { background: #3a2f12; color: #ffe9a8; }
+.meet-lvl { position: absolute; right: 4px; bottom: 6px; width: 4px; height: 24px; border-radius: 2px; background: rgba(255, 255, 255, .25); overflow: hidden; display: flex; align-items: flex-end; } .meet-lvl i { width: 100%; background: #34d399; transition: height .1s; }

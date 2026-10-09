@@ -6,6 +6,7 @@ import { Popover } from '../ui/Popover'
 import { askConfirm } from '../ui/Dialogs'
 import { toast } from '../ui/Toast'
 import { ConsentModal } from './Consent'
+import { useAuth } from '../auth'
 import { DevicePicker } from './Devices'
 import { handsPipPref, setHandsPipPref, useHandsPip } from './HandsPip'
 import { PersonPerms } from './PersonPerms'
@@ -84,6 +85,10 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
   const self = peers[0]
   const msgs = call.chat(), polls = call.polls(), waiting = call.waiting()
   const code = call.code
+  const { user } = useAuth()
+  const [soundBlocked, setSoundBlocked] = useState(false)
+  useEffect(() => { const on = () => setSoundBlocked(true); window.addEventListener('koko:sound-blocked', on); return () => window.removeEventListener('koko:sound-blocked', on) }, [])
+  const [joinedAt] = useState(() => Date.now())
   const pip = useHandsPip(call, call.me().manager)
   const [pipPref, setPipPref] = useState(handsPipPref())
   const rec = call.recording()
@@ -225,6 +230,11 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
         {status === 'reconnecting' && <span className="meet-chip warn"><span className="spinner sm" />Reconnecting…</span>}
       </header>
 
+      {soundBlocked && (
+        <div className="meet-banner" role="alert">Your browser blocked the sound from this meeting. <button className="btn btn-soft btn-sm btn-pill" onClick={() => { window.dispatchEvent(new Event('koko:sound-retry')); setSoundBlocked(false) }}>Turn the sound on</button></div>)}
+      {peers.some((p) => !p.self && p.net === 'failed') && (
+        <div className="meet-banner" role="alert">Can't connect to {peers.filter((p) => !p.self && p.net === 'failed').map((p) => p.name).join(', ')}. Direct calls are blocked between your networks.
+          {user?.is_admin ? <> Turn on the free relay in <a href="/admin#meet" target="_blank" rel="noreferrer">Admin → Meetings</a> to fix this for everyone.</> : <> Ask the person who runs this site to turn on a relay server for meetings.</>}</div>)}
       <div className="meet-body">
         <main className="meet-stage">
           <Stage call={call} peers={peers} spotlight={call.spotlight()} layout={layout} hideSelf={hideSelf} onMessage={(id) => { setChatTo(id); setPanel('chat') }} onPerms={setPermsFor} />
@@ -249,6 +259,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
           </aside>)}
       </div>
 
+      {!self?.audio && peers.length > 1 && perms.mic && Date.now() - joinedAt < 20000 && <div className="meet-muted-pill"><MicOff size={14} />You're muted. Press M or the microphone to talk.</div>}
       <footer className="meet-bar">
         <button className={`meet-ctl ${self?.audio ? '' : 'off'} ${!perms.mic && !self?.audio ? 'locked' : ''}`} onClick={() => void call.setMic(!self?.audio)} aria-label={self?.audio ? 'Mute' : 'Unmute'} title={!perms.mic && !self?.audio ? 'The host has turned off unmuting. Raise your hand to ask.' : self?.audio ? 'Mute (M)' : 'Unmute (M)'}>{self?.audio ? <Mic size={20} /> : <MicOff size={20} />}{!perms.mic && !self?.audio && <LockIcon size={11} className="lk" />}</button>
         <button className={`meet-ctl ${self?.video ? '' : 'off'} ${!perms.camera && !self?.video ? 'locked' : ''}`} onClick={() => void call.setCam(!self?.video)} aria-label={self?.video ? 'Turn off camera' : 'Turn on camera'} title={!perms.camera && !self?.video ? "You can't turn your camera on in this meeting" : self?.video ? 'Turn off camera (V)' : 'Turn on camera (V)'}>{self?.video ? <Video size={20} /> : <VideoOff size={20} />}{!perms.camera && !self?.video && <LockIcon size={11} className="lk" />}</button>
