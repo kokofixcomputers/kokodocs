@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart3, Captions, Circle, UserRound, Check, Copy, Hand, LayoutGrid, Lock, LockOpen, Maximize, MessageSquare, Mic, MicOff, MonitorUp, MonitorX, MoreVertical, PhoneOff, Settings2, Smile, SquareUser, Users, Video, VideoOff, Volume2, X, Keyboard, Download, EyeOff, Info } from 'lucide-react'
+import { BarChart3, Captions, Circle, FileText, Lock as LockIcon, Presentation as PresentIcon, UserRound, Check, Copy, Hand, LayoutGrid, Lock, LockOpen, Maximize, MessageSquare, Mic, MicOff, MonitorUp, MonitorX, MoreVertical, PhoneOff, Settings2, Smile, SquareUser, Users, Video, VideoOff, Volume2, X, Keyboard, Download, EyeOff, Info } from 'lucide-react'
 import { api, type MeetInfo, type MeetSettings } from '../api'
 import { Modal } from '../ui/Modal'
 import { Popover } from '../ui/Popover'
@@ -7,10 +7,13 @@ import { askConfirm } from '../ui/Dialogs'
 import { toast } from '../ui/Toast'
 import { ConsentModal } from './Consent'
 import { DevicePicker } from './Devices'
+import { handsPipPref, setHandsPipPref, useHandsPip } from './HandsPip'
+import { PersonPerms } from './PersonPerms'
+import { SharePicker } from './SharePicker'
 import { ChatPanel, PeoplePanel, PollsPanel } from './Panels'
 import { SettingsForm } from './SettingsForm'
 import { Stage } from './Stage'
-import type { Call } from './types'
+import type { Call, Peer } from './types'
 import { canShare, clock, download, inviteText, useCall } from './util'
 
 type Panel = 'chat' | 'people' | 'polls' | null
@@ -69,6 +72,8 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
   const [showCaps, setShowCaps] = useState(true)
   const [modal, setModal] = useState<null | 'settings' | 'keys' | 'devices' | 'record'>(null)
   const [reask, setReask] = useState(false)
+  const [permsFor, setPermsFor] = useState<Peer | null>(null)
+  const [picker, setPicker] = useState<null | 'collab' | 'present'>(null)
   const [recBusy, setRecBusy] = useState(false)
   const [needAll, setNeedAll] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -79,7 +84,12 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
   const self = peers[0]
   const msgs = call.chat(), polls = call.polls(), waiting = call.waiting()
   const code = call.code
+  const pip = useHandsPip(call, call.me().manager)
+  const [pipPref, setPipPref] = useState(handsPipPref())
   const rec = call.recording()
+  const perms = call.perms()
+  const sharing = call.share()
+  const mineShare = !!sharing && (sharing.by_id === me.id || me.manager)
   const mode = s.recording
   const canRecord = mode === 'managers' ? me.manager : mode === 'host' ? me.owner : false
   const inCharge = !!rec?.mine || me.owner   // the recorder and the host are never asked to agree
@@ -96,6 +106,13 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
     if (waiting.length > seen.current.waiting) { toast(`${waiting[waiting.length - 1].name} is waiting to join`); beep() }
     seen.current.waiting = waiting.length
   }, [waiting.length, me.manager]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handCount = peers.filter((p) => p.hand > 0).length
+  const lastHands = useRef(0)
+  useEffect(() => {   // a manager who isn't looking at the meeting hears when a hand goes up
+    if (me.manager && handCount > lastHands.current && (document.hidden || pip.isOpen)) beep()
+    lastHands.current = handCount
+  }, [handCount, me.manager]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // keep the screen awake
   useEffect(() => {
@@ -181,6 +198,11 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
           {me.owner && <button onClick={go(() => { api.meetEdit(code, { settings: { guests: !s.guests } }).then(() => toast(s.guests ? 'Only signed-in people can join now.' : 'People without an account can join now.')).catch((e) => toast((e as Error).message)) })}><UserRound size={17} />{s.guests ? 'Stop allowing people without an account' : 'Allow people without an account'}</button>}
           {me.owner && <button onClick={go(() => setModal('settings'))}><Settings2 size={17} />Meeting settings</button>}
         </>)}
+        {me.manager && pip.supported && (<>
+          <div className="menu-sep" />
+          <button onClick={go(() => (pip.isOpen ? pip.close() : void pip.open()))}><Hand size={17} />{pip.isOpen ? 'Close the raised hands window' : 'Pop out raised hands'}</button>
+          <button onClick={go(() => { setHandsPipPref(!pipPref); setPipPref(!pipPref); toast(!pipPref ? 'Raised hands will pop out when you switch away. Reload the meeting to apply.' : 'Raised hands will stay in the meeting.') })}><Hand size={17} />{pipPref ? 'Stop popping out when I switch away' : 'Pop out when I switch away'}</button>
+        </>)}
         <div className="menu-sep" />
         <button onClick={go(() => void copy())}><Info size={17} />Copy the invite</button>
         <button onClick={go(() => setModal('keys'))}><Keyboard size={17} />Keyboard shortcuts</button>
@@ -205,7 +227,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
 
       <div className="meet-body">
         <main className="meet-stage">
-          <Stage call={call} peers={peers} spotlight={call.spotlight()} layout={layout} hideSelf={hideSelf} onMessage={(id) => { setChatTo(id); setPanel('chat') }} />
+          <Stage call={call} peers={peers} spotlight={call.spotlight()} layout={layout} hideSelf={hideSelf} onMessage={(id) => { setChatTo(id); setPanel('chat') }} onPerms={setPermsFor} />
           {peers.length === 1 && <div className="meet-alone"><p>You're the only one here.</p><button className="btn btn-soft btn-pill btn-sm" onClick={copy}>{copied ? <Check size={15} /> : <Copy size={15} />}Copy the invite</button></div>}
           <Floaters call={call} />
           {capsOn && showCaps && recent.length > 0 && <div className="meet-caps" aria-live="polite">{recent.map((c) => <p key={c.id}><b>{c.name}</b> {c.text}</p>)}</div>}
@@ -222,16 +244,25 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
               <button className="icon-btn sm" onClick={() => setPanel(null)} aria-label="Close"><X size={16} /></button>
             </div>
             {panel === 'chat' && <ChatPanel call={call} peers={peers} to={chatTo} setTo={setChatTo} />}
-            {panel === 'people' && <PeoplePanel call={call} peers={peers} onMessage={(id) => { setChatTo(id); setPanel('chat') }} />}
+            {panel === 'people' && <PeoplePanel call={call} peers={peers} onMessage={(id) => { setChatTo(id); setPanel('chat') }} onPerms={setPermsFor} />}
             {panel === 'polls' && <PollsPanel call={call} />}
           </aside>)}
       </div>
 
       <footer className="meet-bar">
-        <button className={`meet-ctl ${self?.audio ? '' : 'off'}`} onClick={() => void call.setMic(!self?.audio)} aria-label={self?.audio ? 'Mute' : 'Unmute'} title={self?.audio ? 'Mute (M)' : 'Unmute (M)'}>{self?.audio ? <Mic size={20} /> : <MicOff size={20} />}</button>
-        <button className={`meet-ctl ${self?.video ? '' : 'off'}`} onClick={() => void call.setCam(!self?.video)} aria-label={self?.video ? 'Turn off camera' : 'Turn on camera'} title={self?.video ? 'Turn off camera (V)' : 'Turn on camera (V)'}>{self?.video ? <Video size={20} /> : <VideoOff size={20} />}</button>
-        {canShare && <button className={`meet-ctl ${self?.screen ? 'on' : ''}`} onClick={toggleShare} aria-label={self?.screen ? 'Stop presenting' : 'Present your screen'} title={self?.screen ? 'Stop presenting (S)' : 'Present your screen (S)'}>{self?.screen ? <MonitorX size={20} /> : <MonitorUp size={20} />}</button>}
-        {s.reactions && (
+        <button className={`meet-ctl ${self?.audio ? '' : 'off'} ${!perms.mic && !self?.audio ? 'locked' : ''}`} onClick={() => void call.setMic(!self?.audio)} aria-label={self?.audio ? 'Mute' : 'Unmute'} title={!perms.mic && !self?.audio ? 'The host has turned off unmuting. Raise your hand to ask.' : self?.audio ? 'Mute (M)' : 'Unmute (M)'}>{self?.audio ? <Mic size={20} /> : <MicOff size={20} />}{!perms.mic && !self?.audio && <LockIcon size={11} className="lk" />}</button>
+        <button className={`meet-ctl ${self?.video ? '' : 'off'} ${!perms.camera && !self?.video ? 'locked' : ''}`} onClick={() => void call.setCam(!self?.video)} aria-label={self?.video ? 'Turn off camera' : 'Turn on camera'} title={!perms.camera && !self?.video ? "You can't turn your camera on in this meeting" : self?.video ? 'Turn off camera (V)' : 'Turn on camera (V)'}>{self?.video ? <Video size={20} /> : <VideoOff size={20} />}{!perms.camera && !self?.video && <LockIcon size={11} className="lk" />}</button>
+        <Popover trigger={({ toggle }) => <button className={`meet-ctl ${self?.screen || mineShare ? 'on' : ''}`} onClick={toggle} aria-label="Share" title="Share your screen, or a document"><MonitorUp size={20} /></button>}>
+          {(close) => (
+            <div className="menu wide">
+              {sharing && mineShare ? <button className="danger" onClick={() => { close(); call.stopShare() }}><X size={17} />{sharing.kind === 'present' ? 'Stop presenting' : 'Stop sharing the document'}</button> : null}
+              {self?.screen ? <button className="danger" onClick={() => { close(); call.stopScreen() }}><MonitorX size={17} />Stop presenting your screen</button> : null}
+              {canShare && !self?.screen && <button disabled={!perms.screen || !!sharing} onClick={() => { close(); void call.shareScreen() }}><MonitorUp size={17} />Share your screen{!perms.screen ? ' (not allowed)' : ''}</button>}
+              <button disabled={!perms.collab || (!!sharing && !mineShare)} onClick={() => { close(); setPicker('collab') }}><FileText size={17} />Edit a document together…{!perms.collab ? ' (not allowed)' : ''}</button>
+              <button disabled={!perms.present || (!!sharing && !mineShare)} onClick={() => { close(); setPicker('present') }}><PresentIcon size={17} />Present slides…{!perms.present ? ' (not allowed)' : ''}</button>
+            </div>)}
+        </Popover>
+        {(s.reactions || perms.react) && perms.react && (
           <Popover trigger={({ toggle }) => <button className="meet-ctl" onClick={toggle} aria-label="Reactions" title="Reactions"><Smile size={20} /></button>}>
             {(close) => <div className="meet-emojis">{call.emojis().map((e) => <button key={e} onClick={() => { call.react(e); close() }} aria-label={`React ${e}`}>{e}</button>)}</div>}
           </Popover>)}
@@ -252,6 +283,9 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
         ) : <button className="meet-ctl hang" onClick={leave} aria-label="Leave" title="Leave"><PhoneOff size={20} /></button>}
       </footer>
 
+      {pip.node}
+      {picker && <SharePicker call={call} mode={picker} onClose={() => setPicker(null)} />}
+      {permsFor && <PersonPerms call={call} peer={permsFor} onClose={() => setPermsFor(null)} />}
       {modal === 'settings' && <MeetingSettings code={code} call={call} onClose={() => setModal(null)} />}
       {modal === 'keys' && <Shortcuts onClose={() => setModal(null)} />}
       {modal === 'record' && (

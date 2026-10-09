@@ -1,5 +1,5 @@
 import type { MeetTicket } from '../api'
-import { Emitter, type Answer, type Caption, type CallEnd, type CallStatus, type ChatMsg, type Consents, type PollView, type RoomSettings, type Waiting } from './types'
+import { DEFAULT_PERMS, Emitter, type Answer, type Caption, type CallEnd, type CallStatus, type ChatMsg, type Consents, type PermKey, type Perms, type PollView, type RoomSettings, type Share, type Waiting } from './types'
 
 export interface CPeer { id: string; cid: string; name: string; host: boolean; cohost: boolean; guest?: boolean; audio: boolean; video: boolean; screen: boolean }
 export interface Me { id: string; cid: string; owner: boolean; cohost: boolean; manager: boolean }
@@ -27,6 +27,10 @@ export class Control extends Emitter {
   waiting: Waiting[] = []
   captions: Caption[] = []
   consents: Consents | null = null
+  perms: Perms = { ...DEFAULT_PERMS }
+  overrides: Record<string, Partial<Perms>> = {}
+  share: Share | null = null
+  slide = 0
   myConsent: Answer = null
   emojis: string[] = []
   private ws: WebSocket | null = null
@@ -40,7 +44,7 @@ export class Control extends Emitter {
   private reactFns = new Set<(from: string, emoji: string) => void>()
   private leftFns = new Set<(id: string) => void>()
   onNoticeFrom: ((m: string) => void) | null = null
-  private forceFn: ((screen: boolean) => void) | null = null
+  private forceFn: ((f: { audio?: boolean; video?: boolean; screen?: boolean }) => void) | null = null
   private muteFn: (() => void) | null = null
   private camOffFn: (() => void) | null = null
 
@@ -54,7 +58,7 @@ export class Control extends Emitter {
   onWelcome(fn: () => void) { this.welcomeFns.add(fn); return () => { this.welcomeFns.delete(fn) } }
   onReact(fn: (from: string, emoji: string) => void) { this.reactFns.add(fn); return () => { this.reactFns.delete(fn) } }
   onLeft(fn: (id: string) => void) { this.leftFns.add(fn); return () => { this.leftFns.delete(fn) } }
-  onForce(fn: (screen: boolean) => void) { this.forceFn = fn }
+  onForce(fn: (f: { audio?: boolean; video?: boolean; screen?: boolean }) => void) { this.forceFn = fn }
   onMute(fn: () => void) { this.muteFn = fn }
   onCamOff(fn: () => void) { this.camOffFn = fn }
 
@@ -90,6 +94,7 @@ export class Control extends Emitter {
         this.settings = m.settings; this.title = m.title; this.started = m.started; this.spotlight = m.spotlight; this.hands = m.hands; this.emojis = m.emojis
         this.polls = m.polls; this.waiting = m.waiting ?? []
         this.myConsent = m.consent === true ? 'yes' : m.consent === false ? 'no' : null
+        this.perms = m.perms ?? { ...DEFAULT_PERMS }; this.overrides = m.overrides ?? {}; this.share = m.share ?? null; this.slide = this.share ? this.share.slide : 0
         if (!this.chat.length) this.chat = (m.chat as any[]).map(this.toChat)
         this.changed(); this.welcomeFns.forEach((f) => f()); break
       }
@@ -118,7 +123,11 @@ export class Control extends Emitter {
       case 'mute': this.muteFn?.(); this.onNoticeFrom?.(m.by ? `${m.by} muted you.` : 'You were muted.'); break
       case 'camoff': this.camOffFn?.(); this.onNoticeFrom?.(m.by ? `${m.by} turned off your camera.` : 'Your camera was turned off.'); break
       case 'unmute-ask': this.onNoticeFrom?.(`${m.by || 'The host'} asked you to unmute.`); break
-      case 'force': this.forceFn?.(m.screen); if (m.text) this.onNoticeFrom?.(m.text); break
+      case 'force': this.forceFn?.({ audio: m.audio, video: m.video, screen: m.screen }); if (m.text) this.onNoticeFrom?.(m.text); break
+      case 'perms': this.perms = m.perms; this.changed(); break
+      case 'overrides': this.overrides = m.overrides; this.changed(); break
+      case 'share': this.share = m.share; this.slide = m.share ? m.share.slide : 0; this.changed(); break
+      case 'slide': this.slide = m.n; if (this.share) this.share = { ...this.share, slide: m.n }; this.changed(); break
       case 'kicked': this.finish(m.blocked ? 'blocked' : 'kicked'); break
       case 'denied': this.finish(m.why === 'removed' ? 'blocked' : 'denied'); break
       case 'locked': this.finish('locked'); break

@@ -5,7 +5,7 @@ import { listDevices, type Media } from './media'
 import { MeshMedia } from './mesh'
 import { RtkMedia } from './rtk'
 import { MeetingRecorder } from './record'
-import { Emitter, type Answer, type Call, type Caption, type CallEnd, type CallStatus, type ChatMsg, type Consents, type Devices, type LocalTracks, type Peer, type PollView, type RoomSettings, type Waiting } from './types'
+import { Emitter, type Answer, type Call, type Caption, type CallEnd, type CallStatus, type ChatMsg, type Consents, type Devices, type LocalTracks, type Peer, type PermKey, type Perms, type PollView, type RoomSettings, type Share, type Waiting } from './types'
 
 /** A call as the meeting page sees it: the control channel (who is here, the waiting room, chat, reactions, polls, ...) joined to the audio-and-video
  *  part (direct between browsers, or Cloudflare RealtimeKit). Audio and video only start once the room has let you in. */
@@ -96,6 +96,17 @@ export class Session extends Emitter implements Call {
   polls(): PollView[] { return this.ctl.polls }
   waiting(): Waiting[] { return this.ctl.waiting }
   captions(): Caption[] { return this.ctl.captions }
+  perms(): Perms { return this.ctl.perms }
+  overrides() { return this.ctl.overrides }
+  setPerm(id: string, key: PermKey, allow: boolean | null) { this.ctl.send({ t: 'perm', to: id, key, allow }) }
+  share(): Share | null { return this.ctl.share }
+  slide() { return this.ctl.slide }
+  shareToken() { return api.meetShareToken(this.code, this.ticket.jt) }
+  startShare(docId: string, mode: 'collab' | 'present', opts: { edit?: boolean; seek?: boolean } = {}) { this.ctl.send({ t: 'share', action: 'start', doc_id: docId, mode, ...opts }) }
+  stopShare() { this.ctl.send({ t: 'share', action: 'stop' }) }
+  setShareEdit(on: boolean) { this.ctl.send({ t: 'share', action: 'edit', on }) }
+  setShareSeek(on: boolean) { this.ctl.send({ t: 'share', action: 'seek', on }) }
+  setSlide(n: number) { this.ctl.slide = n; this.ctl.send({ t: 'slide', n }); this.changed() }
   recording() { const r = this.ctl.settings.recording_now; return r ? { ...r, mine: !!this.recorder } : null }
   consent(): Answer { return this.ctl.myConsent }
   consents(): Consents | null { return this.ctl.consents }
@@ -130,12 +141,16 @@ export class Session extends Emitter implements Call {
 
   // ---- what the person does
   async setMic(on: boolean) {
-    if (on && !this.ctl.me.manager && !this.ctl.settings.unmute) { this.notice('The host has turned off unmuting. Raise your hand to ask.'); return }
+    if (on && !this.ctl.perms.mic) { this.notice("You can't unmute yourself in this meeting. Raise your hand to ask."); return }
     await this.media?.setMic(on)
   }
-  async setCam(on: boolean) { await this.media?.setCam(on) }
+  async setCam(on: boolean) {
+    if (on && !this.ctl.perms.camera) { this.notice("You can't turn your camera on in this meeting."); return }
+    await this.media?.setCam(on)
+  }
   async shareScreen() {
-    if (this.ctl.settings.share === 'host' && !this.ctl.me.manager) { this.notice('Only the host can share their screen in this meeting.'); return }
+    if (!this.ctl.perms.screen) { this.notice('Only the host can share their screen in this meeting.'); return }
+    if (this.ctl.share) { this.notice('A document is being shared. Stop it first to share your screen.'); return }
     await this.media?.shareScreen()
   }
   stopScreen() { this.media?.stopScreen() }

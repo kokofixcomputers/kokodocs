@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Crown, Hand, MicOff, Pin, Star } from 'lucide-react'
 import { useContextMenu } from '../ui/ContextMenu'
 import { personItems } from './Panels'
+import { SharedStage } from './SharedStage'
 import { getSpeaker, hue, initials, onSpeaker } from './util'
 import { watchSpeaking, type Call, type Peer } from './types'
 
 type Kind = 'cam' | 'screen'
 
-function Tile({ call, peer, kind, pinned, spotlight, onPin, onTalk, onMessage, big }: { call: Call; peer: Peer; kind: Kind; pinned: boolean; spotlight: boolean; onPin: () => void; onTalk: (id: string, v: boolean) => void; onMessage: (id: string) => void; big?: boolean }) {
+function Tile({ call, peer, kind, pinned, spotlight, onPin, onTalk, onMessage, onPerms, big }: { call: Call; peer: Peer; kind: Kind; pinned: boolean; spotlight: boolean; onPin: () => void; onTalk: (id: string, v: boolean) => void; onMessage: (id: string) => void; onPerms: (p: Peer) => void; big?: boolean }) {
   const ctx = useContextMenu()
   const el = useRef<HTMLVideoElement>(null)
   const [talking, setTalking] = useState(false)
@@ -30,7 +31,7 @@ function Tile({ call, peer, kind, pinned, spotlight, onPin, onTalk, onMessage, b
   }, [heard, peer.id])
   const showVideo = kind === 'screen' ? !!stream : peer.video && !!stream
   return (
-    <div {...ctx.bind(() => personItems(call, peer, { onMessage, pin: { pinned, toggle: onPin } }))} className={`meet-tile ${kind} ${talking ? 'talking' : ''} ${peer.self && kind === 'cam' ? 'self' : ''} ${big ? 'big' : ''}`}>
+    <div {...ctx.bind(() => personItems(call, peer, { onMessage, onPerms, pin: { pinned, toggle: onPin } }))} className={`meet-tile ${kind} ${talking ? 'talking' : ''} ${peer.self && kind === 'cam' ? 'self' : ''} ${big ? 'big' : ''}`}>
       {ctx.node}
       <video ref={el} autoPlay playsInline muted={peer.self || kind === 'screen'} className={showVideo ? '' : 'off'} />
       {!showVideo && <div className="meet-avatar" style={{ '--h': hue(peer.name) } as React.CSSProperties}>{initials(peer.name)}</div>}
@@ -50,7 +51,7 @@ function Tile({ call, peer, kind, pinned, spotlight, onPin, onTalk, onMessage, b
 
 /** The tiles. Gallery: everyone the same size. Otherwise one person (the spotlight, a pin, someone sharing their screen, or the active speaker) is big
  *  and everyone else is in a strip beside it. */
-export function Stage({ call, peers, spotlight, layout, hideSelf, onMessage }: { call: Call; peers: Peer[]; spotlight: string | null; layout: 'gallery' | 'speaker'; hideSelf: boolean; onMessage: (id: string) => void }) {
+export function Stage({ call, peers, spotlight, layout, hideSelf, onMessage, onPerms }: { call: Call; peers: Peer[]; spotlight: string | null; layout: 'gallery' | 'speaker'; hideSelf: boolean; onMessage: (id: string) => void; onPerms: (p: Peer) => void }) {
   const [pin, setPin] = useState<string | null>(null)   // "id:kind"
   const [talk, setTalk] = useState<Record<string, boolean>>({})
   const lastTalker = useRef<string | null>(null)
@@ -75,8 +76,16 @@ export function Stage({ call, peers, spotlight, layout, hideSelf, onMessage }: {
 
   const toggle = (id: string, kind: Kind) => setPin((p) => (p === `${id}:${kind}` ? null : `${id}:${kind}`))
   const tile = (p: Peer, kind: Kind, big = false) => (
-    <Tile key={`${p.id}:${kind}`} call={call} onMessage={onMessage} peer={p} kind={kind} big={big} pinned={pin === `${p.id}:${kind}`} spotlight={spotlight === p.id} onPin={() => toggle(p.id, kind)} onTalk={onTalk} />)
+    <Tile key={`${p.id}:${kind}`} call={call} onMessage={onMessage} onPerms={onPerms} peer={p} kind={kind} big={big} pinned={pin === `${p.id}:${kind}`} spotlight={spotlight === p.id} onPin={() => toggle(p.id, kind)} onTalk={onTalk} />)
 
+  const sharing = call.share()
+  if (sharing) {
+    return (
+      <div className="meet-spot">
+        <div className="meet-main"><SharedStage call={call} share={sharing} /></div>
+        <div className="meet-strip">{shown.map((p) => tile(p, 'cam'))}</div>
+      </div>)
+  }
   if (main) {
     const rest = shown.filter((p) => !(main.kind === 'cam' && p.id === main.peer.id))
     return (

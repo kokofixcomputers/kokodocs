@@ -60,6 +60,21 @@ def make_doc_token(doc_id: str, hours: int = 12) -> str:
     return jwt.encode({"doc": doc_id, "typ": "doc", "exp": time.time() + hours * 3600}, SECRET, ALGO)
 
 
+def make_meet_doc_token(doc_id: str, role: str, code: str, minutes: int = 180) -> str:
+    """Lets someone in a meeting open the document being shared there (as viewer or editor) for as long as it is the meeting's shared item."""
+    return jwt.encode({"doc": doc_id, "typ": "mdoc", "role": role, "mtg": code, "exp": time.time() + minutes * 60}, SECRET, ALGO)
+
+
+def read_meet_doc_token(token: str | None, doc_id: str) -> dict | None:
+    if not token:
+        return None
+    try:
+        p = jwt.decode(token, SECRET, algorithms=[ALGO])
+    except jwt.PyJWTError:
+        return None
+    return p if p.get("typ") == "mdoc" and p.get("doc") == doc_id and p.get("role") in ("viewer", "editor") else None
+
+
 def doc_token_valid(token: str | None, doc_id: str) -> bool:
     if not token:
         return False

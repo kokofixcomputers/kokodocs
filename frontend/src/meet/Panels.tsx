@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BarChart3, Check, Crown, Hand, MessageSquare, Mic, MicOff, MoreHorizontal, Pin, Plus, Send, Star, Trash2, UserCheck, UserX, VideoOff, X } from 'lucide-react'
+import { BarChart3, Check, Crown, Hand, KeyRound, MessageSquare, Mic, MicOff, MoreHorizontal, Pin, Plus, Send, Star, Trash2, UserCheck, UserX, VideoOff, X } from 'lucide-react'
 import { Popover } from '../ui/Popover'
 import { useContextMenu, type CtxItem } from '../ui/ContextMenu'
 import { Select } from '../ui/Select'
@@ -19,7 +19,8 @@ export function ChatPanel({ call, peers, to, setTo }: { call: Call; peers: Peer[
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight }) }, [msgs.length])
   const target = to ? peers.find((p) => p.id === to) : null
   const mode = s.chat
-  const blocked = mode === 'off' || (mode === 'host' && !me.manager && !(target && target.manager))
+  const canWrite = call.perms().chat
+  const blocked = mode === 'off' || (!canWrite && !(target && target.manager))
   const submit = () => { if (text.trim() && !blocked) { call.send(text, to || undefined); setText('') } }
   const others = peers.filter((p) => !p.self)
   return (
@@ -32,7 +33,7 @@ export function ChatPanel({ call, peers, to, setTo }: { call: Call; peers: Peer[
             <p>{m.text}</p>
           </div>))}
       </div>
-      {mode !== 'all' && <p className="meet-note">{mode === 'off' ? 'Chat is turned off.' : me.manager ? 'Only hosts can write to everyone.' : 'Only the host can write to everyone. You can message the host privately.'}</p>}
+      {(mode === 'off' || !canWrite) && <p className="meet-note">{mode === 'off' ? 'Chat is turned off.' : 'You can only message the host privately. Pick them in "To".'}</p>}
       <div className="meet-to"><span>To</span>
         <Select label="Send to" value={to || 'all'} onChange={(v) => setTo(v === 'all' ? '' : v)}
           options={[{ value: 'all', label: 'Everyone' }, ...others.map((p) => ({ value: p.id, label: p.name }))]} /></div>
@@ -47,7 +48,7 @@ export function ChatPanel({ call, peers, to, setTo }: { call: Call; peers: Peer[
 // ───────────────────────────── people
 
 /** Everything that can be done to one person, for right-click on a tile or a row, and for the "..." button. Managers get the moderation actions. */
-export function personItems(call: Call, p: Peer, o: { onMessage: (id: string) => void; pin?: { pinned: boolean; toggle: () => void } }): CtxItem[] {
+export function personItems(call: Call, p: Peer, o: { onMessage: (id: string) => void; onPerms?: (p: Peer) => void; pin?: { pinned: boolean; toggle: () => void } }): CtxItem[] {
   const me = call.me()
   const items: CtxItem[] = []
   if (o.pin) items.push({ label: o.pin.pinned ? 'Unpin' : 'Pin to the main view', icon: <Pin size={16} />, onClick: o.pin.toggle })
@@ -57,6 +58,7 @@ export function personItems(call: Call, p: Peer, o: { onMessage: (id: string) =>
     items.push({ sep: true })
     items.push(p.audio ? { label: 'Mute', icon: <MicOff size={16} />, onClick: () => call.mute(p.id) } : { label: 'Ask to unmute', icon: <Mic size={16} />, onClick: () => call.askUnmute(p.id) })
     if (p.video) items.push({ label: 'Turn off camera', icon: <VideoOff size={16} />, onClick: () => call.camOff(p.id) })
+    if (!p.manager && o.onPerms) items.push({ label: 'Permissions…', icon: <KeyRound size={16} />, onClick: () => o.onPerms!(p) })
     if (p.hand > 0) items.push({ label: 'Lower hand', icon: <Hand size={16} />, onClick: () => call.lowerHand(p.id) })
     items.push({ label: call.spotlight() === p.id ? 'Remove spotlight' : 'Spotlight for everyone', icon: <Star size={16} />, onClick: () => call.spotlightTo(call.spotlight() === p.id ? null : p.id) })
     if (me.owner && !p.host) items.push({ label: p.cohost ? 'Remove co-host' : 'Make co-host', icon: <Crown size={16} />, onClick: () => call.cohost(p.id, !p.cohost) })
@@ -77,7 +79,7 @@ function ItemsMenu({ items, close }: { items: CtxItem[]; close: () => void }) {
     </div>)
 }
 
-export function PeoplePanel({ call, peers, onMessage }: { call: Call; peers: Peer[]; onMessage: (id: string) => void }) {
+export function PeoplePanel({ call, peers, onMessage, onPerms }: { call: Call; peers: Peer[]; onMessage: (id: string) => void; onPerms: (p: Peer) => void }) {
   const me = call.me(), waiting = call.waiting()
   const raised = peers.filter((p) => p.hand > 0).sort((a, b) => a.hand - b.hand)
   return (
@@ -96,16 +98,16 @@ export function PeoplePanel({ call, peers, onMessage }: { call: Call; peers: Pee
           {raised.map((p) => <div key={p.id} className="meet-person"><Avatar name={p.name} /><span className="name">{p.self ? `${p.name} (you)` : p.name}</span><span className="meet-hand-n"><Hand size={14} />{p.hand}</span></div>)}
         </section>)}
       <header className="meet-people-h"><b>In the meeting ({peers.length})</b></header>
-      {peers.map((p) => <Row key={p.id} call={call} p={p} onMessage={onMessage} />)}
+      {peers.map((p) => <Row key={p.id} call={call} p={p} onMessage={onMessage} onPerms={onPerms} />)}
     </div>
   )
 }
 
-function Row({ call, p, onMessage }: { call: Call; p: Peer; onMessage: (id: string) => void }) {
+function Row({ call, p, onMessage, onPerms }: { call: Call; p: Peer; onMessage: (id: string) => void; onPerms: (p: Peer) => void }) {
   const ctx = useContextMenu()
   const cs = call.recording() && call.me().manager ? call.consents() : null
   const answer = cs ? (cs.no.includes(p.id) ? 'not in the recording' : cs.pending.includes(p.id) ? 'asked about recording' : '') : ''
-  const items = () => personItems(call, p, { onMessage })
+  const items = () => personItems(call, p, { onMessage, onPerms })
   return (
         <div className="meet-person" {...ctx.bind(items)}>
           {ctx.node}

@@ -1,5 +1,5 @@
 """Meetings: rooms, guests, passcodes, the waiting room, co-hosts, reactions, polls, permanent meetings, and both providers (RealtimeKit and TURN against a mock
-Cloudflare). Needs the server on :8000 with a fresh data dir, started with KOKO_CONSENT_GRACE=2 KOKO_RECORDER_GRACE=1 KOKO_CF_API=http://127.0.0.1:8767/client/v4 KOKO_TURN_API=http://127.0.0.1:8767/v1/turn/keys"""
+Cloudflare). Needs the server on :8000 with a fresh data dir, started with KOKO_CONSENT_GRACE=2 KOKO_RECORDER_GRACE=1 KOKO_SHARE_GRACE=1 KOKO_CF_API=http://127.0.0.1:8767/client/v4 KOKO_TURN_API=http://127.0.0.1:8767/v1/turn/keys"""
 import json, os, re, sys, threading, time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from websockets.sync.client import connect as wsconnect
@@ -413,6 +413,87 @@ s, brec2 = call('POST', f'/api/meet/{bcode}/recordings', {'jt': jbh['jt']}); put
 put_chunk(brec2['id'], 1, b'F' * 600_000, jbh['jt'], bcode)
 ok('and when some of it had arrived, that part is kept', call('GET', '/api/recordings', None, U)[1]['items'][0]['size'] == 600_000 and call('GET', '/api/recordings', None, U)[1]['items'][0]['status'] == 'done')
 call('PATCH', f"/api/admin/users/{bu['id']}", {'clear_quota': True}, A)
+
+# ---- permissions, person by person
+s, pm = call('POST', '/api/meet', {'title': 'Perms'}, A); pcode_ = pm['code']
+ok('new permission settings have friendly defaults', all(pm['settings'][k] == v for k, v in {'camera': True, 'collab': 'all', 'present': 'all', 'edit_shared': True, 'seek': True}.items()), pm['settings'])
+ph, jph, fph = welcomed(pcode_, A); pg, jpg, fpg = welcomed(pcode_, None, 'Pia')
+ok('a guest is told what they may do (everything, by default)', fpg['perms'] == {k: True for k in ['mic', 'camera', 'screen', 'chat', 'react', 'collab', 'present', 'edit', 'seek']}, fpg['perms'])
+ok('and a host sees the (empty) overrides', fph.get('overrides') == {}, fph.get('overrides'))
+drain(ph); drain(pg)
+call('PUT', f'/api/meet/{pcode_}', {'settings': {'camera': False, 'unmute': False}}, A)
+np_ = rxp(pg, 'perms', lambda m: m['perms']['camera'] is False and m['perms']['mic'] is False, 2); ok('changing the meeting defaults updates what people may do at once', np_ is not None, np_)
+tx(pg, t='state', audio=True, video=True, screen=False); fc = rxp(pg, 'force', lambda m: True, 2)
+ok('turning on a camera or microphone nobody allowed is switched back off', fc and fc.get('video') is False and fc.get('audio') is False, fc)
+st_ = rxp(ph, 'state', lambda m: True, 2); ok('and others see them as off', st_ and not st_['video'] and not st_['audio'], st_)
+tx(ph, t='perm', to=fpg['me']['id'], key='camera', allow=True)
+ok('the host can allow the camera for one person', rxp(pg, 'perms', lambda m: m['perms']['camera'] is True and m['perms']['mic'] is False, 2) is not None)
+ov = rxp(ph, 'overrides', lambda m: m['overrides'], 2); ok('the host sees who has an override', ov and ov['overrides'] == {fpg['me']['id']: {'camera': True}}, ov)
+tx(pg, t='state', audio=False, video=True, screen=False); ok('and now their camera can go on', rxp(ph, 'state', lambda m: m['video'], 2) is not None)
+tx(ph, t='perm', to=fpg['me']['id'], key='camera', allow=False)
+fc = rxp(pg, 'force', lambda m: m.get('video') is False, 2); ok('taking it away switches it off if it is on right now', fc is not None, fc)
+tx(ph, t='perm', to=fpg['me']['id'], key='camera', allow=None); ok('clearing goes back to the meeting default', rxp(pg, 'perms', lambda m: m['perms']['camera'] is False, 2) is not None)
+tx(pg, t='perm', to=fph['me']['id'], key='camera', allow=False); ok("a guest cannot change anyone's permissions", rxp(ph, 'perms', lambda m: True, 0.6) is None and rx(ph, 'overrides', 0.4) is None)
+call('PUT', f'/api/meet/{pcode_}', {'settings': {'chat': 'host', 'reactions': False}}, A); rxp(pg, 'perms', lambda m: not m['perms']['chat'], 2)
+tx(ph, t='perm', to=fpg['me']['id'], key='chat', allow=True); rxp(pg, 'perms', lambda m: m['perms']['chat'], 2); drain(ph)
+tx(pg, t='chat', text='allowed to speak'); ok('one person can be allowed to chat when the rest cannot', (rxp(ph, 'chat', lambda m: True, 2) or {}).get('text') == 'allowed to speak')
+tx(ph, t='perm', to=fpg['me']['id'], key='react', allow=True); rxp(pg, 'perms', lambda m: m['perms']['react'], 2); drain(ph)
+tx(pg, t='react', emoji='👍'); ok('and to react', rxp(ph, 'react', lambda m: True, 2) is not None)
+
+# ---- sharing a document in the meeting
+def api_doc(did, tok=None, dt=None):
+    import urllib.request, urllib.error
+    h = {'content-type': 'application/json', **({'authorization': 'Bearer ' + tok} if tok else {}), **({'x-doc-token': dt} if dt else {})}
+    try: x = urllib.request.urlopen(urllib.request.Request(f'{B}/api/docs/{did}', None, h)); return x.status, json.loads(x.read())
+    except urllib.error.HTTPError as e:
+        try: return e.code, json.loads(e.read())
+        except Exception: return e.code, {}
+def make_doc(tok, kind='doc', title='A doc'):
+    return call('POST', '/api/docs', {'title': title, 'kind': kind}, tok)[1]['id']
+call('PUT', f'/api/meet/{pcode_}', {'settings': {'chat': 'all', 'reactions': True, 'camera': True, 'unmute': True}}, A)
+sd = make_doc(A, 'doc', 'Plan'); sd_slides = make_doc(A, 'slides', 'Deck'); bob_doc = make_doc(U, 'doc', 'Bobs')
+s, jpb = join(pcode_, U); pb = ws(pcode_, jpb['jt']); fpb = rx(pb, 'welcome'); drain(ph); drain(pg); drain(pb)
+tx(pg, t='share', action='start', doc_id=sd, mode='collab'); nt = rxp(pg, 'notice', lambda m: True, 2); ok('a guest cannot share a document (they own none)', nt and 'Sign in' in nt['text'], nt)
+tx(pb, t='share', action='start', doc_id=sd, mode='collab'); nt = rxp(pb, 'notice', lambda m: True, 2); ok("nobody can share a document they don't own", nt and 'own' in nt['text'], nt)
+tx(ph, t='share', action='start', doc_id=sd, mode='present'); nt = rxp(ph, 'notice', lambda m: True, 2); ok('only presentations can be presented', nt and 'presentations' in nt['text'], nt)
+ok('nothing was shared by those', call('POST', f'/api/meet/{pcode_}/share/token', {'jt': jpg['jt']})[0] == 404)
+tx(ph, t='share', action='start', doc_id=sd, mode='collab')
+sh = rxp(pg, 'share', lambda m: m['share'], 2)
+ok('the host shares a document to edit together; everyone is told', sh and sh['share']['kind'] == 'collab' and sh['share']['title'] == 'Plan' and sh['share']['edit'] and sh['share']['by'] == 'Koko' and sh['share']['doc_kind'] == 'doc', sh)
+s, tk = call('POST', f'/api/meet/{pcode_}/share/token', {'jt': jpg['jt']})
+ok('a guest in the meeting gets an editor key for it', s == 200 and tk['role'] == 'editor' and tk['doc_id'] == sd, s, tk)
+ok('without the key the guest cannot open it', api_doc(sd)[0] in (401, 403))
+s, dd = api_doc(sd, None, tk['token']); ok('with it they can, as an editor', s == 200 and dd['role'] == 'editor', s, dd)
+ok("a key for another document does not work", api_doc(bob_doc, None, tk['token'])[0] in (401, 403))
+tx(ph, t='share', action='edit', on=False); rxp(pg, 'share', lambda m: m['share'] and not m['share']['edit'], 2)
+s, tk2 = call('POST', f'/api/meet/{pcode_}/share/token', {'jt': jpg['jt']}); ok('switching editing off makes new keys view-only', tk2['role'] == 'viewer' and api_doc(sd, None, tk2['token'])[1]['role'] == 'viewer')
+tx(ph, t='share', action='edit', on=True); rxp(pg, 'share', lambda m: m['share'] and m['share']['edit'], 2)
+tx(ph, t='perm', to=fpg['me']['id'], key='edit', allow=False); s, tk3 = call('POST', f'/api/meet/{pcode_}/share/token', {'jt': jpg['jt']})
+ok("and one person can be made view-only while the rest edit", tk3['role'] == 'viewer' and call('POST', f'/api/meet/{pcode_}/share/token', {'jt': jpb['jt']})[1]['role'] == 'editor')
+tx(ph, t='perm', to=fpg['me']['id'], key='edit', allow=None); drain(ph); drain(pg)
+tx(pb, t='share', action='start', doc_id=bob_doc, mode='collab'); nt = rxp(pb, 'notice', lambda m: True, 2); ok('only one thing is shared at a time', nt and 'already sharing' in nt['text'], nt)
+tx(pg, t='state', audio=False, video=False, screen=True); fc = rxp(pg, 'force', lambda m: m.get('screen') is False, 2); ok('and nobody can share their screen over it', fc is not None and 'document' in fc.get('text', ''), fc)
+tx(pb, t='share', action='stop'); ok('only the person sharing (or a manager) can stop it', rxp(pg, 'share', lambda m: True, 0.6) is None)
+tx(ph, t='share', action='stop'); ok('the host stops it for everyone', rxp(pg, 'share', lambda m: m['share'] is None, 2) is not None)
+ok('and the keys stop working at once', api_doc(sd, None, tk['token'])[0] in (401, 403) and call('POST', f'/api/meet/{pcode_}/share/token', {'jt': jpg['jt']})[0] == 404)
+call('PUT', f'/api/meet/{pcode_}', {'settings': {'collab': 'host', 'present': 'host'}}, A); rxp(pb, 'perms', lambda m: not m['perms']['collab'], 2)
+tx(pb, t='share', action='start', doc_id=bob_doc, mode='collab'); nt = rxp(pb, 'notice', lambda m: True, 2); ok('who may share documents is a setting', nt and "can't share" in nt['text'], nt)
+tx(ph, t='perm', to=fpb['me']['id'], key='collab', allow=True); rxp(pb, 'perms', lambda m: m['perms']['collab'], 2)
+tx(pb, t='share', action='start', doc_id=bob_doc, mode='collab'); ok('but one person can be allowed to', rxp(ph, 'share', lambda m: m['share'] and m['share']['by'] == 'Bob', 2) is not None)
+tx(pb, t='share', action='stop'); rxp(ph, 'share', lambda m: m['share'] is None, 2)
+# presenting
+tx(ph, t='share', action='start', doc_id=sd_slides, mode='present'); sh = rxp(pg, 'share', lambda m: m['share'] and m['share']['kind'] == 'present', 2)
+ok('the host presents a presentation', sh and sh['share']['kind'] == 'present' and sh['share']['slide'] == 0 and sh['share']['seek'] and not sh['share']['edit'], sh)
+tk4 = call('POST', f'/api/meet/{pcode_}/share/token', {'jt': jpg['jt']})[1]; ok('viewers get a view-only key for a presentation', tk4['role'] == 'viewer')
+tx(ph, t='slide', n=3); sl = rxp(pg, 'slide', lambda m: True, 2); ok("the presenter's page reaches everyone", sl and sl['n'] == 3, sl)
+tx(pg, t='slide', n=9); ok('and nobody else can turn the page', rxp(ph, 'slide', lambda m: True, 0.6) is None)
+tx(ph, t='share', action='seek', on=False); ok('the presenter can stop people browsing on their own', rxp(pg, 'share', lambda m: m['share'] and not m['share']['seek'], 2) is not None)
+tx(pb, t='slide', n=4); ok('a participant cannot move the presentation', rxp(pg, 'slide', lambda m: True, 0.6) is None)
+tx(ph, t='cohost', to=fpb['me']['id'], on=True); rxp(pb, 'role', lambda m: m['cohost'], 2)
+tx(pb, t='slide', n=5); ok('a co-host can', (rxp(pg, 'slide', lambda m: True, 2) or {}).get('n') == 5)
+ph.close(); time.sleep(2.5)
+nsh = call('POST', f'/api/meet/{pcode_}/share/token', {'jt': jpg['jt']}); ok('when the person presenting leaves, it ends', nsh[0] == 404, nsh)
+call('PUT', f'/api/meet/{pcode_}', {'settings': {'collab': 'all', 'present': 'all'}}, A)
 
 # ---- end for everyone (one-off)
 ok('only the host can end it', call('POST', f'/api/meet/{code}/end', {}, U)[0] == 403)

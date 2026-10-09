@@ -32,7 +32,7 @@ from typing import Literal
 from . import access, stt
 from .db import get_db, settings_get, settings_set
 from .routes import must_admin, must_user, current_user
-from .security import ALGO, SECRET, RateLimiter, decrypt_secret, encrypt_secret
+from .security import ALGO, SECRET, RateLimiter, decrypt_secret, encrypt_secret, make_meet_doc_token
 
 router = APIRouter(prefix="/api")
 create_limiter = RateLimiter(30, 3600)
@@ -243,6 +243,11 @@ DEFAULTS = {
     "unmute": True,           # people may unmute themselves
     "captions": True,         # live captions can be switched on (when the server can transcribe speech)
     "max": 0,                 # most people at once; 0 = as many as the provider allows
+    "camera": True,           # people may turn their camera on
+    "collab": "all",          # who may share a document to edit together: all | host
+    "present": "all",         # who may present a presentation: all | host
+    "edit_shared": True,      # people may edit a shared document (what a new share starts with)
+    "seek": True,             # people may browse slides on their own while someone presents
     "recording": "host",      # who may record the meeting: off | host | managers
     "record_consent": False,  # everyone must agree to being recorded (those who don't are removed); otherwise people can decline and are left out of the recording
 }
@@ -260,6 +265,11 @@ class SettingsIn(BaseModel):
     unmute: bool | None = None
     captions: bool | None = None
     max: int | None = Field(None, ge=0, le=RTK_MAX)
+    camera: bool | None = None
+    collab: Literal["all", "host"] | None = None
+    present: Literal["all", "host"] | None = None
+    edit_shared: bool | None = None
+    seek: bool | None = None
     recording: Literal["off", "host", "managers"] | None = None
     record_consent: bool | None = None
 
@@ -543,6 +553,23 @@ async def meeting_media(code: str, body: Media, db=Depends(get_db)):
         raise HTTPException(403, "You're not in this meeting yet.")
     p = PROVIDERS[m["provider"]]
     return await p.creds(db, m, t["n"], t["i"], state["manager"])
+
+
+@router.post("/meet/{code}/share/token")
+async def share_token(code: str, body: Media, db=Depends(get_db)):
+    """A key to open the document being shared in the meeting: editor if people may edit it (and this person may), otherwise viewer."""
+    code = norm_code(code)
+    t = read_ticket(body.jt, code)
+    room = _room().rooms.get(code)
+    me = next((p for p in room.peers.values() if p.cid == t["i"]), None) if (t and room) else None
+    if not me:
+        raise HTTPException(403, "You're not in this meeting.")
+    sh = room.share
+    if not sh:
+        raise HTTPException(404, "Nothing is being shared right now.")
+    perms = _room().effective(room, me)
+    role = "editor" if sh["kind"] == "collab" and sh["edit"] and perms["edit"] else "viewer"
+    return {"doc_id": sh["doc_id"], "token": make_meet_doc_token(sh["doc_id"], role, code), "role": role, "kind": sh["kind"], "doc_kind": sh["doc_kind"]}
 
 
 @router.post("/meet/{code}/end")

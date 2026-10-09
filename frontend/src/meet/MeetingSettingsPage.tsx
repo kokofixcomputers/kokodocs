@@ -4,16 +4,17 @@ import { ArrowLeft, Check, Copy, Infinity as Forever, KeyRound, Lock, Plus, Sett
 import { api, type MeetInfo, type MeetSettings } from '../api'
 import { askConfirm } from '../ui/Dialogs'
 import { toast } from '../ui/Toast'
-import { AccessSettings, DEFAULT_SETTINGS, InMeetingSettings } from './SettingsForm'
+import { AccessSettings, DEFAULT_SETTINGS, InMeetingSettings, PermissionSettings } from './SettingsForm'
 import { inviteText } from './util'
 import './meet.css'
 
-type Section = 'general' | 'access' | 'cohosts' | 'meeting' | 'danger'
+type Section = 'general' | 'access' | 'cohosts' | 'perms' | 'meeting' | 'danger'
 const SECTIONS: { id: Section; label: string; icon: React.ReactNode; blurb: string }[] = [
   { id: 'general', label: 'General', icon: <Settings2 size={17} />, blurb: 'The name, the link, and whether the meeting stays on your account.' },
   { id: 'access', label: 'Who gets in', icon: <ShieldCheck size={17} />, blurb: 'Approval, passcode, guests and how many people.' },
   { id: 'cohosts', label: 'Co-hosts', icon: <Star size={17} />, blurb: 'People who help run the meeting, even before you arrive.' },
-  { id: 'meeting', label: 'In the meeting', icon: <SlidersHorizontal size={17} />, blurb: 'What people start with and what they can do.' },
+  { id: 'perms', label: 'Permissions', icon: <KeyRound size={17} />, blurb: 'What people can do: unmute, camera, screen sharing, chat, shared documents and presentations. During a meeting you can change it for one person.' },
+  { id: 'meeting', label: 'In the meeting', icon: <SlidersHorizontal size={17} />, blurb: 'What people start with, recording and captions.' },
   { id: 'danger', label: 'End or delete', icon: <Trash2 size={17} />, blurb: 'Close the running session, or remove the meeting.' },
 ]
 
@@ -171,6 +172,7 @@ export function MeetingSettingsPage() {
                 </ul>)}
             </div>)}
 
+          {section === 'perms' && <div className="ms-card meet-settings"><PermissionSettings s={d.settings} onChange={patch} guestsAllowed={cfg.guests} captionsAvailable={cfg.captions} /></div>}
           {section === 'meeting' && <div className="ms-card meet-settings"><InMeetingSettings s={d.settings} onChange={patch} guestsAllowed={cfg.guests} captionsAvailable={cfg.captions} /></div>}
 
           {section === 'danger' && meeting && (

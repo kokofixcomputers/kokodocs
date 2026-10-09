@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException
 
-from .security import doc_token_valid, read_token
+from .security import doc_token_valid, read_meet_doc_token, read_token
 
 RANK = {"viewer": 1, "editor": 2, "manager": 3, "owner": 4}   # a manager can edit and manage who has access; only the owner can delete
 
@@ -97,6 +97,12 @@ def resolve(db: sqlite3.Connection, doc: sqlite3.Row, user, doc_token: str | Non
         bump(link_role)
     elif mode == "password" and doc_token_valid(doc_token, doc["id"]):
         bump(link_role)
+
+    mt = read_meet_doc_token(doc_token, doc["id"])   # the document is being shared in a meeting this person is in
+    if mt and not doc["zk"]:
+        from . import meetroom
+        if meetroom.share_active(mt["mtg"], doc["id"]):
+            bump(mt["role"])
 
     if best:
         return Access(best, user=user)

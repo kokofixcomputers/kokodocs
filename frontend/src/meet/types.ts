@@ -27,6 +27,23 @@ export interface PollView { id: string; q: string; options: string[]; multi: boo
 export interface Caption { id: string; from: string; name: string; text: string; ts: number }
 export interface Waiting { id: string; name: string; reason: 'approval' | 'host'; guest?: boolean }
 export type RoomSettings = MeetSettings & { locked?: boolean; captions_on?: boolean; recording_now?: { by: string; since: number; required: boolean } | null }
+/** What one person may do in the meeting (the meeting's defaults, changed by what the host set for them). */
+export type PermKey = 'mic' | 'camera' | 'screen' | 'chat' | 'react' | 'collab' | 'present' | 'edit' | 'seek'
+export type Perms = Record<PermKey, boolean>
+export const PERM_LABELS: Record<PermKey, { label: string; hint: string }> = {
+  mic: { label: 'Unmute themselves', hint: 'Turn their own microphone on' },
+  camera: { label: 'Turn on their camera', hint: '' },
+  screen: { label: 'Share their screen', hint: '' },
+  chat: { label: 'Write to everyone in the chat', hint: 'They can still message the host privately' },
+  react: { label: 'Send reactions', hint: '' },
+  collab: { label: 'Start a shared document', hint: 'Share a document, spreadsheet or presentation of theirs to edit together' },
+  present: { label: 'Present a presentation', hint: 'Show their slides to everyone, page by page' },
+  edit: { label: 'Edit shared documents', hint: 'Otherwise they can only watch' },
+  seek: { label: 'Browse slides on their own', hint: 'While someone presents, look at other slides without moving the presentation' },
+}
+export const DEFAULT_PERMS: Perms = { mic: true, camera: true, screen: true, chat: true, react: true, collab: true, present: true, edit: true, seek: true }
+/** The document being edited together, or presented, in the meeting. */
+export interface Share { id: string; kind: 'collab' | 'present'; doc_id: string; title: string; doc_kind: 'doc' | 'sheet' | 'slides'; by: string; by_id: string; edit: boolean; seek: boolean; slide: number; since: number }
 export interface Consents { yes: string[]; no: string[]; pending: string[] }
 export type Answer = 'yes' | 'no' | null
 
@@ -56,6 +73,19 @@ export interface Call {
   waiting(): Waiting[]
   captions(): Caption[]
   /** Is the meeting being recorded, and was it me who pressed record? */
+  /** What I may do right now, and (for hosts) what has been changed for each person: peer id -> permissions set just for them. */
+  perms(): Perms
+  overrides(): Record<string, Partial<Perms>>
+  setPerm(id: string, key: PermKey, allow: boolean | null): void
+  share(): Share | null
+  /** The slide the presenter is on. */
+  slide(): number
+  shareToken(): Promise<import('../api').MeetShareToken>
+  startShare(docId: string, mode: 'collab' | 'present', opts?: { edit?: boolean; seek?: boolean }): void
+  stopShare(): void
+  setShareEdit(on: boolean): void
+  setShareSeek(on: boolean): void
+  setSlide(n: number): void
   recording(): { by: string; since: number; required: boolean; mine: boolean } | null
   /** My answer to "may we record you?" (null: not asked or not answered yet). The recorder and the host never need to answer. */
   consent(): Answer

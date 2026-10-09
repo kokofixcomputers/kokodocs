@@ -70,6 +70,7 @@ export interface FormResponse { id: string; created_at: number; name: string | n
 export interface MeetSettings {
   approval: boolean; host_first: boolean; guests: boolean; mute_on_entry: boolean; cam_off_on_entry: boolean
   chat: 'all' | 'host' | 'off'; share: 'all' | 'host'; reactions: boolean; unmute: boolean; captions: boolean; max: number
+  camera: boolean; collab: 'all' | 'host'; present: 'all' | 'host'; edit_shared: boolean; seek: boolean
   recording: 'off' | 'host' | 'managers'; record_consent: boolean
 }
 export interface MeetInfo {
@@ -81,6 +82,7 @@ export interface MeetInfo {
 }
 export interface RecordingItem { id: string; title: string; code: string; by: string; status: 'recording' | 'done'; mime: string; size: number; duration_ms: number; created_at: number }
 export interface MeetTicket { jt: string; cid: string; name: string; host: boolean; title: string; provider: 'mesh' | 'realtimekit'; permanent: boolean }
+export interface MeetShareToken { doc_id: string; token: string; role: 'viewer' | 'editor'; kind: 'collab' | 'present'; doc_kind: 'doc' | 'sheet' | 'slides' }
 export interface MeetMedia { provider: 'mesh' | 'realtimekit'; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
 export interface MeetCreate { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
 export interface MeetEdit { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
@@ -347,6 +349,7 @@ export const api = {
   recordings: () => request<{ items: RecordingItem[]; total: number }>('/api/recordings'),
   recording: (id: string) => request<RecordingItem & { url: string }>(`/api/recordings/${id}`),
   deleteRecording: (id: string) => request<{ ok: true }>(`/api/recordings/${id}`, { method: 'DELETE' }),
+  meetShareToken: (code: string, jt: string) => request<MeetShareToken>(`/api/meet/${encodeURIComponent(code)}/share/token`, { method: 'POST', ...json({ jt }) }),
   meetEnd: (code: string) => request<{ ok: true; permanent: boolean }>(`/api/meet/${encodeURIComponent(code)}/end`, { method: 'POST' }),
   meetCaption: (code: string, jt: string, wav: Blob) => { const fd = new FormData(); fd.append('jt', jt); fd.append('file', wav, 'speech.wav'); return request<{ text: string }>(`/api/meet/${encodeURIComponent(code)}/caption`, { method: 'POST', body: fd }) },
   adminMeet: () => request<MeetAdmin>('/api/admin/meet'),

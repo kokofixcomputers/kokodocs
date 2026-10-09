@@ -68,6 +68,11 @@ export function EditorPage() {
 
   useEffect(() => { if (!loading) { setState({ kind: 'loading' }); load() } }, [id, loading, user?.id, load, zkLocked])
 
+  useEffect(() => {   // shown inside a meeting: no header or side panels, just the document
+    const on = new URLSearchParams(window.location.search).has('embed')
+    document.documentElement.classList.toggle('embed', on)
+    return () => document.documentElement.classList.remove('embed')
+  }, [])
   const readyKind = state.kind === 'ready' ? state.info.kind : null
   useEffect(() => { setShortcutArea(readyKind === 'wiki' ? 'doc' : readyKind === 'board' ? 'general' : readyKind ?? 'general'); return () => setShortcutArea('general') }, [readyKind])
 

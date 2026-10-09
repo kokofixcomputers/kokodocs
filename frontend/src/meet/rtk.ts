@@ -34,7 +34,7 @@ export class RtkMedia extends Emitter implements Media {
     joined.on('participantJoined', (p: Part) => { this.watch(p); bump() })
     joined.on('participantLeft', (p: Part) => { this.watched.delete(p.id); this.cache.delete(p.id); bump() })
     for (const p of joined.values()) this.watch(p as Part)
-    this.ctl.onForce(() => this.stopScreen())
+    this.ctl.onForce((f) => { if (f.screen === false) this.stopScreen(); if (f.audio === false) void this.setMic(false); if (f.video === false) void this.setCam(false) })
     this.ctl.onMute(() => void this.setMic(false))
     this.ctl.onCamOff(() => void this.setCam(false))
     this.changed()
