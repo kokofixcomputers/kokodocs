@@ -4,6 +4,7 @@ The other choice, reading it on the person's own device, never reaches the serve
 pictures (any OpenAI-compatible one, or Mistral's dedicated OCR model) with an instruction to reply with only the text in the image, and the
 text comes back. Nothing is stored. The administrator chooses which model reads pictures, and can edit the instruction (admin panel, Scan a page)."""
 import base64
+import json
 import re
 from urllib.parse import urlparse
 
@@ -52,13 +53,16 @@ def clean(text: str) -> str:
 async def run_model(s: dict, data: bytes, ext: str, prompt: str) -> str:
     """Send one picture to one model with the instruction and return the text."""
     cf = CF_NATIVE.match(s["base_url"].strip().rstrip("/"))
-    # Workers AI vision models take pictures on Cloudflare's OpenAI-compatible endpoint (same token; not AI Gateway)
-    base = await check_url(f"{s['base_url'].strip().rstrip('/')}/v1" if cf else s["base_url"])
+    base = await check_url(s["base_url"])
     url = f"data:{MIME[ext]};base64,{base64.b64encode(data).decode()}"
     dedicated = (urlparse(base).hostname == "api.mistral.ai") and "ocr" in s["model"].lower()   # Mistral's own OCR model has its own endpoint
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT), follow_redirects=False) as c:
-            if dedicated:
+            if cf:   # Workers AI REST API: .../ai/run/<model>, the picture as an image_url part
+                r = await c.post(f"{cf.group(1)}/ai/run/{s['model']}", headers=headers_for(s), json={
+                    "max_tokens": 4096, "temperature": 0,
+                    "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": url}}]}]})
+            elif dedicated:
                 r = await c.post(f"{base}/ocr", headers=headers_for(s), json={"model": s["model"], "document": {"type": "image_url", "image_url": url}})
             else:
                 r = await c.post(f"{base}/chat/completions", headers=headers_for(s), json={
@@ -72,7 +76,13 @@ async def run_model(s: dict, data: bytes, ext: str, prompt: str) -> str:
         raise HTTPException(502 if r.status_code != 429 else 429, msg + hint)
     try:
         j = r.json()
-        if dedicated:
+        if cf:
+            res = j.get("result", j)
+            if j.get("success") is False or not isinstance(res, dict):
+                raise ValueError
+            text = res.get("response") if "choices" not in res else res["choices"][0]["message"]["content"]
+            text = text if isinstance(text, str) else json.dumps(text or "")
+        elif dedicated:
             text = "\n\n".join(str(p.get("markdown", "")) for p in j.get("pages", []))
         else:
             c0 = j["choices"][0]["message"]["content"]
