@@ -23,6 +23,7 @@ import { KindIcon } from '../ui/KindIcon'
 import { Logo } from '../ui/Logo'
 import { Modal } from '../ui/Modal'
 import { Popover } from '../ui/Popover'
+import { MeetMenu } from '../meet/MeetMenu'
 import { FolderShareDialog } from './FolderShareDialog'
 import { toast } from '../ui/Toast'
 import { ShareDialog } from '../editor/ShareDialog'
@@ -435,6 +436,7 @@ export function Dashboard() {
           <input placeholder="Search titles and text inside files" value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
         <div className="top-actions">
+          <MeetMenu />
           <NotificationsBell />
           <button className="icon-btn" onClick={toggle} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
           <Popover align="end" trigger={({ toggle }) => (

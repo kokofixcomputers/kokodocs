@@ -1,0 +1,80 @@
+/* Meetings: the page before joining, and the call itself. Dark in both themes while in a call, like every call app: video looks right on it. */
+.meet-shell { min-height: 100dvh; display: grid; place-items: center; padding: 20px; background: var(--bg); }
+.meet-card { width: min(440px, 100%); background: var(--surface); border-radius: 24px; padding: 32px 28px; box-shadow: var(--shadow-2); text-align: center; display: grid; gap: 10px; }
+.meet-card h1 { font-size: 22px; } .meet-card p { margin: 0; }
+.meet-actions { display: flex; justify-content: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+.meet-lobby { width: min(980px, 100%); display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: 36px; align-items: center; }
+.meet-preview { position: relative; aspect-ratio: 16 / 10; background: #151515; border-radius: 22px; overflow: hidden; display: grid; place-items: center; box-shadow: var(--shadow-2); }
+.meet-preview video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.meet-preview video.off, .meet-tile video.off { opacity: 0; }
+.meet-preview-bar { position: absolute; bottom: 14px; left: 0; right: 0; display: flex; justify-content: center; gap: 12px; }
+.meet-join { display: grid; gap: 12px; align-content: center; justify-items: start; } .meet-join h1 { font-size: 26px; } .meet-join p { margin: 0; }
+.meet-join .btn-lg { min-width: 160px; margin-top: 6px; }
+.meet-name { display: grid; gap: 6px; width: 100%; font-size: 13px; font-weight: 600; color: var(--muted); } .meet-name .field { height: 46px; }
+.meet-as { font-size: 15px; } .small { font-size: 13px; }
+.meet-enc { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 760px) { .meet-lobby { grid-template-columns: 1fr; gap: 20px; } .meet-join { justify-items: stretch; } .meet-join .btn-lg { width: 100%; } .meet-shell { align-items: start; padding: 14px; } }
+
+.meet-avatar { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; font: 600 28px 'Lexend', 'Inter', sans-serif; color: #fff; background: hsl(var(--h) 45% 42%); user-select: none; }
+.meet-avatar.big { width: 110px; height: 110px; font-size: 38px; } .meet-avatar.sm { width: 32px; height: 32px; font-size: 12px; flex: none; }
+
+/* round control buttons */
+.meet-ctl { position: relative; width: 48px; height: 48px; border-radius: 50%; border: 0; display: inline-grid; place-items: center; background: rgba(255, 255, 255, .14); color: #fff; transition: background .15s, transform .15s var(--ease); backdrop-filter: blur(8px); }
+.meet-ctl:hover { background: rgba(255, 255, 255, .24); } .meet-ctl:active { transform: scale(.92); }
+.meet-ctl.off { background: #d93a40; } .meet-ctl.off:hover { background: #e24b51; }
+.meet-ctl.on { background: #fff; color: #111; } .meet-ctl.hang { background: #d93a40; width: 56px; border-radius: 24px; } .meet-ctl.hang:hover { background: #e24b51; }
+.meet-dot { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #2563eb; color: #fff; font: 600 11px/18px 'Inter', sans-serif; font-style: normal; }
+
+/* the call */
+.meet-call { height: 100dvh; display: flex; flex-direction: column; background: #0d0d0f; color: #f2f2f2; overflow: hidden; }
+.meet-top { display: flex; align-items: center; gap: 10px; padding: 12px 16px; min-height: 52px; flex-wrap: wrap; }
+.meet-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; } .meet-title b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meet-code { display: inline-flex; align-items: center; gap: 6px; border: 0; background: rgba(255, 255, 255, .1); color: #ddd; border-radius: 999px; padding: 3px 10px; font: 500 12.5px ui-monospace, Menlo, monospace; }
+.meet-code:hover { background: rgba(255, 255, 255, .18); }
+.meet-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .1); color: #cfcfcf; }
+.meet-chip.warn { background: #5a4310; color: #ffe08a; }
+.meet-body { flex: 1; display: flex; min-height: 0; gap: 12px; padding: 0 12px; }
+.meet-stage { flex: 1; min-width: 0; min-height: 0; position: relative; display: flex; }
+.meet-wait { margin: auto; display: grid; gap: 12px; justify-items: center; color: #bbb; }
+.meet-grid { flex: 1; display: grid; gap: 10px; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); align-content: center; min-height: 0; }
+.meet-stage.spot { gap: 10px; } .meet-main { flex: 1; min-width: 0; min-height: 0; display: grid; } .meet-main .meet-tile { height: 100%; }
+.meet-strip { width: 220px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: none; } .meet-strip .meet-tile { aspect-ratio: 16 / 10; flex: none; }
+.meet-alone { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 999px; background: rgba(0, 0, 0, .6); backdrop-filter: blur(8px); font-size: 14px; }
+.meet-alone p { margin: 0; } .meet-alone .btn-soft { background: rgba(255, 255, 255, .16); color: #fff !important; }
+
+.meet-tile { position: relative; background: #1b1b1f; border-radius: 16px; overflow: hidden; display: grid; place-items: center; min-height: 0; min-width: 0; outline: 3px solid transparent; transition: outline-color .15s; }
+.meet-tile.talking { outline-color: #34d399; }
+.meet-tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.meet-tile.self video { transform: scaleX(-1); } .meet-tile.screen video { object-fit: contain; }
+.meet-label { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 20px); display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(0, 0, 0, .6); font-size: 13px; }
+.meet-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.meet-bar { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 14px 12px calc(14px + env(safe-area-inset-bottom)); flex-wrap: wrap; }
+
+.meet-panel { width: 340px; flex: none; display: flex; flex-direction: column; min-height: 0; background: var(--surface); color: var(--ink); border-radius: 18px; overflow: hidden; }
+.meet-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 6px 14px; gap: 8px; }
+.meet-panel .tabs { display: flex; gap: 4px; } .meet-panel .tabs button { border: 0; background: none; padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 14px; color: var(--muted); } .meet-panel .tabs button.on { background: var(--accent-soft); color: var(--ink); }
+.meet-log { flex: 1; overflow-y: auto; padding: 8px 14px; display: flex; flex-direction: column; gap: 12px; } .center { text-align: center; font-size: 13px; }
+.meet-msg .meta { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; } .meet-msg time { color: var(--faint); } .meet-msg p { margin: 2px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.meet-msg.mine .meta b { color: var(--link); }
+.meet-send { display: flex; align-items: center; gap: 6px; padding: 10px; border-top: 1px solid var(--line); } .meet-send .field { flex: 1; height: 42px; }
+.meet-people { padding: 6px 10px 12px; display: grid; gap: 4px; align-content: start; overflow-y: auto; }
+.meet-person { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 12px; } .meet-person:hover { background: var(--hover); }
+.meet-person .name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .meet-body { padding: 0 8px; gap: 8px; position: relative; }
+  .meet-grid { gap: 6px; } .meet-tile { border-radius: 12px; }
+  .meet-stage.spot { flex-direction: column; } .meet-strip { width: auto; flex-direction: row; height: 92px; overflow-x: auto; overflow-y: hidden; } .meet-strip .meet-tile { width: 140px; height: 100%; aspect-ratio: auto; }
+  .meet-panel { position: absolute; inset: 0 8px 0; width: auto; z-index: 5; box-shadow: var(--shadow-2); }
+  .meet-bar { gap: 8px; } .meet-ctl { width: 46px; height: 46px; } .meet-ctl.hang { width: 52px; }
+  .meet-top { padding: 10px 12px; } .meet-avatar { width: 64px; height: 64px; font-size: 22px; }
+}
+
+.meet-menu .meet-new { font-weight: 600; } .meet-menu:has(.meet-join-row) { min-width: 280px; }
+.meet-join-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; } .meet-join-row .field { flex: 1; height: 40px; }
+.menu-label { padding: 6px 12px 2px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.meet-mine { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; } .meet-mine b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .meet-mine code { font-size: 11.5px; background: none; padding: 0; color: var(--muted); }
+.meet-ok { margin: 0; color: var(--ok); font-weight: 500; }
+.ad-h { font-size: 15px; font-weight: 600; font-family: 'Inter', sans-serif; }

@@ -12,6 +12,7 @@
     "predev": "node scripts/copy-twemoji.mjs && node scripts/copy-ocr.mjs && node scripts/build-emoji-pack.mjs"
   },
   "dependencies": {
+    "@cloudflare/realtimekit": "^2.0.2",
     "@formulajs/formulajs": "^4.6.1",
     "@gutenye/ocr-browser": "^1.4.9",
     "@noble/curves": "^2.4.0",

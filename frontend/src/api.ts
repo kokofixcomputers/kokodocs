@@ -67,6 +67,18 @@ export interface MentionSkip { email: string; reason: 'not_shared' }
 export interface Comment { anchor: Record<string, unknown> | null; id: string; parent_id: string | null; body: string; quote: string; resolved: boolean; created_at: number; user_id: string; author: string; mentions: string[] }
 export interface FormFileRef { id: string; name: string; size: number }
 export interface FormResponse { id: string; created_at: number; name: string | null; email: string | null; answers: Record<string, string | string[] | FormFileRef> }
+export interface MeetInfo { code: string; title: string; host_name: string; is_host: boolean; ended: boolean; guests: boolean; provider: string; created_at: number; signed_in?: boolean; can_join?: boolean }
+export interface MeetJoin { provider: 'mesh' | 'realtimekit'; name: string; host: boolean; title: string; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
+export interface MeetAdmin {
+  enabled: boolean; guests: boolean; provider: string; providers: { id: string; label: string }[]; problem: string | null
+  turn: { mode: 'none' | 'cloudflare' | 'custom'; key_id: string; token_set: boolean; urls: string; user: string; pass_set: boolean }
+  rtk: { account: string; app: string; token_set: boolean; host_preset: string; guest_preset: string }
+}
+export interface MeetAdminIn {
+  enabled?: boolean; guests?: boolean; provider?: string
+  turn?: Partial<{ mode: string; key_id: string; token: string; urls: string; user: string; password: string }>
+  rtk?: Partial<{ account: string; app: string; token: string; host_preset: string; guest_preset: string }>
+}
 export interface OcrConfig { available: boolean; model: { id: string; label: string; model: string } | null; locked: boolean; default: '' | 'local' | 'ai' }
 export interface OcrAdmin { model_id: string; prompt: string; default_prompt: string; lock: boolean; default: '' | 'local' | 'ai'; models: { id: string; label: string; model: string; host: string }[] }
 export interface AiConversationInfo { id: string; title: string; created_at: number; updated_at: number }
@@ -309,6 +321,15 @@ export const api = {
     fd.append('file', wav, 'speech.wav')
     return (await request<{ text: string }>(`/api/docs/${id}/transcribe/draft`, { method: 'POST', body: fd, signal }, id)).text
   },
+  meetConfig: () => request<{ enabled: boolean; guests: boolean }>('/api/meet/config'),
+  meetCreate: (title: string, guests: boolean) => request<MeetInfo>('/api/meet', { method: 'POST', ...json({ title, guests }) }),
+  meetMine: () => request<MeetInfo[]>('/api/meet'),
+  meetInfo: (code: string) => request<MeetInfo>(`/api/meet/${encodeURIComponent(code)}`),
+  meetJoin: (code: string, name: string) => request<MeetJoin>(`/api/meet/${encodeURIComponent(code)}/join`, { method: 'POST', ...json({ name }) }),
+  meetEnd: (code: string) => request<{ ok: true }>(`/api/meet/${encodeURIComponent(code)}/end`, { method: 'POST' }),
+  adminMeet: () => request<MeetAdmin>('/api/admin/meet'),
+  adminMeetSave: (b: MeetAdminIn) => request<MeetAdmin>('/api/admin/meet', { method: 'PUT', ...json(b) }),
+  adminMeetTest: () => request<{ ok: boolean; message: string; turn?: boolean }>('/api/admin/meet/test', { method: 'POST' }),
   ocrConfig: () => request<OcrConfig>('/api/ocr/config'),
   adminOcr: () => request<OcrAdmin>('/api/admin/ocr'),
   adminOcrSave: (b: Partial<{ model_id: string; prompt: string; lock: boolean; default: string }>) => request<OcrAdmin>('/api/admin/ocr', { method: 'PUT', ...json(b) }),

@@ -204,6 +204,11 @@ def migrate(db: sqlite3.Connection) -> None:
     if "hash" not in {r["name"] for r in db.execute("PRAGMA table_info(uploads)")}:
         db.execute("ALTER TABLE uploads ADD COLUMN hash TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS idx_uploads_hash ON uploads(owner_id, hash)")
+    db.execute("""CREATE TABLE IF NOT EXISTS meetings (
+        code TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', host_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL DEFAULT 'mesh', provider_ref TEXT NOT NULL DEFAULT '', guests INTEGER NOT NULL DEFAULT 1,
+        created_at REAL NOT NULL, ended_at REAL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_meetings_host ON meetings(host_id, created_at)")
     db.execute("CREATE TABLE IF NOT EXISTS image_aliases (name TEXT PRIMARY KEY, target TEXT NOT NULL)")   # addresses of merged duplicates -> the surviving copy
     db.execute("CREATE INDEX IF NOT EXISTS idx_alias_target ON image_aliases(target)")
     db.execute("CREATE TABLE IF NOT EXISTS upload_refs (name TEXT NOT NULL, doc_id TEXT NOT NULL, PRIMARY KEY (name, doc_id))")
