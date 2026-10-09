@@ -61,6 +61,8 @@ export interface Call {
   readonly name: string
   status(): CallStatus
   mediaProblem(): string
+  mediaFailedToStart(): boolean
+  restartMedia(): void
   provider(): 'mesh' | 'realtimekit' | 'sfu' | 'metered' | 'livekit'
   waitReason(): 'approval' | 'host' | null
   endReason(): CallEnd | null

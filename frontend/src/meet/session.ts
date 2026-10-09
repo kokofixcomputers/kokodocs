@@ -40,6 +40,10 @@ export class Session extends Emitter implements Call {
 
   get name() { return this.ticket.name }
 
+  private startError = ''
+  /** try again after audio and video failed to start */
+  restartMedia() { this.startError = ''; this.changed(); void this.startMedia() }
+
   private async startMedia() {
     if (this.media || this.starting || this.ended) return
     this.starting = true
@@ -62,8 +66,9 @@ export class Session extends Emitter implements Call {
       }
       this.syncState(); this.changed()
     } catch (e) {
-      this.notice(`Audio and video couldn't start: ${(e as Error).message}`)
-      this.local.audio?.stop(); this.local.video?.stop()
+      this.startError = (e as Error).message || String(e)
+      this.notice(`Audio and video couldn't start: ${this.startError}`)
+      this.local.audio?.stop(); this.local.video?.stop(); this.changed()
     } finally { this.starting = false }
   }
 
@@ -90,7 +95,8 @@ export class Session extends Emitter implements Call {
   // ---- what the page reads
   status(): CallStatus { return this.ctl.status }
   provider() { return this.ticket.provider }
-  mediaProblem() { return this.media?.problem?.() ?? '' }
+  mediaProblem() { return this.startError ? `audio and video couldn't start (${this.startError})` : this.media?.problem?.() ?? '' }
+  mediaFailedToStart() { return !!this.startError }
   waitReason() { return this.ctl.waitReason }
   endReason(): CallEnd | null { return this.ctl.end }
   permanent() { return this.ticket.permanent }
@@ -158,7 +164,7 @@ export class Session extends Emitter implements Call {
       `What you may do: ${Object.entries(c.perms).map(([k, v]) => `${k} ${v ? 'yes' : 'NO'}`).join(', ')}`,
       `Meeting defaults: unmute ${c.settings.unmute}, camera ${c.settings.camera}, mute on entry ${c.settings.mute_on_entry}, camera off on entry ${c.settings.cam_off_on_entry}`,
       `What the others say about themselves: ${[...c.peers.values()].map((p) => `${p.name} mic ${p.audio ? 'on' : 'off'} camera ${p.video ? 'on' : 'off'}`).join('; ') || 'nobody else'}`, '']
-    const body = this.media?.report ? await this.media.report(names) : this.media ? '(this call provider has no detailed report)' : 'Audio and video have not started.'
+    const body = this.startError ? `Audio and video did not start: ${this.startError}` : this.media?.report ? await this.media.report(names) : this.media ? '(this call provider has no detailed report)' : 'Audio and video have not started.'
     return [...head, body].join('\n')
   }
   async setMic(on: boolean) {

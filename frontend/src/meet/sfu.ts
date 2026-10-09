@@ -18,15 +18,24 @@ interface Remote { sid: string; tracks: Partial<Record<Kind, MediaStreamTrack>>;
 const STUCK_MS = 15000
 
 function silence(): MediaStreamTrack {
-  const ctx = new AudioContext(), d = ctx.createMediaStreamDestination()
-  const t = d.stream.getAudioTracks()[0]; t.enabled = true
+  const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AC) throw new Error("this browser can't make the silent audio the call service needs (no AudioContext)")
+  const ctx = new AC(), d = ctx.createMediaStreamDestination()
+  // an oscillator at zero volume keeps the track live (some browsers give a dead track otherwise)
+  const g = ctx.createGain(); g.gain.value = 0
+  const o = ctx.createOscillator(); o.connect(g); g.connect(d); o.start()
+  void ctx.resume().catch(() => {})
+  const t = d.stream.getAudioTracks()[0]
+  if (!t) throw new Error("this browser gave no silent audio track")
   return t
 }
 function black(): MediaStreamTrack {
   const c = document.createElement('canvas'); c.width = 160; c.height = 90
+  if (typeof c.captureStream !== 'function') throw new Error("this browser can't make the blank video the call service needs (no canvas capture)")
   const g = c.getContext('2d')!; let n = 0
   const draw = () => { g.fillStyle = '#000'; g.fillRect(0, 0, 160, 90); g.fillStyle = n++ % 2 ? '#010101' : '#000'; g.fillRect(0, 0, 1, 1) }
   draw(); const t = c.captureStream(1).getVideoTracks()[0]
+  if (!t) throw new Error('this browser gave no blank video track')
   window.setInterval(draw, 1000)   // a frame every second keeps the sending side alive
   return t
 }
@@ -66,6 +75,11 @@ export class SfuMedia extends Emitter implements Media {
   }
 
   async start() {
+    let stage = 'preparing'
+    try { await this.begin((x) => { stage = x }) } catch (e) { throw new Error(`${stage}: ${(e as Error).message}`) }
+  }
+
+  private async begin(at: (stage: string) => void) {
     const pc = this.pc
     this.ctl.onSignal((from, data) => void this.onSignal(from, data))
     this.ctl.onLeft((id) => { this.remotes.delete(id); this.changed() })
@@ -93,14 +107,17 @@ export class SfuMedia extends Emitter implements Media {
     if (this.dialect === 'metered') {
       // as Metered's own quickstart does it: the session starts with a bare offer (one empty video line), then the tracks are published by id with a new offer
       pc.addTransceiver('video')
+      at('creating the session')
       await pc.setLocalDescription(await pc.createOffer())
       const first = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp } })
       this.sid = first.sessionId
       await pc.setRemoteDescription(first.sessionDescription)
       for (const t of pc.getTransceivers()) if (t.mid) this.known.add(t.mid)
+      at('adding your tracks')
       addSlots()
       await pc.setLocalDescription(await pc.createOffer())
       this.slots.forEach((t, i) => { this.ids[NAMES[i]] = t.sender.track?.id })
+      at('publishing your tracks')
       const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.sid}/tracks`, 'POST', {
         op: 'publish', sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp },
         tracks: this.slots.map((t, i) => ({ trackId: t.sender.track?.id, mid: t.mid, customTrackName: NAMES[i] })),
@@ -108,6 +125,7 @@ export class SfuMedia extends Emitter implements Media {
       await pc.setRemoteDescription(r.sessionDescription)
       this.slots.forEach((t) => { if (t.mid) this.known.add(t.mid) })
     } else {
+      at('creating the session')
       addSlots()
       await pc.setLocalDescription(await pc.createOffer())
       const { sessionId } = await api.meetSfu<{ sessionId: string }>(this.code, this.jt, 'session')
