@@ -337,6 +337,14 @@ export class SfuMedia extends Emitter implements Media {
     stats?.forEach((s: any) => { if (s.type === 'transport' && s.selectedCandidatePairId) { const p = (stats as any).get(s.selectedCandidatePairId); if (p) out.push(`Selected path: ${p.currentRoundTripTime ? Math.round(p.currentRoundTripTime * 1000) + ' ms' : ''}, sent ${p.bytesSent ?? 0} B, received ${p.bytesReceived ?? 0} B`) } })
     out.push(`Receiving connection: ${this.rx === this.pc ? 'the same' : `${this.rx.connectionState}, ICE ${this.rx.iceConnectionState}, session ${this.rxSid}`}`, `Transceivers: ${pc_summary(this.rx)}`, `Signalling state: ${this.pc.signalingState}`, `Connection lines assigned to people: ${[...this.byMid.entries()].map(([m, v]) => `${m}=${names[v.peer] ?? v.peer}/${v.kind}`).join(', ') || 'none'}`)
     for (const [id, r] of this.remotes) out.push(`${names[id] ?? id}: session ${r.sid}, ${Object.keys(r.tracks).join(', ') || 'no tracks yet'}`)
+    // what the video actually looks like on the wire: sent (our side) and received (theirs)
+    for (const [label, c] of [['sending', this.pc], ['receiving', this.rx]] as const) {
+      const st = await c.getStats().catch(() => null)
+      st?.forEach((x: any) => {
+        if (x.type === 'outbound-rtp' && x.kind === 'video') out.push(`Sent video (${label}) ${x.mid ?? ''}: ${x.frameWidth ?? '?'}x${x.frameHeight ?? '?'}, ${x.framesSent ?? 0} frames, ${x.keyFramesEncoded ?? 0} key frames, ${x.bytesSent ?? 0} B, ${x.qualityLimitationReason ?? ''}`)
+        if (x.type === 'inbound-rtp' && x.kind === 'video') out.push(`Received video (${label}) ${x.mid ?? ''}: ${x.frameWidth ?? '?'}x${x.frameHeight ?? '?'}, ${x.framesReceived ?? 0} frames, ${x.framesDecoded ?? 0} decoded, ${x.keyFramesDecoded ?? 0} key frames, ${x.packetsLost ?? 0} lost, ${x.pliCount ?? 0} key frame requests, ${x.bytesReceived ?? 0} B`)
+      })
+    }
     const p = this.problem(); if (p) out.push(`Problem: ${p}`)
     return out.join('\n')
   }
