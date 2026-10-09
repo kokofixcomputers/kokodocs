@@ -83,19 +83,24 @@ export class SfuMedia extends Emitter implements Media {
       this.changed()
     }
     pc.onconnectionstatechange = () => this.changed()
-    this.slots = [
-      pc.addTransceiver(this.audio ?? this.ph.mic, { direction: 'sendonly' }),
-      pc.addTransceiver(this.video ?? this.ph.cam, { direction: 'sendonly' }),
-      pc.addTransceiver(this.ph.screen, { direction: 'sendonly' }),
-    ]
-    await pc.setLocalDescription(await pc.createOffer())
+    const addSlots = () => {
+      this.slots = [
+        pc.addTransceiver(this.audio ?? this.ph.mic, { direction: 'sendonly' }),
+        pc.addTransceiver(this.video ?? this.ph.cam, { direction: 'sendonly' }),
+        pc.addTransceiver(this.ph.screen, { direction: 'sendonly' }),
+      ]
+    }
     if (this.dialect === 'metered') {
-      // the session starts with this offer; the tracks are then published by id (and a new offer)
+      // as Metered's own quickstart does it: the session starts with a bare offer (one empty video line), then the tracks are published by id with a new offer
+      pc.addTransceiver('video')
+      await pc.setLocalDescription(await pc.createOffer())
       const first = await api.meetSfu<{ sessionId: string; sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, 'session', 'POST', { sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp } })
       this.sid = first.sessionId
       await pc.setRemoteDescription(first.sessionDescription)
-      this.slots.forEach((t, i) => { this.ids[NAMES[i]] = t.sender.track?.id })
+      for (const t of pc.getTransceivers()) if (t.mid) this.known.add(t.mid)
+      addSlots()
       await pc.setLocalDescription(await pc.createOffer())
+      this.slots.forEach((t, i) => { this.ids[NAMES[i]] = t.sender.track?.id })
       const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${this.sid}/tracks`, 'POST', {
         op: 'publish', sessionDescription: { type: 'offer', sdp: pc.localDescription!.sdp },
         tracks: this.slots.map((t, i) => ({ trackId: t.sender.track?.id, mid: t.mid, customTrackName: NAMES[i] })),
@@ -103,6 +108,8 @@ export class SfuMedia extends Emitter implements Media {
       await pc.setRemoteDescription(r.sessionDescription)
       this.slots.forEach((t) => { if (t.mid) this.known.add(t.mid) })
     } else {
+      addSlots()
+      await pc.setLocalDescription(await pc.createOffer())
       const { sessionId } = await api.meetSfu<{ sessionId: string }>(this.code, this.jt, 'session')
       this.sid = sessionId
       const r = await api.meetSfu<{ sessionDescription: RTCSessionDescriptionInit }>(this.code, this.jt, `${sessionId}/tracks`, 'POST', {
@@ -138,7 +145,12 @@ export class SfuMedia extends Emitter implements Media {
         if (this.dialect === 'metered') {
           // one track at a time: the connection line each one arrives on is then the new one in the server's offer
           // the ids to ask for are the ones Metered itself lists for that session (found by the names we gave the tracks)
-          const listed = await api.meetSfu<{ items?: { trackId?: string; customTrackName?: string }[] }>(this.code, this.jt, `${this.sid}/tracks`, 'POST', { op: 'list', sessionId: sid })
+          let listed: { items?: { trackId?: string; customTrackName?: string }[] } = {}
+          for (let i = 0; i < 6; i++) {   // their tracks may take a moment to appear after they publish
+            listed = await api.meetSfu(this.code, this.jt, `${this.sid}/tracks`, 'POST', { op: 'list', sessionId: sid })
+            if (listed.items?.length) break
+            await new Promise((r) => setTimeout(r, 1000))
+          }
           const found: Ids = {}
           for (const t of listed.items ?? []) if (t.trackId && NAMES.includes(t.customTrackName as Kind)) found[t.customTrackName as Kind] = t.trackId
           if (!Object.keys(found).length) {   // the names weren't kept: they were published in order (microphone, camera, screen), so the order of the lines says which is which
