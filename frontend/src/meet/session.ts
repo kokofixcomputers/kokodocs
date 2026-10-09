@@ -49,6 +49,7 @@ export class Session extends Emitter implements Call {
       const m = mc.provider === 'realtimekit' ? new RtkMedia(this.ctl, mc.auth_token ?? '', this.local)
         : mc.provider === 'livekit' ? new LivekitMedia(this.ctl, mc.url ?? '', mc.token ?? '', this.local)
         : mc.provider === 'sfu' || mc.provider === 'metered' ? new SfuMedia(this.ctl, this.code, this.ticket.jt, mc.ice_servers ?? [], this.local, mc.provider === 'metered' ? 'metered' : 'cloudflare')
+        : mc.provider !== 'mesh' ? (() => { throw new Error(`This version of KokoDocs doesn't know how to join a call carried by "${mc.provider}". Reload the page to get the latest version.`) })()
         : new MeshMedia(this.ctl, mc.ice_servers ?? [], this.local)
       m.subscribe(() => { this.syncState(); this.changed(); void this.syncCaptions() })
       m.onNotice((t) => this.notice(t))

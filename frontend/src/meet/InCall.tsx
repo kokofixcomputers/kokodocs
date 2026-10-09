@@ -229,6 +229,7 @@ export function InCall({ call, info, onLeave, captionsAvailable }: { call: Call;
         {rec && (inCharge
           ? <span className="meet-chip rec" title={rec.mine ? 'You are recording this meeting' : `${rec.by} is recording this meeting`}><i />Recording {clock(Date.now() - rec.since)}</span>
           : <button className="meet-chip rec" onClick={() => setReask(true)} title="Click to change your answer"><i />Recording · {call.consent() === 'yes' ? "you're in it" : call.consent() === 'no' ? "you're not in it" : 'waiting for your answer'}</button>)}
+        {call.provider() !== 'mesh' && <span className="meet-chip" title="Everyone sends their audio and video once to this service, which sends it on to the others."><Server size={13} />{({ sfu: 'Cloudflare SFU', metered: 'Metered SFU', livekit: 'LiveKit', realtimekit: 'Cloudflare RealtimeKit' } as Record<string, string>)[call.provider()] ?? call.provider()}</span>}
         {(() => {
           const others = peers.filter((p) => !p.self && p.path)
           const relayed = others.filter((p) => p.path === 'relay')
