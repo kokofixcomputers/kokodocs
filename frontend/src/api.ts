@@ -87,7 +87,7 @@ export interface MeetMedia { provider: 'mesh' | 'realtimekit'; ice_servers?: RTC
 export interface MeetCreate { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
 export interface MeetEdit { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
 export interface MeetAdmin {
-  enabled: boolean; guests: boolean; provider: string; providers: { id: string; label: string }[]; problem: string | null
+  enabled: boolean; guests: boolean; provider: string; providers: { id: string; label: string }[]; problem: string | null; warning?: string | null
   turn: { mode: 'none' | 'cloudflare' | 'custom'; key_id: string; token_set: boolean; urls: string; user: string; pass_set: boolean }
   rtk: { account: string; app: string; token_set: boolean; host_preset: string; guest_preset: string }
 }

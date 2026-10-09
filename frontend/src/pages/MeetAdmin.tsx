@@ -72,6 +72,7 @@ export function MeetAdminSection() {
             <Field label="TURN key id" hint="Cloudflare dashboard → Realtime → TURN → create a key."><input value={d.keyId} onChange={(e) => setD({ ...d, keyId: e.target.value })} autoComplete="off" /></Field>
             <Field label="TURN key API token" hint={m.turn.token_set ? 'Saved. Type to replace it.' : undefined}><input type="password" value={d.token} placeholder={m.turn.token_set ? '••••••••' : ''} onChange={(e) => setD({ ...d, token: e.target.value })} autoComplete="new-password" /></Field>
           </>)}
+          {m.warning && <p className="form-error">{m.warning}</p>}
           {m.turn.mode === 'custom' && (<>
             <label className="ai-field"><span>Server addresses, one per line</span>
               <textarea className="ocr-prompt" rows={3} value={d.urls} placeholder={'free.expressturn.com:3478\nturn:relay.example.com:3478\nglobal.relay.metered.ca:80 username password'} onChange={(e) => setD({ ...d, urls: e.target.value })} spellCheck={false} />

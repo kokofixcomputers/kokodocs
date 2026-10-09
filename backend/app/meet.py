@@ -146,12 +146,23 @@ def parse_servers(text: str) -> tuple[list[dict], list[str]]:
     return ([{"urls": shared}] if shared else []) + own, bad
 
 
+def is_relay(sv: dict) -> bool:
+    return any(str(u).lower().startswith(("turn:", "turns:")) for u in sv["urls"])
+
+
 def custom_servers(c: dict) -> list[dict]:
     servers, _ = parse_servers(c["turn_urls"])
     for sv in servers:
-        if "username" not in sv and c["turn_user"]:   # the lines without a login of their own share the username and password below the list
+        if "username" not in sv and c["turn_user"] and c["turn_pass"]:   # the lines without a login of their own share the username and password below the list
             sv.update(username=c["turn_user"], credential=c["turn_pass"])
-    return servers
+    # a relay without a username and password makes the browser refuse to start any call at all, so such an entry is left out
+    return [sv for sv in servers if not is_relay(sv) or (sv.get("username") and sv.get("credential"))]
+
+
+def missing_login(c: dict) -> list[str]:
+    """Relay addresses that have no username and password, from either their own line or the boxes below the list."""
+    servers, _ = parse_servers(c["turn_urls"])
+    return [u for sv in servers if is_relay(sv) and "username" not in sv and not (c["turn_user"] and c["turn_pass"]) for u in sv["urls"]]
 
 
 async def ice_servers(c: dict) -> list[dict]:
@@ -202,6 +213,9 @@ class Mesh:
     async def test(db) -> dict:
         servers = await ice_servers(cfg(db))
         turn = any(any(str(u).startswith(("turn:", "turns:")) for u in s["urls"]) for s in servers)
+        warn = relay_warning(cfg(db))
+        if warn:
+            return {"ok": True, "message": warn, "turn": turn}
         return {"ok": True, "message": ("Relay servers are working." if turn else "Works, with STUN only. People on strict networks (some offices, mobile networks) may not connect without a TURN relay."), "turn": turn}
 
 
@@ -662,9 +676,18 @@ async def meeting_caption(code: str, jt: str = Form(...), language: str | None =
 
 # ---------------------------------------------------------------- admin
 
+def relay_warning(c: dict) -> str | None:
+    """Not a reason to stop meetings (the entries without a login are simply left out) but something the administrator should fix."""
+    miss = missing_login(c) if c["turn_mode"] == "custom" else []
+    if miss:
+        return f"{', '.join(x.split(':', 1)[1] for x in miss[:3])} has no username and password, so it is being ignored. Put them after the address on the same line (address username password), or in the Username and Password boxes."
+    _, bad = parse_servers(c["turn_urls"]) if c["turn_mode"] == "custom" else ([], [])
+    return ("These aren't server addresses and are ignored: " + ", ".join(f'"{x}"' for x in bad[:4])) if bad else None
+
+
 def admin_view(db) -> dict:
     c = cfg(db)
-    return {"enabled": c["enabled"], "guests": c["guests"], "provider": c["provider"],
+    return {"warning": relay_warning(c), "enabled": c["enabled"], "guests": c["guests"], "provider": c["provider"],
             "providers": [{"id": p.id, "label": p.label} for p in PROVIDERS.values()],
             "turn": {"mode": c["turn_mode"], "key_id": c["turn_key_id"], "token_set": bool(c["turn_token"]), "urls": c["turn_urls"], "user": c["turn_user"], "pass_set": bool(c["turn_pass"])},
             "rtk": {"account": c["rk_account"], "app": c["rk_app"], "token_set": bool(c["rk_token"]), "host_preset": c["rk_host"], "guest_preset": c["rk_guest"]},
@@ -727,6 +750,12 @@ def admin_put(body: AdminIn, admin=Depends(must_admin), db=Depends(get_db)):
         _, bad = parse_servers(t.urls)
         if bad:
             raise HTTPException(422, "These aren't server addresses: " + ", ".join(f'"{x}"' for x in bad[:6]) + ". Write one address per line, like free.expressturn.com:3478. A login goes after the address on the same line (address username password), or in the Username and Password boxes below.")
+    if t and (t.urls is not None or t.user is not None or t.password is not None) and (t.mode or settings_get(db, "meet_turn_mode", "none")) == "custom":
+        now = {"turn_urls": t.urls if t.urls is not None else settings_get(db, "meet_turn_urls"), "turn_user": (t.user if t.user is not None else settings_get(db, "meet_turn_user")).strip(),
+               "turn_pass": t.password.strip() if t.password and t.password.strip() else _secret(db, "meet_turn_pass")}
+        miss = missing_login(now)
+        if miss:
+            raise HTTPException(422, f"{', '.join(x.split(':', 1)[1] for x in miss[:3])} needs a username and password: put them after the address on the same line (address username password), or in the Username and Password boxes below.")
     if t:
         _put(db, "meet_turn_mode", t.mode)
         _put(db, "meet_turn_key_id", t.key_id)

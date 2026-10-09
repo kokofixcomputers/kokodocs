@@ -535,6 +535,25 @@ ok('the address with its login on one line works (also with = and + in the passw
 s, r = call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'free.expressturn.com:3478, global.relay.metered.ca:80 userA secretA'}}, A)
 s, mc = call('POST', f"/api/meet/{m3['code']}/media", {'jt': j3['jt']})
 ok('a comma between addresses on one line is fine', s == 200 and ['turn:free.expressturn.com:3478', 'turn:global.relay.metered.ca:80'] == [u for x in mc['ice_servers'] for u in x['urls'] if 'stun' not in u], mc)
+s, r = call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'free.expressturn.com:3478\nglobal.relay.metered.ca:80', 'user': '', 'password': ''}}, A)
+ok('a relay address with no username and password is refused when saved, saying which', s == 422 and 'free.expressturn.com:3478' in r['detail'] and 'username and password' in r['detail'], s, r)
+call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'free.expressturn.com:3478 u1 p1\nglobal.relay.metered.ca:80', 'user': '', 'password': ''}}, A) if False else None
+s, r = call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom', 'urls': 'global.relay.metered.ca:80 user pass'}}, A)
+call('PUT', '/api/admin/meet', {'turn': {'mode': 'custom'}}, A)
+s, mc = call('POST', f"/api/meet/{m3['code']}/media", {'jt': j3['jt']})
+ok('and anything that slips through is never sent to a browser without a login', all(not any(u.startswith(('turn:', 'turns:')) for u in x['urls']) or (x.get('username') and x.get('credential')) for x in mc['ice_servers']), mc)
+# a configuration saved by an older version (addresses, no login): calls must keep working, with a warning for the admin
+import sqlite3 as _sq
+_d = _sq.connect('data/kokodocs.sqlite3')
+for k, v in {'meet_turn_mode': 'custom', 'meet_turn_urls': 'free.expressturn.com:3478\nglobal.relay.metered.ca:80', 'meet_turn_user': '', 'meet_turn_pass': ''}.items():
+    _d.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (k, v))
+_d.commit(); _d.close()
+s, m4 = call('POST', '/api/meet', {}, A); ok('a relay entry with no login does not stop meetings from starting', s == 200, s, m4)
+s, j4 = join(m4['code'], None, 'Zed'); w4 = ws(m4['code'], j4['jt']); rx(w4, 'welcome')
+s, mc = call('POST', f"/api/meet/{m4['code']}/media", {'jt': j4['jt']})
+ok("and is left out of what browsers receive (they'd refuse to start a call with it)", s == 200 and all(not any(u.startswith(('turn:', 'turns:')) for u in x['urls']) for x in mc['ice_servers']), mc)
+ok('the admin page warns about it', 'no username and password' in (call('GET', '/api/admin/meet', None, A)[1].get('warning') or ''))
+s, r = call('POST', '/api/admin/meet/test', {}, A); ok('and the test says so instead of "working"', s == 200 and 'ignored' in r['message'] and not r['turn'], r)
 call('PUT', '/api/admin/meet', {'turn': {'mode': 'none'}}, A)
 
 # ---- RealtimeKit
