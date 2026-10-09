@@ -73,13 +73,14 @@ export interface MeetSettings {
 }
 export interface MeetInfo {
   code: string; title: string; host_name: string; is_host: boolean; ended: boolean; permanent: boolean; guests: boolean; has_passcode: boolean; approval: boolean
-  provider: string; created_at: number; live: number; signed_in?: boolean; can_join?: boolean
-  settings?: MeetSettings; passcode?: string   // only the host sees these
+  provider: string; created_at: number; live: number; is_cohost?: boolean; signed_in?: boolean; can_join?: boolean
+  settings?: MeetSettings; passcode?: string   // only the host sees these (a co-host sees the passcode)
+  cohosts?: { id: string; name: string; email: string }[]; role?: 'host' | 'cohost'
 }
 export interface MeetTicket { jt: string; cid: string; name: string; host: boolean; title: string; provider: 'mesh' | 'realtimekit'; permanent: boolean }
 export interface MeetMedia { provider: 'mesh' | 'realtimekit'; ice_servers?: RTCIceServer[]; max?: number; auth_token?: string }
-export interface MeetCreate { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings> }
-export interface MeetEdit { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings> }
+export interface MeetCreate { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
+export interface MeetEdit { title?: string; permanent?: boolean; passcode?: string; settings?: Partial<MeetSettings>; cohosts?: string[] }
 export interface MeetAdmin {
   enabled: boolean; guests: boolean; provider: string; providers: { id: string; label: string }[]; problem: string | null
   turn: { mode: 'none' | 'cloudflare' | 'custom'; key_id: string; token_set: boolean; urls: string; user: string; pass_set: boolean }

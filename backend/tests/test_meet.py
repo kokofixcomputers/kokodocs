@@ -225,6 +225,32 @@ tx(wcat, t='cohost', to=wh['me']['id'], on=True); ok('but only the host can make
 tx(wcat, t='kick', to=wh['me']['id']); ok('and a co-host cannot remove the host', rx(h, 'kicked', 0.4) is None)
 drain(h); tx(wcat, t='mute', to=wh['me']['id']); ok('or mute the host', rx(h, 'mute', 0.4) is None)
 
+# ---- co-hosts set before the meeting starts
+s, r = call('POST', '/api/meet', {'title': 'Early', 'cohosts': ['nobody@nowhere.io']}, A)
+ok('a co-host must have an account: unknown emails are named', s == 422 and 'nobody@nowhere.io' in json.dumps(r), s, r)
+s, ch = call('POST', '/api/meet', {'title': 'Early', 'permanent': True, 'cohosts': ['BOB@x.io', 'koko@kokodev.cc'], 'settings': {'approval': True, 'host_first': True}}, A); ecode = ch['code']
+ok('co-hosts are saved by account (the host is not listed as their own co-host)', s == 200 and [x['email'] for x in ch['cohosts']] == ['bob@x.io'] and ch['role'] == 'host', ch)
+mine_b = call('GET', '/api/meet', None, U)[1]
+it = [x for x in mine_b if x['code'] == ecode]
+ok('the co-host sees it in their own list, as co-hosting, with the invite details but not the settings', it and it[0]['role'] == 'cohost' and 'settings' not in it[0] and it[0]['title'] == 'Early', mine_b)
+ok('and cannot change it', call('PUT', f'/api/meet/{ecode}', {'title': 'mine now'}, U)[0] == 403)
+s, ie = call('GET', f'/api/meet/{ecode}', None, U); ok('the page knows they are a co-host, and others are not told', ie['is_cohost'] and not call('GET', f'/api/meet/{ecode}', None, C)[1]['is_cohost'])
+eb, jeb, fe = welcomed(ecode, U)
+ok('the co-host arrives first, straight in (the host is not there, and approval is on)', fe['me']['manager'] and fe['me']['cohost'] and not fe['me']['owner'], fe['me'])
+s, jq = join(ecode, None, 'Quinn'); eq = ws(ecode, jq['jt'])
+ok('everyone else waits for approval, because a manager is present', (rx(eq) or {}).get('reason') == 'approval')
+wl = rxp(eb, 'waiting-list', lambda m: m['list']); tx(eb, t='admit', id=wl['list'][0]['id'])
+ok('and the co-host lets them in', (rx(eq, 'welcome') or {}).get('t') == 'welcome')
+eh, _, fh = welcomed(ecode, A)
+ok('the host arriving later is the owner, and the co-host stays co-host', fh['me']['owner'] and any(p['cohost'] and p['name'] == 'Bob' for p in fh['peers']), fh['peers'])
+# change the list while people are in
+call('PUT', f'/api/meet/{ecode}', {'cohosts': []}, A)
+role = rxp(eb, 'role', lambda m: m['cohost'] is False, 3); ok('removing a co-host in the settings demotes them at once', role is not None and not role['manager'], role)
+call('PUT', f'/api/meet/{ecode}', {'cohosts': ['bob@x.io', 'cat@x.io']}, A)
+role = rxp(eb, 'role', lambda m: m['cohost'] is True, 3); ok('and adding one promotes them at once', role is not None and role['manager'], role)
+s, r = call('PUT', f'/api/meet/{ecode}', {'cohosts': ['bob@x.io'] * 3 + [f'u{i}@x.io' for i in range(12)]}, A); ok('there is a limit', s in (422,), s)
+ok('the list is returned to the host', {x['email'] for x in [y for y in call('GET', '/api/meet', None, A)[1] if y['code'] == ecode][0]['cohosts']} == {'bob@x.io', 'cat@x.io'})
+
 # ---- host first
 s, hf = call('POST', '/api/meet', {'title': 'Host first', 'settings': {'host_first': True}}, A); fcode = hf['code']
 s, jg1 = join(fcode, None, 'Early'); we = ws(fcode, jg1['jt'])

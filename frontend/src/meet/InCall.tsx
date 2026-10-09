@@ -53,7 +53,7 @@ function MeetingSettings({ code, call, onClose }: { code: string; call: Call; on
         <div className="switch-row"><div><b>Lock the meeting</b><span>Nobody new can join until you unlock it.</span></div>
           <button role="switch" aria-checked={!!call.settings().locked} aria-label="Lock the meeting" className={`toggle ${call.settings().locked ? 'on' : ''}`} onClick={() => call.lock(!call.settings().locked)} /></div>
         {s ? <SettingsForm s={s} onChange={change} guestsAllowed={cfg.guests} captionsAvailable={cfg.captions} /> : <span className="spinner" />}
-        <p className="muted small">Changes apply right away, and are saved to this meeting.</p>
+        <p className="muted small">Changes apply right away, and are saved to this meeting. <a href={`/meetings/${code}#cohosts`} target="_blank" rel="noreferrer">Open the full settings page</a> to set co-hosts, a passcode and more.</p>
       </div>
     </Modal>)
 }

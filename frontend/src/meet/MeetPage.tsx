@@ -63,7 +63,7 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
   const { user } = useAuth()
   const [name, setName] = useState(readName())
   const [passcode, setPasscode] = useState('')
-  const [askPass, setAskPass] = useState(info.has_passcode && !info.is_host)
+  const [askPass, setAskPass] = useState(info.has_passcode && !info.is_host && !info.is_cohost)
   const [mic, setMic] = useState(false)
   const [cam, setCam] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -131,8 +131,8 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
         </div>
         <div className="meet-join">
           <h1>{info.title}</h1>
-          <p className="muted">Hosted by {info.host_name || 'someone'}{info.permanent ? ' · permanent meeting' : ''}</p>
-          {info.approval && !info.is_host && <p className="meet-hint"><Clock size={14} />The host will let you in.</p>}
+          <p className="muted">Hosted by {info.host_name || 'someone'}{info.permanent ? ' · permanent meeting' : ''}{info.is_cohost ? ' · you are a co-host' : ''}</p>
+          {info.approval && !info.is_host && !info.is_cohost && <p className="meet-hint"><Clock size={14} />The host will let you in.</p>}
           {user ? <p className="meet-as">Joining as <b>{user.name}</b></p> : (
             <label className="meet-name"><span>Your name</span>
               <span className="field"><input value={name} maxLength={60} placeholder="Name" autoFocus onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void join()} /></span></label>)}
@@ -140,7 +140,7 @@ function Lobby({ code, info, onJoined }: { code: string; info: MeetInfo; onJoine
             <label className="meet-name"><span>Meeting passcode</span>
               <span className="field"><input type="password" value={passcode} maxLength={64} placeholder="Passcode" autoComplete="off" onChange={(e) => setPasscode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void join()} /></span></label>)}
           {error && <p className="form-error">{error}</p>}
-          <button className="btn btn-primary btn-pill btn-lg" disabled={busy} onClick={join}>{busy ? <span className="spinner sm" /> : info.approval && !info.is_host ? 'Ask to join' : 'Join now'}</button>
+          <button className="btn btn-primary btn-pill btn-lg" disabled={busy} onClick={join}>{busy ? <span className="spinner sm" /> : info.approval && !info.is_host && !info.is_cohost ? 'Ask to join' : 'Join now'}</button>
           {!user && <p className="muted small">Have an account? <Link to="/login" state={{ from: `/m/${code}` }}>Sign in</Link></p>}
           <p className="meet-enc"><LockOpen size={14} />Calls aren't end-to-end encrypted.</p>
         </div>

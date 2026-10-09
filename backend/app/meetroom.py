@@ -20,7 +20,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from . import access
 from .db import connect
-from .meet import MESH_MAX, PROVIDERS, RTK_MAX, cfg, closed, load_settings, norm_code, read_ticket
+from .meet import MESH_MAX, PROVIDERS, RTK_MAX, cfg, closed, cohost_ids, load_settings, norm_code, read_ticket
 
 ws_router = APIRouter()
 
@@ -81,6 +81,7 @@ class Room:
     admitted: set = field(default_factory=set)      # cids that have been let in (a reconnect doesn't wait again)
     blocked: set = field(default_factory=set)
     cohosts: set = field(default_factory=set)       # keys (account id or cid) made co-host this session
+    fixed: set = field(default_factory=set)         # accounts the host set as co-hosts in the meeting's settings, before it started
     locked: bool = False
     captions_on: bool = False                       # live captions are running (every browser transcribes its own speech)
     spotlight: str | None = None
@@ -225,7 +226,7 @@ async def close_room(code: str, msg: dict) -> None:
     rooms.pop(code, None)
 
 
-async def push_settings(code: str, settings: dict, title: str) -> None:
+async def push_settings(code: str, settings: dict, title: str, fixed: list[str] | None = None) -> None:
     """The host changed the meeting's settings (from the manager page or the meeting itself): the room follows at once."""
     room = rooms.get(code)
     if not room:
@@ -233,6 +234,16 @@ async def push_settings(code: str, settings: dict, title: str) -> None:
     was_approval = room.settings.get("approval")
     room.settings = {**settings}
     room.title = title
+    if fixed is not None:   # the host changed who is a co-host in the settings: people already in the room are promoted or demoted
+        room.fixed = set(fixed)
+        for p in list(room.peers.values()):
+            want = bool(p.uid and p.uid in room.fixed) or p.key in room.cohosts
+            if not p.owner and want != p.cohost:
+                p.cohost = want
+                await broadcast(room, {"t": "cohost", "id": p.id, "on": want})
+                await send(p, {"t": "role", "manager": p.manager, "cohost": want, "waiting": [{"id": w.id, "name": w.name, "reason": w.waiting} for w in room.waiting.values()] if want else []})
+                if want:
+                    await release_host_waiters(room)
     await broadcast(room, {"t": "settings", "settings": settings_view(room), "title": title})
     if was_approval and not settings.get("approval"):   # approval switched off: everyone waiting for it comes in
         for w in [x for x in room.waiting.values() if x.waiting == "approval"]:
@@ -268,7 +279,7 @@ def _authorize(code: str, ticket: str | None):
             return None
         db.execute("UPDATE meetings SET last_used = ? WHERE code = ?", (time.time(), code))
         db.commit()
-        return {"cid": t["i"], "name": t["n"], "uid": uid, "owner": bool(uid and uid == m["host_id"]), "provider": m["provider"], "settings": s, "title": m["title"], "host_id": m["host_id"]}
+        return {"cid": t["i"], "name": t["n"], "uid": uid, "owner": bool(uid and uid == m["host_id"]), "provider": m["provider"], "settings": s, "title": m["title"], "host_id": m["host_id"], "fixed": cohost_ids(m)}
 
 
 @ws_router.websocket("/ws/meet/{code}")
@@ -280,8 +291,9 @@ async def ws_meet(ws: WebSocket, code: str):
         await ws.close(code=4403)
         return
     room = rooms.setdefault(code, Room(code, who["provider"], who["settings"], who["title"], who["host_id"]))
+    room.fixed = set(who["fixed"])
     me = Peer(secrets.token_hex(6), who["cid"], ws, who["name"], who["uid"], who["owner"], gid=ws.query_params.get("gid", "")[:40])
-    me.cohost = me.key in room.cohosts
+    me.cohost = me.key in room.cohosts or bool(me.uid and me.uid in room.fixed)
     # the same person reconnecting: the old connection is replaced (and does not have to be approved again)
     for old in [x for x in [*room.peers.values(), *room.waiting.values()] if x.cid == me.cid]:
         await send(old, {"t": "replaced"})

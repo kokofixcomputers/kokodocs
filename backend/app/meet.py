@@ -282,6 +282,46 @@ def closed(m) -> bool:
     return bool(m["ended_at"]) or expired(m)
 
 
+MAX_COHOSTS = 10
+
+
+def cohost_ids(m) -> list[str]:
+    try:
+        ids = json.loads(m["cohosts"] or "[]")
+    except ValueError:
+        ids = []
+    return [i for i in ids if isinstance(i, str)]
+
+
+def cohost_people(db, m) -> list[dict]:
+    out = []
+    for uid in cohost_ids(m):
+        u = db.execute("SELECT id, name, email FROM users WHERE id = ?", (uid,)).fetchone()
+        if u:
+            out.append({"id": u["id"], "name": u["name"], "email": u["email"]})
+    return out
+
+
+def resolve_cohosts(db, emails: list[str], host_id: str) -> list[str]:
+    """Account emails to account ids. Co-hosts must have an account (that is how they are recognised when they arrive)."""
+    ids: list[str] = []
+    missing = []
+    for e in emails:
+        e = (e or "").strip().lower()
+        if not e:
+            continue
+        u = db.execute("SELECT id FROM users WHERE lower(email) = ? AND (disabled IS NULL OR disabled = 0)", (e,)).fetchone()
+        if not u:
+            missing.append(e)
+        elif u["id"] != host_id and u["id"] not in ids:
+            ids.append(u["id"])
+    if missing:
+        raise HTTPException(422, "No account with the email " + ", ".join(missing) + ". Co-hosts need a KokoDocs account.")
+    if len(ids) > MAX_COHOSTS:
+        raise HTTPException(422, f"A meeting can have up to {MAX_COHOSTS} pre-set co-hosts.")
+    return ids
+
+
 def _room():
     from . import meetroom
     return meetroom
@@ -292,12 +332,12 @@ def public_info(db, m, user) -> dict:
     s = load_settings(m)
     return {"code": m["code"], "title": m["title"], "host_name": host["name"] if host else "", "is_host": bool(user and user["id"] == m["host_id"]),
             "ended": closed(m), "permanent": bool(m["permanent"]), "guests": s["guests"], "has_passcode": bool(m["passcode_enc"]), "approval": s["approval"],
-            "provider": m["provider"], "created_at": m["created_at"], "live": _room().live_count(m["code"])}
+            "is_cohost": bool(user and user["id"] in cohost_ids(m)), "provider": m["provider"], "created_at": m["created_at"], "live": _room().live_count(m["code"])}
 
 
 def full_info(db, m, user) -> dict:
     """What the host sees and edits (the settings and the passcode)."""
-    return {**public_info(db, m, user), "settings": load_settings(m), "passcode": passcode_of(m)}
+    return {**public_info(db, m, user), "settings": load_settings(m), "passcode": passcode_of(m), "cohosts": cohost_people(db, m), "role": "host"}
 
 
 def get_meeting(db, code: str):
@@ -340,6 +380,7 @@ class NewMeeting(BaseModel):
     permanent: bool = False
     passcode: str = Field("", max_length=32)
     settings: SettingsIn = SettingsIn()
+    cohosts: list[str] = Field(default_factory=list, max_length=20)   # account emails
 
 
 def _check_passcode(p: str):
@@ -360,13 +401,14 @@ def create_meeting(body: NewMeeting, user=Depends(must_user), db=Depends(get_db)
     if body.permanent and db.execute("SELECT COUNT(*) AS n FROM meetings WHERE host_id = ? AND permanent = 1", (user["id"],)).fetchone()["n"] >= MAX_PERMANENT:
         raise HTTPException(409, f"You can keep up to {MAX_PERMANENT} permanent meetings. Delete one first.")
     _check_passcode(body.passcode)
+    cohosts = resolve_cohosts(db, body.cohosts, user["id"])
     s = body.settings.model_dump(exclude_none=True)
     guests = 1 if (s.pop("guests", True) and c["guests"]) else 0
     code = new_code()
     title = body.title.strip() or f"{user['name']}'s meeting"
     now = time.time()
-    db.execute("INSERT INTO meetings (code, title, host_id, provider, guests, created_at, permanent, settings, passcode_enc, last_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-               (code, title, user["id"], c["provider"], guests, now, 1 if body.permanent else 0, json.dumps(s), encrypt_secret(body.passcode) if body.passcode else "", now))
+    db.execute("INSERT INTO meetings (code, title, host_id, provider, guests, created_at, permanent, settings, passcode_enc, last_used, cohosts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+               (code, title, user["id"], c["provider"], guests, now, 1 if body.permanent else 0, json.dumps(s), encrypt_secret(body.passcode) if body.passcode else "", now, json.dumps(cohosts)))
     db.commit()
     return full_info(db, get_meeting(db, code), user)
 
@@ -374,7 +416,12 @@ def create_meeting(body: NewMeeting, user=Depends(must_user), db=Depends(get_db)
 @router.get("/meet")
 def my_meetings(user=Depends(must_user), db=Depends(get_db)):
     rows = db.execute("SELECT * FROM meetings WHERE host_id = ? AND ended_at IS NULL ORDER BY permanent DESC, created_at DESC LIMIT 100", (user["id"],)).fetchall()
-    return [full_info(db, m, user) for m in rows if not expired(m)]
+    out = [full_info(db, m, user) for m in rows if not expired(m)]
+    # meetings someone made you a co-host of: you can start them, let people in and share the invite, but not change them
+    for m in db.execute("SELECT * FROM meetings WHERE ended_at IS NULL AND host_id != ? AND cohosts LIKE ? ORDER BY created_at DESC LIMIT 100", (user["id"], f'%"{user["id"]}"%')).fetchall():
+        if user["id"] in cohost_ids(m) and not expired(m):
+            out.append({**public_info(db, m, user), "passcode": passcode_of(m), "role": "cohost"})
+    return out
 
 
 @router.get("/meet/{code}")
@@ -392,6 +439,7 @@ class EditMeeting(BaseModel):
     permanent: bool | None = None
     passcode: str | None = Field(None, max_length=32)     # "" removes it
     settings: SettingsIn | None = None
+    cohosts: list[str] | None = Field(None, max_length=20)   # account emails; replaces the list
 
 
 @router.put("/meet/{code}")
@@ -416,9 +464,11 @@ async def edit_meeting(code: str, body: EditMeeting, user=Depends(must_user), db
             db.execute("UPDATE meetings SET guests = ? WHERE code = ?", (1 if (patch.pop("guests") and cfg(db)["guests"]) else 0, m["code"]))
         merged = {k: v for k, v in load_settings(get_meeting(db, code)).items() if k != "guests"} | patch
         db.execute("UPDATE meetings SET settings = ? WHERE code = ?", (json.dumps(merged), m["code"]))
+    if body.cohosts is not None:
+        db.execute("UPDATE meetings SET cohosts = ? WHERE code = ?", (json.dumps(resolve_cohosts(db, body.cohosts, m["host_id"])), m["code"]))
     db.commit()
     m = get_meeting(db, code)
-    await _room().push_settings(m["code"], load_settings(m), m["title"])
+    await _room().push_settings(m["code"], load_settings(m), m["title"], cohost_ids(m))
     return full_info(db, m, user)
 
 
@@ -456,8 +506,9 @@ def join_meeting(code: str, body: Join, user=Depends(current_user), db=Depends(g
     if not name:
         raise HTTPException(422, "Enter your name")
     host = bool(user and user["id"] == m["host_id"])
+    cohost = bool(user and user["id"] in cohost_ids(m))
     pc = passcode_of(m)
-    if pc and not host and not secrets.compare_digest(body.passcode.strip().encode(), pc.encode()):
+    if pc and not (host or cohost) and not secrets.compare_digest(body.passcode.strip().encode(), pc.encode()):
         raise HTTPException(403, {"code": "passcode", "message": "That passcode isn't right" if body.passcode else "This meeting needs a passcode"})
     if not join_limiter.allow(f"join:{user['id'] if user else 'guest'}"):
         raise HTTPException(429, "Too many people joining at once. Try again in a minute.")

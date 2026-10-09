@@ -208,10 +208,10 @@ def migrate(db: sqlite3.Connection) -> None:
         code TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', host_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         provider TEXT NOT NULL DEFAULT 'mesh', provider_ref TEXT NOT NULL DEFAULT '', guests INTEGER NOT NULL DEFAULT 1,
         created_at REAL NOT NULL, ended_at REAL, permanent INTEGER NOT NULL DEFAULT 0, settings TEXT NOT NULL DEFAULT '{}',
-        passcode_enc TEXT NOT NULL DEFAULT '', last_used REAL)""")
+        passcode_enc TEXT NOT NULL DEFAULT '', last_used REAL, cohosts TEXT NOT NULL DEFAULT '[]')""")
     db.execute("CREATE INDEX IF NOT EXISTS idx_meetings_host ON meetings(host_id, created_at)")
     have = {r["name"] for r in db.execute("PRAGMA table_info(meetings)")}
-    for col, ddl in (("permanent", "INTEGER NOT NULL DEFAULT 0"), ("settings", "TEXT NOT NULL DEFAULT '{}'"), ("passcode_enc", "TEXT NOT NULL DEFAULT ''"), ("last_used", "REAL")):
+    for col, ddl in (("permanent", "INTEGER NOT NULL DEFAULT 0"), ("settings", "TEXT NOT NULL DEFAULT '{}'"), ("passcode_enc", "TEXT NOT NULL DEFAULT ''"), ("last_used", "REAL"), ("cohosts", "TEXT NOT NULL DEFAULT '[]'")):
         if col not in have:
             db.execute(f"ALTER TABLE meetings ADD COLUMN {col} {ddl}")
     db.execute("CREATE TABLE IF NOT EXISTS image_aliases (name TEXT PRIMARY KEY, target TEXT NOT NULL)")   # addresses of merged duplicates -> the surviving copy
