@@ -4,7 +4,7 @@ import { NetChip } from './NetStatus'
 
 /** The desktop app's own title bar (the window has no system one): back and forward, search, and whether the offline copy is up to date.
  *  The system's window buttons sit at the left on a Mac and at the right on Windows and Linux, so there is room left for them. */
-export interface DesktopApi { platform: string; version: string; fullscreen: (cb: (on: boolean) => void) => void }
+export interface DesktopApi { platform: string; version: string; fullscreen: (cb: (on: boolean) => void) => void; appFiles: (cb: (s: { done: number; total: number; finished?: boolean }) => void) => void }
 declare global { interface Window { kokoDesktop?: DesktopApi } }
 
 export const isDesktop = () => typeof window !== 'undefined' && !!window.kokoDesktop
@@ -14,6 +14,7 @@ export function installDesktop() {
   const c = document.documentElement.classList
   c.add('desktop'); c.add(d.platform === 'darwin' ? 'desktop-mac' : 'desktop-overlay')
   d.fullscreen((on) => c.toggle('desktop-full', on))
+  d.appFiles((s) => window.dispatchEvent(new CustomEvent('koko:appfiles', { detail: s })))
 }
 
 export function DesktopBar() {

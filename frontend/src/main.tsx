@@ -23,6 +23,7 @@ import { SearchPalette } from './ui/Search'
 import { ShortcutsSheet } from './ui/Shortcuts'
 import { SyncNotices } from './ui/SyncNotices'
 import { ssoPopupLanding } from './ui/ssoPopup'
+import { Crash } from './ui/Crash'
 import { NetPill } from './ui/NetStatus'
 import { DesktopBar, installDesktop, isDesktop } from './ui/DesktopBar'
 import { KeyboardFit } from './ui/KeyboardFit'
@@ -64,7 +65,7 @@ if (!ssoPopupLanding()) ReactDOM.createRoot(document.getElementById('root')!).re
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
+        <Crash><Routes>
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/forgot" element={<ForgotPage />} />
@@ -81,7 +82,7 @@ if (!ssoPopupLanding()) ReactDOM.createRoot(document.getElementById('root')!).re
           <Route path="/meetings" element={<RequireAuth><MeetingsPage /></RequireAuth>} />
           <Route path="/meetings/:code" element={<RequireAuth><MeetingSettingsPage /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        </Routes></Crash>
         <Toaster />
         <Tooltips />
         <SearchPalette />

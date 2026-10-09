@@ -61,7 +61,8 @@ async function prefetch() {
     const sw = await (await net.fetch(server + '/sw.js', { cache: 'no-store' })).text().catch(() => '')
     const queue = new Set(JSON.parse(/const PRECACHE = (\[.*\])/.exec(sw)?.[1] || '[]').filter(cacheable))
     const idx = saved('/index.html'); if (idx) for (const m of idx.body.toString().matchAll(FILE)) queue.add('/assets/' + m[1])
-    const done = new Set()
+    const done = new Set(); let fin = 0
+    const report = () => win?.webContents.send('desktop:app', { done: fin, total: queue.size })
     const next = () => { for (const p of queue) if (!done.has(p)) return p; return null }
     await Promise.all([1, 2, 3, 4].map(async () => {
       for (let p = next(); p; p = next()) {
@@ -75,8 +76,10 @@ async function prefetch() {
           }
           if (/javascript|css/.test(type)) for (const m of body.toString('utf8').matchAll(FILE)) queue.add('/assets/' + m[1])   // what this file loads in turn
         } catch { /* next time */ }
+        fin++; if (fin % 5 === 0) report()
       }
     }))
+    win?.webContents.send('desktop:app', { done: queue.size, total: queue.size, finished: true })
   } catch { /* offline, or an older server */ } finally { prefetching = false }
 }
 

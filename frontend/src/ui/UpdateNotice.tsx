@@ -1,3 +1,4 @@
+import { isOnline } from '../offline/net'
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 
@@ -45,6 +46,7 @@ export function UpdateNotice() {
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void check() }, POLL_MS)
     document.addEventListener('visibilitychange', visible); window.addEventListener('online', check)
     const preload = (e: Event) => {   // Vite fires this when a lazy-loaded file can't be fetched
+      if (!isOnline()) return   // offline a reload can't help: the error goes to the screen that explains it (see Crash)
       e.preventDefault()
       let last = 0; try { last = Number(sessionStorage.getItem(RELOADED_KEY) ?? 0) } catch { /* ignore */ }
       if (Date.now() - last > 30_000) { try { sessionStorage.setItem(RELOADED_KEY, String(Date.now())) } catch { /* ignore */ } location.reload() }
