@@ -3,7 +3,7 @@ import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
 import { getWriting } from '../prefs'
 import { AUTOCOMPLETE_SYSTEM, POLISHED_PREFIX, aiConnected, askModel, tidySuggestion } from './ai/model'
-import { cancelLocal, completeLocal, loadLocalModel } from './ai/local'
+import { cancelLocal, completeLocal, loadLocalModel, chooseLocalModel } from './ai/local'
 
 /** Grey suggestions while you type, like GitHub Copilot: pause after a few words and the likely rest of the sentence appears after the cursor.
  *  Tab takes it, Cmd/Ctrl+→ takes one word, anything else (or Esc) dismisses it. Off until it is switched on in Settings → Writing; the suggestions come from a small
@@ -67,7 +67,7 @@ export const Autocomplete = Extension.create<{ allowServer: () => boolean }>({
               if (!opts.allowServer() || !(await aiConnected())) return
               raw = await askModel(AUTOCOMPLETE_SYSTEM, before, mine.signal, undefined, 200)
             } else {
-              raw = await completeLocal(POLISHED_PREFIX + before.slice(-600), 20, mine.signal)
+              chooseLocalModel(w.localModel); raw = await completeLocal(POLISHED_PREFIX + before.slice(-600), 20, mine.signal)
             }
             if (mine.signal.aborted || id !== serial || view.state.doc !== doc || view.state.selection.head !== at) return
             const text = tidySuggestion(before, raw)
@@ -79,7 +79,7 @@ export const Autocomplete = Extension.create<{ allowServer: () => boolean }>({
             if (prev.doc.eq(v.state.doc) && prev.selection.eq(v.state.selection)) return
             stop(); serial++
             if (!eligible(v)) return
-            if (getWriting().engine === 'device') { void loadLocalModel().catch(() => undefined) }
+            if (getWriting().engine === 'device') { chooseLocalModel(getWriting().localModel); void loadLocalModel().catch(() => undefined) }
             timer = window.setTimeout(() => void run(), DELAY)
           },
           destroy: stop,
