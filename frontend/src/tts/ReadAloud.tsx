@@ -43,7 +43,7 @@ export function ReadAloud({ plain }: { plain: boolean }) {
             <>
               <div className="tts-field"><span>Neural voice</span>
                 <Select label="Neural voice" value={nv} options={NEURAL_VOICES.map((v) => ({ value: v.id, label: v.label }))} onChange={(v) => { setNv(v); setNeuralVoice(v); if (on) reader.stop() }} /></div>
-              <p className="tts-hint small">Runs on this device and works offline. The first time it downloads the voice (about 90 MB); after that it starts right away. Other languages are read with the device’s voices.</p>
+              <p className="tts-hint small">Runs on this device and works offline. It uses your graphics card when the browser offers one (much faster; the first download is about 160 MB), otherwise the processor (about 90 MB). After that it starts right away. Other languages are read with the device’s voices.</p>
             </>
           ) : (
             <>

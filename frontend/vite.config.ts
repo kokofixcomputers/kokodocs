@@ -49,14 +49,28 @@ function serviceWorker(): Plugin {
   }
 }
 
+/** The ONNX runtime comes in two builds: processor only (about half the size) and one that can also use the graphics card (WebGPU). "Scan a page" only needs the processor
+ *  one, so that is what a plain `import 'onnxruntime-web'` becomes, except inside the read-aloud voice's library, which has its own copy of the runtime and can use the card. */
+function ortBuilds(): Plugin {
+  return {
+    name: 'ort-builds',
+    enforce: 'pre',
+    async resolveId(source, importer, options) {
+      if (source !== 'onnxruntime-web') return null
+      const voice = !!importer && /[\\/]@huggingface[\\/]transformers[\\/]/.test(importer)
+      return this.resolve(voice ? 'onnxruntime-web/webgpu' : 'onnxruntime-web/wasm', importer, { ...options, skipSelf: true })
+    },
+  }
+}
+
 /** js-clipper (used by the page reader to cut out lines of text) is saved in a Latin-1 encoding that the bundler refuses to read as UTF-8. */
 function latin1Clipper(): Plugin {
   return { name: 'js-clipper-latin1', enforce: 'pre', load(id) { if (/js-clipper[\\/]clipper\.js/.test(id)) return readFileSync(id.split('?')[0], 'latin1') } }
 }
 
 export default defineConfig({
-  plugins: [react(), buildStamp(), serviceWorker(), latin1Clipper()],
-  resolve: { alias: { 'onnxruntime-web': 'onnxruntime-web/wasm' } },   // the CPU-only build (about half the size: the page reader doesn't use the GPU)
+  plugins: [react(), buildStamp(), serviceWorker(), latin1Clipper(), ortBuilds()],
+  worker: { plugins: () => [ortBuilds()] },   // (background workers are built with their own plugin list)
   server: {
     port: 5173,
     proxy: {
