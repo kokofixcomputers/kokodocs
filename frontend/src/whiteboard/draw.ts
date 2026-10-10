@@ -100,7 +100,8 @@ export function drawParts(e: El): Part[] {
   const pts = (e.pts ?? []) as Pt[]
   if (!pts.length) return []
   const size = e.hl ? Math.max(10, e.sw * 3) : e.sw * 2.4
-  const outline = pts.length === 1 ? getStroke([pts[0], [pts[0][0] + 0.1, pts[0][1]]], { size, last: true }) : getStroke(pts, { size, thinning: e.hl ? 0 : 0.55, smoothing: 0.55, streamline: 0.5, simulatePressure: !e.hl, last: true })
+  const pressured = pts.some((q) => q.length > 2)   // drawn with a pen that senses how hard it is pressed
+  const outline = pts.length === 1 ? getStroke([pts[0], [pts[0][0] + 0.1, pts[0][1]]], { size, last: true }) : getStroke(pts, { size: pressured ? size * 1.5 : size, thinning: e.hl ? 0 : pressured ? 0.7 : 0.55, smoothing: 0.55, streamline: pressured ? 0.35 : 0.5, simulatePressure: !e.hl && !pressured, last: true })
   const out: Part[] = []
   if (closed(e) && e.fill !== 'transparent' && e.fill !== 'none') out.push(...parts(gen.polygon(pts, { ...opts(e, true), stroke: 'none', strokeWidth: 0 }), e).filter((p) => p.fill !== 'none'))
   out.push({ d: quad(outline), stroke: 'none', fill: e.stroke, sw: 0 })

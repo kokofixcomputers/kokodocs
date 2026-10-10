@@ -534,6 +534,10 @@ A new kind of file (*New whiteboard* on the home page, and in a meeting's share 
 
 Bucket fill works on shapes and closed strokes rather than on any enclosed area made of several separate lines.
 
+**Apple Pencil and other pens.** A pen's pressure shapes the stroke: light is thin, firm is thick (every sample the pen reports is used, so lines are smooth). Once a pencil has touched the board, a hand resting on the screen right after it is ignored (palm rejection), and a finger drags the board and pinches to zoom instead of drawing, so the pencil does the drawing and selecting. A pen with an eraser end erases with it.
+
+**Hold to make perfect shapes.** Draw with the pen or highlighter and keep it still at the end of the stroke for about a second: a rough shape turns into the one it was meant to be. It recognises lines (straightened, and levelled to horizontal, vertical or 45° when close), circles and ellipses (even tilted), rectangles and squares (even tilted), diamonds, triangles, hexagons and other polygons, which become real shapes you can move, resize, colour and put text in. After a line snaps in, keep the pen down and move it to set the length. Squiggles and curves it does not recognise stay as you drew them. The magnet button at the bottom left turns it off.
+
 ## Tables and sticky notes
 
 - **Fill handle.** Select a cell (or several) in a table and drag the small square at its corner down, up, left or right. Numbers continue (1, 2 → 3, 4, 5), as do dates (`2026-01-30`), weekdays, months and text ending in a number (`Item 1` → `Item 2`). A single cell, or anything else, is copied with its formatting.

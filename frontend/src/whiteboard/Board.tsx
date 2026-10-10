@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { arrowBetween } from './flowchart'
+import { recognize, type Rec } from './recognize'
 import { absPts, boundsOf, center, closed, corners, elbow, hit, inPolygon, pageBox, rot, shapeAt, union, type Box, type Pt } from './geometry'
 import { fitText, layout } from './text'
 import { ElNode } from './Scene'
@@ -11,7 +12,7 @@ export interface View { x: number; y: number; z: number }
 export interface Remote { id: number; name: string; color: string; cursor?: { x: number; y: number }; sel?: string[] }
 export interface BoardHandle { toWorld: (cx: number, cy: number) => Pt; size: () => { w: number; h: number } }
 
-const MIN_Z = 0.05, MAX_Z = 8
+const MIN_Z = 0.05, MAX_Z = 8, HOLD_MS = 700
 const HANDLES = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const
 type Handle = (typeof HANDLES)[number]
 const DEFAULT_SIZE: Partial<Record<string, [number, number]>> = { triangle: [140, 120], star: [130, 130], cylinder: [130, 150], ellipse: [160, 100], diamond: [160, 110] }
@@ -23,7 +24,7 @@ type Session =
   | { k: 'rotate'; el: El; c: Pt; a0: number }
   | { k: 'pt'; el: El; i: number }
   | { k: 'create'; tool: Tool; start: Pt; id: string }
-  | { k: 'pen'; pts: Pt[]; hl: boolean }
+  | { k: 'pen'; pts: Pt[]; hl: boolean; at: Pt; timer?: number; snapped?: { rec: Rec; el: El } }
   | { k: 'marquee'; start: Pt; keep: string[] }
   | { k: 'lasso'; pts: Pt[]; keep: string[] }
   | { k: 'erase'; hit: Set<string> }
@@ -45,6 +46,8 @@ interface Props {
   onContext: (x: number, y: number, id: string | null) => void
   onPickImage: (at: Pt) => void
   onDropFiles?: (files: File[], at: Pt) => void
+  holdToSnap?: boolean
+  onPenSeen?: () => void
   onBring?: (id: string) => void
 }
 
@@ -68,6 +71,9 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
   const [size, setSize] = useState({ w: 800, h: 600 })
   const pointers = useRef(new Map<number, Pt>())
   const space = useRef(false)
+  const penSeen = useRef(false)    // a pencil has been used on this board: fingers move the board and are ignored while it draws
+  const lastPen = useRef(0)
+  const hold = useRef(p.holdToSnap !== false); hold.current = p.holdToSnap !== false
   const viewRef = useRef(view); viewRef.current = view
   const elsRef = useRef(els); elsRef.current = els
   const byId = useMemo(() => new Map(els.map((e) => [e.id, e])), [els])
@@ -107,11 +113,13 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
   const selected = els.filter((e) => sel.includes(e.id))
 
   // ── selection box and handles (in screen pixels) ──
+  /** an element as it looks right now, while being dragged, resized or turned */
+  const nowEl = (e: El): El => { const o = offs[e.id]; const l = live[e.id]; return o || l ? ({ ...e, ...(l ?? {}), ...(o ? { x: (l?.x ?? e.x) + o[0], y: (l?.y ?? e.y) + o[1] } : {}) } as El) : e }
   const selBox: Box | null = useMemo(() => {
-    const mine = els.filter((e) => sel.includes(e.id)).map((e) => ({ ...e, ...(live[e.id] ?? {}) }) as El)
+    const mine = els.filter((e) => sel.includes(e.id)).map(nowEl)
     return mine.length ? union(mine.map(pageBox)) : null
-  }, [els, sel, live])
-  const single = selected.length === 1 ? ({ ...selected[0], ...(live[selected[0].id] ?? {}) } as El) : null
+  }, [els, sel, live, offs]) // eslint-disable-line react-hooks/exhaustive-deps
+  const single = selected.length === 1 ? nowEl(selected[0]) : null
   const handlePts = (): { h: Handle; p: Pt }[] => {
     if (!selBox || readOnly) return []
     if (single && (single.type === 'line' || single.type === 'arrow')) return []
@@ -158,8 +166,36 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
     return [a[0] + Math.cos(ang) * l, a[1] + Math.sin(ang) * l]
   }
 
+  /** a point of a pen stroke: with a pencil it also carries how hard it is pressed */
+  const pt3 = (w: Pt, e: { pointerType: string; pressure: number }): Pt => (e.pointerType === 'pen' ? ([w[0], w[1], e.pressure > 0 ? e.pressure : 0.5] as unknown as Pt) : w)
+  const recEl = (rec: Rec, hl: boolean): El => {
+    if (rec.kind === 'line') {
+      const [a, b] = [rec.a, rec.b]
+      if (hl) return styleEl('draw', { x: a[0], y: a[1], pts: [[0, 0], [b[0] - a[0], b[1] - a[1]]], hl: true, stroke: style.stroke === '#1e1e2e' ? '#facc15' : style.stroke, op: 45, sw: 6 })
+      return styleEl('line', { x: a[0], y: a[1], pts: [[0, 0], [b[0] - a[0], b[1] - a[1]]], curve: 'straight', he: 'none', hs: 'none' })
+    }
+    if (rec.kind === 'shape') return withText(styleEl(rec.type, { x: rec.x, y: rec.y, w: rec.w, h: rec.h, a: rec.a }))
+    const f = rec.pts[0]
+    return styleEl('draw', { x: f[0], y: f[1], pts: rec.pts.map((q) => [q[0] - f[0], q[1] - f[1]] as Pt) })
+  }
+  /** holding the pen still turns the rough stroke into the shape it was meant to be */
+  const armHold = (s: Extract<Session, { k: 'pen' }>) => {
+    window.clearTimeout(s.timer)
+    if (!hold.current) return
+    s.timer = window.setTimeout(() => {
+      if (ses.current !== s || s.snapped || s.pts.length < 6) return
+      const rec = recognize(s.pts.map((q) => [q[0], q[1]] as Pt))
+      if (!rec || (s.hl && rec.kind !== 'line')) return
+      s.snapped = { rec, el: recEl(rec, s.hl) }
+      setPenPts(null); setDraftR(s.snapped.el)
+      try { navigator.vibrate?.(14) } catch { /* not on every device */ }
+    }, HOLD_MS)
+  }
   const onDown = (ev: React.PointerEvent) => {
     if (ev.button === 2) return
+    const kind = ev.pointerType
+    if (kind === 'pen') { if (!penSeen.current) p.onPenSeen?.(); penSeen.current = true; lastPen.current = Date.now() }
+    else if (kind === 'touch' && penSeen.current && (Date.now() - lastPen.current < 1500 || [...pointers.current.keys()].some((id) => id >= 0 && ses.current?.k === 'pen'))) return   // a palm resting while the pencil draws
     ;(ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId)
     pointers.current.set(ev.pointerId, scr(ev))
     if (pointers.current.size === 2) {   // two fingers: pinch to zoom and drag to pan
@@ -169,6 +205,8 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
     }
     if (p.editing || p.draftText) return
     const w = toWorld(ev.clientX, ev.clientY), s = scr(ev)
+    if (kind === 'touch' && penSeen.current && tool !== 'text' && pointers.current.size === 1) { ses.current = { k: 'pan', sx: ev.clientX, sy: ev.clientY, v: view }; return }   // with a pencil in use, a finger moves the board
+    if (!readOnly && kind === 'pen' && ((ev.buttons & 32) || ev.button === 5)) { ses.current = { k: 'erase', hit: new Set() }; eraseAt(w); return }   // the pencil's other end
     if (ev.button === 1 || space.current || tool === 'hand') { ses.current = { k: 'pan', sx: ev.clientX, sy: ev.clientY, v: view }; return }
     if (p.interactive) p.setInteractive(null)
     if (readOnly) { if (tool === 'select') { const h = topHit(w); p.setSel(h ? expand([h.id]) : []); if (!h) ses.current = { k: 'pan', sx: ev.clientX, sy: ev.clientY, v: view } } else ses.current = { k: 'pan', sx: ev.clientX, sy: ev.clientY, v: view }; return }
@@ -201,7 +239,7 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
     if (tool === 'lasso') { ses.current = { k: 'lasso', pts: [w], keep: ev.shiftKey ? sel : [] }; setLasso([w]); return }
     if (tool === 'eraser') { ses.current = { k: 'erase', hit: new Set() }; eraseAt(w); return }
     if (tool === 'bucket') { bucket(w); return }
-    if (tool === 'draw' || tool === 'highlight') { ses.current = { k: 'pen', pts: [w], hl: tool === 'highlight' }; setPenPts([w]); return }
+    if (tool === 'draw' || tool === 'highlight') { const first = pt3(w, ev); const sn: Session = { k: 'pen', pts: [first], hl: tool === 'highlight', at: s }; ses.current = sn; setPenPts([first]); armHold(sn); return }
     if (tool === 'text') { const e = styleEl('text', { x: w[0], y: w[1], w: 20, h: style.size * 1.28, text: '', font: style.font, size: style.size, ta: 'left', tc: style.tc }); loadFont(style.font); p.setDraftText(e); return }
     if (tool === 'image') { p.onPickImage(w); return }
     if (tool === 'line' || tool === 'arrow') { const s0 = shapeAt(els, w); ses.current = { k: 'create', tool, start: w, id: s0?.id ?? '' }; setDraftR(newLinear(tool, w, w, s0?.id)); return }
@@ -276,7 +314,22 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
       const t = shapeAt(els, w, s.from.id); setSnapTo(t?.id ?? null)
       setDraftR(arrowBetween(model, s.from, t, { p1: w, curve: style.curve, he: style.he, clean: style.ro === 0, stroke: style.stroke })); return
     }
-    if (s.k === 'pen') { const last = s.pts[s.pts.length - 1]; if (Math.hypot(w[0] - last[0], w[1] - last[1]) * view.z < 1.5) return; s.pts.push(w); setPenPts([...s.pts]); return }
+    if (s.k === 'pen') {
+      if (ev.pointerType === 'pen') lastPen.current = Date.now()
+      if (s.snapped) {   // after the shape snapped in: a line follows the pen to wherever it is drawn out to; other shapes stay as they are
+        if (s.snapped.rec.kind === 'line') { const a = s.snapped.rec.a, b = constrain(a, w, ev), rec: Rec = { kind: 'line', a, b }; s.snapped = { rec, el: recEl(rec, s.hl) }; setDraftR(s.snapped.el) }
+        return
+      }
+      const native = ev.nativeEvent as PointerEvent, batch = (native.getCoalescedEvents?.() ?? []).length ? native.getCoalescedEvents() : [native]   // every sample the pencil reported, not just the latest
+      for (const c of batch) {
+        const q = toWorld(c.clientX, c.clientY), last = s.pts[s.pts.length - 1]
+        if (Math.hypot(q[0] - last[0], q[1] - last[1]) * view.z < 1.2) continue
+        s.pts.push(pt3(q, c))
+      }
+      setPenPts([...s.pts])
+      if (Math.hypot(s0[0] - s.at[0], s0[1] - s.at[1]) > 6) { s.at = s0; armHold(s) }
+      return
+    }
     if (s.k === 'marquee') { const b: Box = { x: Math.min(s.start[0], w[0]), y: Math.min(s.start[1], w[1]), w: Math.abs(w[0] - s.start[0]), h: Math.abs(w[1] - s.start[1]) }; setMarquee(b)
       const ids = els.filter((e) => !e.hide && !e.lock && inBox(pageBox(e), b)).map((e) => e.id); p.setSel(expand([...new Set([...s.keep, ...ids])])); return }
     if (s.k === 'lasso') { s.pts.push(w); setLasso([...s.pts]); return }
@@ -312,7 +365,7 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
     for (const id of s.ids) {
       const e = s.orig.get(id)!
       const nx = x0 + (e.x - b.x) * sx, ny = y0 + (e.y - b.y) * sy
-      if (isLinear(e.type)) out[id] = { x: nx, y: ny, w: e.w * sx, h: e.h * sy, pts: (e.pts ?? []).map((q) => [q[0] * sx, q[1] * sy] as Pt) }
+      if (isLinear(e.type)) out[id] = { x: nx, y: ny, w: e.w * sx, h: e.h * sy, pts: (e.pts ?? []).map((q) => [q[0] * sx, q[1] * sy, ...q.slice(2)] as unknown as Pt) }
       else out[id] = { x: nx, y: ny, w: e.w * sx, h: e.h * sy, ...(e.type === 'text' ? { size: Math.max(6, Math.round((e.size ?? 24) * Math.min(sx, sy))) } : {}) }
     }
     return out
@@ -367,9 +420,11 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
       const ids = model.add([...made, arrow])
       if (made.length) { p.setSel([ids[0]]); window.setTimeout(() => p.setEditing(ids[0]), 60) } else p.setSel([target.id])
     } else if (s.k === 'pen') {
+      window.clearTimeout(s.timer)
+      if (s.snapped) { const el = s.snapped.el; setDraftR(null); setPenPts(null); model.add([el]); return }
       const pts = s.pts; setPenPts(null)
       if (pts.length < 1) return
-      const first = pts[0], e = styleEl('draw', { x: first[0], y: first[1], pts: pts.map((q) => [q[0] - first[0], q[1] - first[1]] as Pt), hl: s.hl, ...(s.hl ? { stroke: style.stroke === '#1e1e2e' ? '#facc15' : style.stroke, op: 45, sw: 6 } : {}) })
+      const first = pts[0], e = styleEl('draw', { x: first[0], y: first[1], pts: pts.map((q) => [q[0] - first[0], q[1] - first[1], ...q.slice(2)] as unknown as Pt), hl: s.hl, ...(s.hl ? { stroke: style.stroke === '#1e1e2e' ? '#facc15' : style.stroke, op: 45, sw: 6 } : {}) })
       model.add([e])
     } else if (s.k === 'marquee') setMarquee(null)
     else if (s.k === 'lasso') {
@@ -406,7 +461,7 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
         <g transform={`translate(${view.x} ${view.y}) scale(${view.z})`}>
           {shown.map((e) => <ElNode key={e.id} e={e} dx={offs[e.id]?.[0]} dy={offs[e.id]?.[1]} bg={bg} interactive={p.interactive === e.id} />)}
           {draft && <ElNode e={draft} bg={bg} />}
-          {penPts && penPts.length > 0 && <ElNode e={{ ...styleEl('draw', { x: penPts[0][0], y: penPts[0][1], pts: penPts.map((q) => [q[0] - penPts[0][0], q[1] - penPts[0][1]] as Pt), hl: tool === 'highlight', ...(tool === 'highlight' ? { stroke: style.stroke === '#1e1e2e' ? '#facc15' : style.stroke, op: 45, sw: 6 } : {}) }) }} />}
+          {penPts && penPts.length > 0 && <ElNode e={{ ...styleEl('draw', { x: penPts[0][0], y: penPts[0][1], pts: penPts.map((q) => [q[0] - penPts[0][0], q[1] - penPts[0][1], ...q.slice(2)] as unknown as Pt), hl: tool === 'highlight', ...(tool === 'highlight' ? { stroke: style.stroke === '#1e1e2e' ? '#facc15' : style.stroke, op: 45, sw: 6 } : {}) }) }} />}
         </g>
       </svg>
       <svg className="wb-over" width="100%" height="100%">

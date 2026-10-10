@@ -27,7 +27,7 @@ export function boundsOf(e: El, normalize: boolean): Partial<El> {
   if (!pts.length) return {}
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), x0 = Math.min(...xs), y0 = Math.min(...ys)
   if (!normalize) return { w: Math.max(...xs) - x0, h: Math.max(...ys) - y0 }
-  return { x: e.x + x0, y: e.y + y0, w: Math.max(...xs) - x0, h: Math.max(...ys) - y0, pts: pts.map((p) => [p[0] - x0, p[1] - y0] as Pt) }
+  return { x: e.x + x0, y: e.y + y0, w: Math.max(...xs) - x0, h: Math.max(...ys) - y0, pts: pts.map((p) => [p[0] - x0, p[1] - y0, ...p.slice(2)] as unknown as Pt) }
 }
 export const absPts = (e: El): Pt[] => (e.pts ?? []).map((p) => [p[0] + e.x, p[1] + e.y] as Pt)
 

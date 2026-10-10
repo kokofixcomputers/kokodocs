@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
-import { ClipboardCheck, ClipboardPaste, Copy, ExternalLink, CopyPlus, Download, Grid3x3, History, Layers as LayersIcon, Loader2, LogIn, Maximize, Minus, Moon, Plus, RotateCcw, Share2, Sparkles, Sun, Trash2, X } from 'lucide-react'
+import { ClipboardCheck, ClipboardPaste, Copy, ExternalLink, CopyPlus, Download, Grid3x3, Magnet, History, Layers as LayersIcon, Loader2, LogIn, Maximize, Minus, Moon, Plus, RotateCcw, Share2, Sparkles, Sun, Trash2, X } from 'lucide-react'
 import { api, type ApiError, type DocInfo, type Version } from '../api'
 import { useAuth } from '../auth'
 import { KokoProvider } from '../collab'
@@ -89,6 +89,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const [verKey, setVerKey] = useState(0)
   const [remotes, setRemotes] = useState<Remote[]>([])
   const [people, setPeople] = useState<{ id: number; name: string; color: string }[]>([])
+  const [snap, setSnap] = useState<boolean>(() => { try { return localStorage.getItem('koko.wb.snap') !== '0' } catch { return true } })
   const [undoState, setUndoState] = useState({ u: 0, r: 0 })
   const fileInput = useRef<HTMLInputElement>(null)
   const imageAt = useRef<Pt | null>(null)
@@ -99,6 +100,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const bg = model.getMeta<string>('bg', '#ffffff'), grid = model.getMeta<boolean>('grid', true)
 
   useEffect(() => lsSet('koko.wb.style', style), [style])
+  useEffect(() => { try { localStorage.setItem('koko.wb.snap', snap ? '1' : '0') } catch { /* private mode */ } }, [snap])
   useEffect(() => { const t = window.setTimeout(() => lsSet(`koko.wb.view.${info.id}`, view), 400); return () => window.clearTimeout(t) }, [view, info.id])
   useEffect(() => { const f = () => setUndoState({ u: model.undo.undoStack.length, r: model.undo.redoStack.length }); f(); return model.subscribe(f) }, [model])
   useEffect(() => { els.forEach((e) => e.font && loadFont(e.font)) }, [els])
@@ -377,7 +379,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
           <main className="wb-main">
             <Board ref={board} model={model} els={els} readOnly={readOnly} tool={tool} setTool={setTool} style={style} sel={sel} setSel={setSel} view={view} setView={setView} bg={bg} grid={grid}
               remotes={remotes} onCursor={onCursor} editing={editing} setEditing={setEditing} draftText={draftText} setDraftText={setDraftText} interactive={interactive} setInteractive={setInteractive}
-              onContext={onContext} onDropFiles={(files, at) => files.forEach((f, i) => void addImage(f, [at[0] + i * 24, at[1] + i * 24]))} onPickImage={(at) => { imageAt.current = at; fileInput.current?.click() }} />
+              onContext={onContext} holdToSnap={snap} onDropFiles={(files, at) => files.forEach((f, i) => void addImage(f, [at[0] + i * 24, at[1] + i * 24]))} onPickImage={(at) => { imageAt.current = at; fileInput.current?.click() }} />
             <Tools tool={tool} setTool={(t) => { setTool(t); if (t === 'image') fileInput.current?.click() }} readOnly={readOnly} canUndo={undoState.u > 0} canRedo={undoState.r > 0} undo={() => model.undo.undo()} redo={() => model.undo.redo()} shape={shape} setShape={setShape} onTemplate={addTemplate} />
             <Props tool={tool} selected={selected} style={style} apply={apply} act={act} readOnly={readOnly} />
             <div className="wb-zoom" role="group" aria-label="Zoom">
@@ -385,6 +387,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
               <button className="wb-zoom-pct" title="Reset to 100% (Ctrl/Cmd+0)" onClick={() => zoomTo(1)}>{Math.round(view.z * 100)}%</button>
               <button className="wb-mini" title="Zoom in (+)" aria-label="Zoom in" onClick={() => zoomBy(1.25)}><Plus size={15} /></button>
               <button className="wb-mini" title="Fit everything (Shift+1)" aria-label="Fit everything" onClick={() => fit()}><Maximize size={15} /></button>
+              <button className={`wb-mini ${snap ? 'on' : ''}`} title="Hold the pen still at the end of a stroke to turn a rough shape into a perfect one" aria-label="Hold to make perfect shapes" aria-pressed={snap} disabled={readOnly} onClick={() => setSnap((v) => !v)}><Magnet size={15} /></button>
               <button className={`wb-mini ${grid ? 'on' : ''}`} title="Grid" aria-label="Grid" aria-pressed={grid} disabled={readOnly} onClick={() => model.setMeta('grid', !grid)}><Grid3x3 size={15} /></button>
             </div>
             {selected.length === 1 && selected[0].type === 'frame' && selected[0].ai && !readOnly && user && (
