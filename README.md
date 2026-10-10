@@ -541,3 +541,5 @@ npm run dist                                       # dmg / exe / AppImage in des
 ```
 
 The app is built for docs.kokodev.cc and the address can't be changed (change `SERVER` in `desktop/main.js` to build it for your own server; an unpackaged run can use `KOKO_DEV_URL` for testing). The first launch shows a short welcome walkthrough. Open it once while connected; after that it starts and works without a connection.
+
+**Nightly builds.** `.github/workflows/desktop-nightly.yml` builds the app on macOS (Apple Silicon and Intel: `.dmg`, `.zip`), Windows (installer and portable `.exe`) and Linux (`.AppImage`, `.deb`) every night at 03:00 UTC, when `desktop/` has changed since the last one, and publishes them to the **`nightly`** pre-release on GitHub (replaced each time, with the tag moved to that commit). Run it by hand from Actions → *Desktop nightly* → *Run workflow*. The builds aren't signed (macOS: right-click → Open the first time; Windows may show a SmartScreen warning).
