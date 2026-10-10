@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('kokoDesktop', {
   update: {   // the interface can be updated on its own, without a new app
     check: () => ipcRenderer.invoke('update:check'),
     install: () => ipcRenderer.invoke('update:install'),
-    onAvailable: (cb) => ipcRenderer.on('desktop:update', (_e, u) => cb(u)),
+    onAvailable: (cb) => { ipcRenderer.send('update:ui'); ipcRenderer.on('desktop:update', (_e, u) => cb(u)) },   // (telling the app that this page can show the update card)
     onProgress: (cb) => ipcRenderer.on('desktop:update-progress', (_e, p) => cb(p)),
     onError: (cb) => ipcRenderer.on('desktop:update-error', (_e, m) => cb(m)),
   },

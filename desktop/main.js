@@ -1,6 +1,6 @@
 // KokoDocs desktop: a window around your KokoDocs server. The website itself keeps the offline copy (service worker + IndexedDB),
 // so this only adds the native parts: the title bar, menus, screen sharing, links, and remembering which server to open.
-const { app, BrowserWindow, Menu, shell, session, ipcMain, nativeTheme, desktopCapturer, protocol, net } = require('electron')
+const { app, BrowserWindow, Menu, shell, session, ipcMain, nativeTheme, desktopCapturer, protocol, net, dialog } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
@@ -114,6 +114,7 @@ function createWindow() {
   win.on('closed', () => { win = null })
   win.on('enter-full-screen', () => win?.webContents.send('desktop:fullscreen', true))
   win.on('leave-full-screen', () => win?.webContents.send('desktop:fullscreen', false))
+  win.webContents.on('did-start-navigation', (_e, _url, inPlace, isMain) => { if (isMain && !inPlace) uiReady = false })
   win.webContents.on('did-finish-load', () => { win?.webContents.send('desktop:fullscreen', win.isFullScreen()); if (win?.webContents.getURL().startsWith(server)) { if (!bundle.active()) setTimeout(prefetch, 4000); setTimeout(() => void checkUpdates(false), 6000) } })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (new URL(url).origin === server) return { action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 720, parent: win ?? undefined, autoHideMenuBar: true, titleBarStyle: 'default', minimizable: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } } }   // the app's own pop-ups (single sign-on)
@@ -204,27 +205,45 @@ ipcMain.handle('desktop:clear', async (_e, what) => {
 
 // ── interface updates (see bundle.js) ──
 let offered = ''
+let uiReady = false   // does the page being shown have the update card? (older interfaces don't: then the app asks with its own dialog)
+ipcMain.on('update:ui', () => { uiReady = true })
+const testing = !app.isPackaged && process.env.KOKO_TEST_DIALOG !== undefined
+const ask = (opts) => (testing ? Promise.resolve({ response: Number(process.env.KOKO_TEST_DIALOG) }) : dialog.showMessageBox(win, opts))
+const mb = (n) => (n ? ` (${(n / 1048576).toFixed(0)} MB)` : '')
+
+async function installNow() {
+  try { await bundle.install((p) => { win?.setProgressBar(p); win?.webContents.send('desktop:update-progress', p) }); win?.setProgressBar(-1); win?.webContents.reloadIgnoringCache() }
+  catch (e) { win?.setProgressBar(-1); win?.webContents.send('desktop:update-error', e.message); if (!uiReady) await ask({ type: 'error', message: "Couldn't update", detail: e.message, buttons: ['OK'] }); throw e }
+}
 async function checkUpdates(manual) {
   try {
     const u = await bundle.check()
-    if (u && (manual || u.commit !== offered)) { offered = u.commit; win?.webContents.send('desktop:update', u) }
+    if (u && (manual || u.commit !== offered)) {
+      offered = u.commit
+      if (uiReady && !(testing && process.env.KOKO_TEST_NOUI)) win?.webContents.send('desktop:update', u)
+      else if ((await ask({ type: 'info', message: 'A new version of KokoDocs is ready', detail: `Version ${u.commit.slice(0, 7)}${mb(u.size)}. The window reloads when it is installed.`, buttons: ['Update', 'Later'], defaultId: 0, cancelId: 1 })).response === 0) await installNow().catch(() => {})
+    }
     return u
   } catch (e) { if (manual) throw e; return null }   // (offline, or GitHub unreachable: try again later)
 }
+async function checkFromMenu() {   // Check for Updates…: always says what it found
+  try {
+    const u = await checkUpdates(true)
+    if (!u) { const b = bundle.describe(); await ask({ type: 'info', message: 'KokoDocs is up to date', detail: b ? `Version ${b.commit.slice(0, 7)}.` : 'This app is showing the server\'s own interface.', buttons: ['OK'] }) }
+  } catch (e) { await ask({ type: 'error', message: "Couldn't check for updates", detail: String(e.message || e), buttons: ['OK'] }) }
+}
 ipcMain.handle('update:check', () => checkUpdates(true))
-ipcMain.handle('update:install', async () => {
-  try { await bundle.install((p) => win?.webContents.send('desktop:update-progress', p)); win?.webContents.reloadIgnoringCache() }
-  catch (e) { win?.webContents.send('desktop:update-error', e.message); throw e }
-})
+ipcMain.handle('update:install', () => installNow())
 ipcMain.handle('bundle:info', () => bundle.describe())
 ipcMain.handle('bundle:remove', () => { bundle.removeDownloaded(); win?.webContents.reloadIgnoringCache() })
 
 function buildMenu() {
+  const updates = { label: 'Check for Updates…', click: () => void checkFromMenu() }
   const settings = { label: isMac ? 'Settings…' : 'Settings', accelerator: 'CmdOrCtrl+,', click: () => win?.webContents.send('desktop:settings') }
   const nav = (fn) => () => win && fn(win.webContents)
   const t = [
     ...(isMac ? [{ label: app.name, submenu: [
-      { role: 'about' }, { type: 'separator' }, settings, { type: 'separator' },
+      { role: 'about' }, updates, { type: 'separator' }, settings, { type: 'separator' },
       { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' },
     ] }] : []),
     { label: 'File', submenu: [
@@ -242,6 +261,7 @@ function buildMenu() {
       { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: nav((w) => w.canGoForward() && w.goForward()) },
     ] },
     { role: 'windowMenu' },
+    ...(isMac ? [] : [{ role: 'help', submenu: [updates, { label: `About ${app.name} ${app.getVersion()}`, enabled: false }] }]),
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(t))
 }
