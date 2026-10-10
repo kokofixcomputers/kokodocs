@@ -3,8 +3,8 @@ import { api } from './api'
 
 /** A person's own settings that follow them between devices (text snippets, the writing helpers). Kept in memory and in this browser, so they work offline too. */
 export interface Snippet { trigger: string; text: string }
-export interface Writing { autocomplete: boolean; engine: 'device' | 'server'; fixFormatting: boolean; commandBar: boolean; linkPreviews: boolean }
-const DEFAULT_WRITING: Writing = { autocomplete: false, engine: 'device', fixFormatting: true, commandBar: true, linkPreviews: true }
+export interface Writing { autocomplete: boolean; engine: 'device' | 'server'; fixFormatting: boolean; commandBar: boolean; linkPreviews: boolean; commandModel: string; completionModel: string }
+const DEFAULT_WRITING: Writing = { autocomplete: false, engine: 'device', fixFormatting: true, commandBar: true, linkPreviews: true, commandModel: '', completionModel: '' }
 
 const KEY = 'koko.prefs'
 let prefs: Record<string, any> = (() => { try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') } catch { return {} } })()

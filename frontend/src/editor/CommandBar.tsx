@@ -85,7 +85,7 @@ export function CommandBar({ editor, zk }: { editor: Editor | null; zk: boolean 
     ctl.current?.abort(); const c = (ctl.current = new AbortController())
     setPhase({ kind: 'working', text: '' })
     try {
-      const out = await askModel(SYSTEM, `Instruction: ${ask}\n\nTEXT:\n${src}`, c.signal, (x) => setPhase({ kind: 'working', text: x }))
+      const out = await askModel(SYSTEM, `Instruction: ${ask}\n\nTEXT:\n${src}`, c.signal, (x) => setPhase({ kind: 'working', text: x }), 0, getWriting().commandModel || undefined)
       setPhase({ kind: 'result', text: out.trim() })
     } catch (e) { if (!c.signal.aborted) setPhase({ kind: 'note', text: (e as Error).message || 'The AI model did not answer.' }) }
   }

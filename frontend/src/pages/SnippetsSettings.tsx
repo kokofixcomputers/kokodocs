@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
+import { api } from '../api'
 import { LOCAL_MODEL, loadLocalModel, removeLocalModel, useLocalModel } from '../editor/ai/local'
 import { aiConnected } from '../editor/ai/model'
 import { Plus, Trash2 } from 'lucide-react'
@@ -45,19 +46,32 @@ export function SnippetsSettings() {
 
 const Toggle = ({ on, label, set }: { on: boolean; label: string; set: (v: boolean) => void }) => <button type="button" role="switch" aria-checked={on} aria-label={label} className={`toggle ${on ? 'on' : ''}`} onClick={() => set(!on)} />
 
+
+/** which AI model a helper uses: the one Koko uses, or one of your own choosing */
+function ModelPick({ value, models, onPick, label }: { value: string; models: { id: string; label: string; model: string; selected: boolean }[]; onPick: (id: string) => void; label: string }) {
+  const koko = models.find((m) => m.selected)
+  return (
+    <select className="st-select" aria-label={label} value={models.some((m) => m.id === value) ? value : ''} onChange={(e) => onPick(e.target.value)}>
+      <option value="">Same as Koko{koko ? ` (${koko.label})` : ''}</option>
+      {models.map((m) => <option key={m.id} value={m.id}>{m.label}{m.model && m.model !== m.label ? ` · ${m.model}` : ''}</option>)}
+    </select>
+  )
+}
+
 /** the writing helpers that use AI, each with its own switch */
 function AiHelpers() {
   const { writing: w } = usePrefs()
   const lm = useLocalModel()
   const [conn, setConn] = useState<boolean | null>(null)
-  useEffect(() => { void aiConnected().then(setConn) }, [])
+  const [models, setModels] = useState<{ id: string; label: string; model: string; selected: boolean }[]>([])
+  useEffect(() => { void aiConnected().then(setConn); api.aiSettings().then((r) => setModels(r.models.map((m) => ({ id: m.id, label: m.label, model: m.model, selected: m.id === r.selected })))).catch(() => undefined) }, [])
   const save = (p: Partial<typeof w>) => saveWriting(p).catch((e) => toast((e as Error).message))
   return (
     <>
       <h2 className="st-sub">AI helpers</h2>
       <div className="st-card">
-        <div className="st-row"><div><b>Do something box</b><span>Press Ctrl/Cmd+J (or the sparkle button) and say what you want: “make this bold”, “heading 2”, “summarize this paragraph”, “make it shorter”. Formatting requests work without AI; rewrites and summaries use the AI model connected under Assistant.</span></div>
-          <span className="st-btns"><Toggle on={w.commandBar} label="Do something box" set={(v) => void save({ commandBar: v })} /></span></div>
+        <div className="st-row"><div><b>Do something box</b><span>Press Ctrl/Cmd+J (or the sparkle button) and say what you want: “make this bold”, “heading 2”, “summarize this paragraph”, “make it shorter”. Formatting requests work without AI; rewrites and summaries use the AI model you pick here (by default the one Koko uses).</span></div>
+          <span className="st-btns">{conn && w.commandBar && <ModelPick value={w.commandModel} models={models} label="Model for the Do something box" onPick={(id) => void save({ commandModel: id })} />}<Toggle on={w.commandBar} label="Do something box" set={(v) => void save({ commandBar: v })} /></span></div>
         <div className="st-row"><div><b>Fix formatting button</b><span>A toolbar button that tidies spacing, turns bold or ALL-CAPS lines into headings, and turns typed “- item” or “1. item” lines into real lists, without changing a word. It works on the selection, or the whole page.</span></div>
           <span className="st-btns"><Toggle on={w.fixFormatting} label="Fix formatting button" set={(v) => void save({ fixFormatting: v })} /></span></div>
         <div className="st-row"><div><b>Suggestions while you write</b><span>Grey text appears after your cursor with the likely rest of the sentence. Press Tab to take it, Cmd/Ctrl+→ for one word, or keep typing to ignore it. Off by default.</span></div>
@@ -66,7 +80,8 @@ function AiHelpers() {
           <div className="st-row" style={{ alignItems: 'flex-start' }}><div><b>Where suggestions come from</b>
             <span>{w.engine === 'device'
               ? `${LOCAL_MODEL.name}, a small model that runs on this device. Nothing you write leaves it, and it works offline once downloaded (about ${LOCAL_MODEL.mb} MB, kept by the browser). It is modest: expect short, plain continuations.`
-              : conn === false ? 'Uses the AI model connected under Assistant, but none is connected yet. Connect one there first.' : 'Uses the AI model connected under Assistant. The text before your cursor is sent to that provider. It is not used for encrypted documents.'}</span>
+              : conn === false ? 'Uses the AI model connected under Assistant, but none is connected yet. Connect one there first.' : 'Uses an AI model from your connections (pick which below, by default the one Koko uses). The text before your cursor is sent to that provider. It is not used for encrypted documents.'}</span>
+            {w.engine === 'server' && conn && <span className="st-inline" style={{ gap: 10, marginTop: 8 }}>Model: <ModelPick value={w.completionModel} models={models} label="Model for suggestions" onPick={(id) => void save({ completionModel: id })} /></span>}
             {w.engine === 'device' && (
               <span className="st-inline" style={{ gap: 10, marginTop: 8 }}>
                 {lm.status === 'loading' ? <><Loader2 size={15} className="spin" /> {lm.downloaded ? 'Starting' : `Downloading ${Math.round(lm.progress * 100)}%`}</>

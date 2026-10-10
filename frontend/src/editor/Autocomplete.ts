@@ -65,7 +65,7 @@ export const Autocomplete = Extension.create<{ allowServer: () => boolean }>({
             let raw = ''
             if (w.engine === 'server') {
               if (!opts.allowServer() || !(await aiConnected())) return
-              raw = await askModel(AUTOCOMPLETE_SYSTEM, before, mine.signal, undefined, 200)
+              raw = await askModel(AUTOCOMPLETE_SYSTEM, before, mine.signal, undefined, 200, w.completionModel || undefined)
             } else {
               raw = await completeLocal(POLISHED_PREFIX + before.slice(-600), 20, mine.signal)
             }

@@ -3,7 +3,7 @@ import { streamChat } from '../../assistant/llm'
 
 /** One question to the AI model the person has connected (Settings → Assistant): a system line and a user message in, the answer out.
  *  `stopAfter` cuts the answer off once it is that long (for short suggestions). */
-export async function askModel(system: string, user: string, signal: AbortSignal, onText?: (t: string) => void, stopAfter = 0): Promise<string> {
+export async function askModel(system: string, user: string, signal: AbortSignal, onText?: (t: string) => void, stopAfter = 0, modelId?: string): Promise<string> {
   const stop = new AbortController()
   const abort = () => stop.abort(); signal.addEventListener('abort', abort, { once: true })
   let seen = ''
@@ -11,7 +11,7 @@ export async function askModel(system: string, user: string, signal: AbortSignal
     const r = await streamChat([{ role: 'system', content: system }, { role: 'user', content: user }], [], stop.signal, (t) => {
       seen = t; onText?.(t)
       if (stopAfter && t.length >= stopAfter) stop.abort()
-    })
+    }, modelId || undefined)
     return r.content
   } catch (e) {
     if (stopAfter && !signal.aborted && seen) return seen   // (we cut it off ourselves)

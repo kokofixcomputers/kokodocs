@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { BubbleMenu, type Editor } from '@tiptap/react'
-import {
+import { Sparkles,
   AlignCenter, AlignLeft, AlignRight, ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, ArrowDownFromLine, ArrowRightFromLine, Combine, Palette,
   MessageSquarePlus, LayoutGrid, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough as StrikeIcon, Code as CodeIcon, Link as LinkIcon, Highlighter as HighlighterIcon, Shapes, Type, Minus, Plus, Rows3, Columns3, Split, Trash2, TableProperties, Image as ImageIcon,
 } from 'lucide-react'
 import { CellSelection, TableMap, mergeCells, selectionCell } from '@tiptap/pm/tables'
 import { toast } from '../ui/Toast'
+import { usePrefs } from '../prefs'
 import { CALLOUT_COLORS, CALLOUT_KINDS, CUSTOM_DEFAULT_BG, calloutKind, defaultTitle } from './Callout'
 import { Select } from '../ui/Select'
 import { Popover } from '../ui/Popover'
@@ -160,6 +161,7 @@ export function ShapeMenu({ editor }: { editor: Editor }) {
 
 /** The little bar over selected text (like Medium's): bold, italic, underline, strikethrough, code, link, colour and highlight, and the comment button in documents. */
 export function FormatMenu({ editor, onComment }: { editor: Editor; onComment?: () => void }) {
+  const { writing } = usePrefs()
   const c = () => editor.chain().focus()
   const on = (n: string, a?: object) => editor.isActive(n, a)
   const link = async () => {
@@ -176,6 +178,7 @@ export function FormatMenu({ editor, onComment }: { editor: Editor; onComment?: 
       shouldShow={({ editor: e, state }) => e.isEditable && !state.selection.empty && !('node' in state.selection) && !e.isActive('image') && !e.isActive('table') && !e.isActive('codeBlock') && !e.isActive('docShape')}
       tippyOptions={{ placement: 'top', offset: [0, 8], maxWidth: 'none', duration: 120 }}>
       <div className="bubble" onMouseDown={keepSelection}>
+        {writing.commandBar && <><Btn icon={<Sparkles size={16} />} label="Ask AI about this text: rewrite, shorten, translate, format…" tip="Ctrl+J" onClick={() => window.dispatchEvent(new Event('koko:command'))} /><span className="bb-sep" /></>}
         <Btn icon={<BoldIcon size={16} />} label="Bold" tip="Ctrl+B" onClick={() => c().toggleBold().run()} active={on('bold')} />
         <Btn icon={<ItalicIcon size={16} />} label="Italic" tip="Ctrl+I" onClick={() => c().toggleItalic().run()} active={on('italic')} />
         <Btn icon={<UnderlineIcon size={16} />} label="Underline" tip="Ctrl+U" onClick={() => c().toggleUnderline().run()} active={on('underline')} />
