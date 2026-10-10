@@ -4,7 +4,7 @@ import {
   Ban, ChevronDown, ChevronRight, FileText, Folder as FolderIcon, FolderInput, FolderPlus, Globe, Home, KeyRound, Lock, LogOut, Moon,
   ArrowDownWideNarrow, ArrowUpNarrowWide, ClipboardList, Copy, ExternalLink, FolderOpen, ListFilter, MoreHorizontal, Tag as TagIcon, Pencil, Plus, RotateCcw, Presentation, Search, Star, Upload, LayoutTemplate, Share2, ShieldCheck, Sun, Table2, Trash2, Users,
   Settings, BookOpen,
-  Kanban, PenTool, SlidersHorizontal,
+  Kanban, PenTool, SlidersHorizontal, FileDown,
 } from 'lucide-react'
 import { api, type DocInfo, type DocKind, type DocSummary, type Folder, type SharedFolder, type SharedFolderView } from '../api'
 import { useAuth } from '../auth'
@@ -216,6 +216,11 @@ export function Dashboard() {
   const [importing, setImporting] = useState<string | null>(null)
   /** Word, Excel, PowerPoint, CSV, Markdown, HTML and text files become a new file of the right kind. */
   const importFile = async (f: File) => {
+    if (/\.kokodocs$/i.test(f.name)) {   // a KokoDocs file opens as it is
+      setImporting(f.name)
+      try { const d = await api.importKokodocs(f, tab === 'mine' ? folderId : null); toast(`Opened ${d.title}`); nav(`/d/${d.id}`) } catch (e) { toast((e as Error).message) } finally { setImporting(null) }
+      return
+    }
     const kind = importKind(f)
     if (!kind) { toast('That file type isn’t supported. Try Word, Excel, PowerPoint, CSV, Markdown, HTML or text files.'); return }
     setImporting(f.name)
@@ -303,6 +308,7 @@ export function Dashboard() {
     { label: d.starred ? 'Remove star' : 'Star', icon: <Star size={16} fill={d.starred ? 'currentColor' : 'none'} />, onClick: () => void toggleStar(d) },
     { label: 'Tags…', icon: <TagIcon size={16} />, onClick: () => setTagging({ kind: 'doc', id: d.id, title: d.title, tags: d.tags ?? [] }) },
     { label: 'Copy link', icon: <Copy size={16} />, onClick: () => copyLink(d) },
+    ...(d.role !== 'viewer' && !d.zk ? [{ label: 'Download as .kokodocs', icon: <FileDown size={16} />, onClick: () => void api.downloadKokodocs(d.id, d.title).catch((e) => toast((e as Error).message)) } as CtxItem] : []),
     ...(d.role === 'manager' ? [{ label: 'Share…', icon: <Share2 size={16} />, onClick: () => void shareDocument(d) }] : []),
     ...(d.role === 'owner' ? [
       { label: 'Share…', icon: <Share2 size={16} />, onClick: () => void shareDocument(d) },

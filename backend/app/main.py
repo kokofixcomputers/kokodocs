@@ -40,6 +40,8 @@ from .linkpreview import router as linkpreview_router
 from . import forms
 from .notifications import router as notifications_router
 from . import imagecompress, imagededupe, searchindex, snapshots
+from .extstore import service as extstore_service
+from .storage import router as storage_router
 from .emailauth import router as emailauth_router
 from .db import init_db
 from .routes import router
@@ -49,6 +51,7 @@ searchindex.start_backfill()
 snapshots.start_compaction()
 imagecompress.start(imagededupe.start_merge())
 forms.start_sweeper()
+extstore_service.start()
 app = FastAPI(title="KokoDocs", docs_url="/api/docs-ui", openapi_url="/api/openapi.json")
 class SelectiveGZip:
     """Compress text responses (the JS bundles, JSON). Images and emoji are already compressed, and streams are left alone."""
@@ -92,6 +95,7 @@ app.include_router(forms_router)
 app.include_router(tags_router)
 app.include_router(wikiproxy_router)
 app.include_router(linkpreview_router)
+app.include_router(storage_router)
 app.include_router(notifications_router)
 app.include_router(emailauth_router)
 app.include_router(ai_router)

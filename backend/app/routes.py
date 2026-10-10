@@ -527,7 +527,15 @@ def get_image(name: str, db=Depends(get_db)):
     if not path.exists():   # a merged duplicate: its address now points at the copy that was kept
         row = db.execute("SELECT target FROM image_aliases WHERE name = ?", (name,)).fetchone()
         path = UPLOAD_DIR / row["target"] if row else path
-    if not path.exists():
+    if not path.exists():   # moved to its owner's own storage? fetch it from there
+        real = path.name
+        row = db.execute("SELECT owner_id FROM uploads WHERE name = ? AND remote = 1", (real,)).fetchone()
+        if row:
+            from .extstore import service as ext
+            data = ext.fetch_file(db, row["owner_id"], "uploads", real)
+            if data is not None:
+                ctype = {"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}[real.rsplit(".", 1)[-1]]
+                return Response(data, media_type=ctype, headers={"Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})
         raise HTTPException(404)
     return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff"})
 

@@ -3,7 +3,7 @@ import { parseDelimited } from '../sheet/csv'
 import type { SheetModel, Style } from '../sheet/model'
 import type { ImportPlan } from './pending'
 
-export const ACCEPT = '.docx,.md,.markdown,.txt,.html,.htm,.xlsx,.csv,.tsv,.pptx'
+export const ACCEPT = '.kokodocs,.docx,.md,.markdown,.txt,.html,.htm,.xlsx,.csv,.tsv,.pptx'
 export const MAX_IMPORT = 40 * 1024 * 1024
 const ext = (f: File) => f.name.split('.').pop()?.toLowerCase() ?? ''
 const baseName = (f: File) => f.name.replace(/\.[^.]+$/, '').trim() || 'Imported file'

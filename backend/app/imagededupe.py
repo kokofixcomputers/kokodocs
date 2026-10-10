@@ -11,12 +11,12 @@ from .db import UPLOAD_DIR, connect
 def merge_duplicates() -> dict:
     merged = saved = 0
     with connect() as db:
-        groups = db.execute("SELECT owner_id, hash, size FROM uploads WHERE hash IS NOT NULL AND hash != '-' GROUP BY owner_id, hash, size HAVING COUNT(*) > 1").fetchall()
+        groups = db.execute("SELECT owner_id, hash, size FROM uploads WHERE remote = 0 AND hash IS NOT NULL AND hash != '-' GROUP BY owner_id, hash, size HAVING COUNT(*) > 1").fetchall()
     for g in groups:
         doomed: list = []
         with connect() as db:
             db.execute("BEGIN IMMEDIATE")   # nothing else adds or removes pictures while this group is being merged
-            rows = db.execute("SELECT name FROM uploads WHERE owner_id = ? AND hash = ? AND size = ? ORDER BY created_at, name", (g["owner_id"], g["hash"], g["size"])).fetchall()
+            rows = db.execute("SELECT name FROM uploads WHERE remote = 0 AND owner_id = ? AND hash = ? AND size = ? ORDER BY created_at, name", (g["owner_id"], g["hash"], g["size"])).fetchall()
             canon, data = None, b""
             for r in rows:   # the oldest copy that still has its file survives
                 try:

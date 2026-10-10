@@ -235,6 +235,18 @@ def migrate(db: sqlite3.Connection) -> None:
     for col, ddl in (("permanent", "INTEGER NOT NULL DEFAULT 0"), ("settings", "TEXT NOT NULL DEFAULT '{}'"), ("passcode_enc", "TEXT NOT NULL DEFAULT ''"), ("last_used", "REAL"), ("cohosts", "TEXT NOT NULL DEFAULT '[]'")):
         if col not in have:
             db.execute(f"ALTER TABLE meetings ADD COLUMN {col} {ddl}")
+    # extended storage: a person's own storage (WebDAV, S3, a folder) that holds their files instead of this server (see extstore/)
+    db.execute("""CREATE TABLE IF NOT EXISTS storage_connections (
+        user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL, config_enc TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+        idle_minutes INTEGER NOT NULL DEFAULT 5, keep_search INTEGER NOT NULL DEFAULT 0, move_now INTEGER NOT NULL DEFAULT 0,
+        last_ok REAL, last_error TEXT NOT NULL DEFAULT '', created_at REAL NOT NULL, updated_at REAL NOT NULL)""")
+    dcols = {r["name"] for r in db.execute("PRAGMA table_info(documents)")}
+    for col, ddl in (("remote_state", "TEXT"), ("remote_key", "TEXT"), ("remote_sha", "TEXT"), ("remote_fp", "TEXT"), ("remote_at", "REAL"), ("remote_error", "TEXT")):
+        if col not in dcols:
+            db.execute(f"ALTER TABLE documents ADD COLUMN {col} {ddl}")
+    for table in ("uploads", "form_files"):
+        if "remote" not in {r["name"] for r in db.execute(f"PRAGMA table_info({table})")}:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN remote INTEGER NOT NULL DEFAULT 0")
     db.execute("CREATE TABLE IF NOT EXISTS image_aliases (name TEXT PRIMARY KEY, target TEXT NOT NULL)")   # addresses of merged duplicates -> the surviving copy
     db.execute("CREATE INDEX IF NOT EXISTS idx_alias_target ON image_aliases(target)")
     db.execute("CREATE TABLE IF NOT EXISTS upload_refs (name TEXT NOT NULL, doc_id TEXT NOT NULL, PRIMARY KEY (name, doc_id))")

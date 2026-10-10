@@ -327,7 +327,16 @@ async def ws_doc(ws: WebSocket, doc_id: str):
             if not doc:
                 return None, "Guest", False
             user = access.get_user(db, token)
-            return access.resolve(db, doc, user, doc_token).role, (user["name"] if user else "Guest"), bool(doc["zk"])
+            role = access.resolve(db, doc, user, doc_token).role
+            if role and not doc["zk"]:
+                from .extstore import service as ext
+                ext.touch(doc_id)
+                if doc["remote_state"] == "remote":
+                    try:
+                        ext.hydrate(db, doc_id)   # kept in the owner's own storage: fetch it back before it is opened
+                    except Exception:
+                        return None, "Guest", False
+            return role, (user["name"] if user else "Guest"), bool(doc["zk"])
 
     role, who, is_zk = await asyncio.to_thread(authorize)
     if not role:
@@ -401,3 +410,11 @@ async def ws_doc(ws: WebSocket, doc_id: str):
                 await flush(room)
                 await maybe_snapshot(room, CLOSE_MIN_GAP)
                 rooms.pop(doc_id, None)
+
+
+def _wire_storage() -> None:
+    from .extstore import service
+    service.set_open_check(lambda doc_id: doc_id in rooms)
+
+
+_wire_storage()

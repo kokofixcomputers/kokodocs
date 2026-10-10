@@ -15,7 +15,8 @@ import uuid
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from urllib.parse import quote
 from pycrdt import Array, Doc, Map
 
 from . import access, collab, quota
@@ -78,6 +79,8 @@ def load_schema(doc_id: str) -> dict:
         return parse_form(room.doc)
     d = Doc()
     with connect() as db:
+        from .extstore import service as ext
+        ext.ensure_local(db, doc_id)
         row = db.execute("SELECT ydoc FROM documents WHERE id = ?", (doc_id,)).fetchone()
     if row and row["ydoc"]:
         d.apply_update(bytes(row["ydoc"]))
@@ -507,8 +510,15 @@ def download_file(doc_id: str, fid: str, c=Depends(ctx), db=Depends(get_db)):
     need_form(db, doc_id, c, "editor")
     if not FILE_ID.match(fid):
         raise HTTPException(404)
-    row = db.execute("SELECT name, stored FROM form_files WHERE id = ? AND form_id = ? AND response_id IS NOT NULL", (fid, doc_id)).fetchone()
+    row = db.execute("SELECT name, stored, remote FROM form_files WHERE id = ? AND form_id = ? AND response_id IS NOT NULL", (fid, doc_id)).fetchone()
     path = FORM_FILES_DIR / row["stored"] if row else None
+    if row and row["remote"] and not path.exists():   # kept in the form owner's own storage
+        from .extstore import service as ext
+        owner = db.execute("SELECT owner_id FROM documents WHERE id = ?", (doc_id,)).fetchone()["owner_id"]
+        data = ext.fetch_file(db, owner, "form", row["stored"])
+        if data is None:
+            raise HTTPException(404, "File not found")
+        return Response(data, media_type="application/octet-stream", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(row['name'])}", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store", "Content-Security-Policy": "sandbox"})
     if not row or not path.exists():
         raise HTTPException(404, "File not found")
     return FileResponse(path, filename=row["name"], media_type="application/octet-stream", headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store", "Content-Security-Policy": "sandbox"})

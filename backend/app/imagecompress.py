@@ -51,7 +51,7 @@ def recompress(data: bytes, ext: str) -> bytes | None:
 def compress_pending() -> dict:
     done = saved = 0
     with connect() as db:
-        rows = db.execute("SELECT name, size, hash FROM uploads WHERE compressed = 0").fetchall()
+        rows = db.execute("SELECT name, size, hash FROM uploads WHERE compressed = 0 AND remote = 0").fetchall()
     for r in rows:
         name = r["name"]
         path = UPLOAD_DIR / name

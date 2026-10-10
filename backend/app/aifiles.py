@@ -85,6 +85,9 @@ def read_file(doc_id: str, user=Depends(must_user), db=Depends(get_db)):
         raise HTTPException(404, "No such file, or it isn't shared with you")
     if doc["zk"]:
         raise HTTPException(409, "That file is encrypted, so the assistant can't read it")
+    from .extstore import service as ext
+    ext.ensure_local(db, doc_id)
+    doc = db.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
     text, cut = readdoc.render(doc["ydoc"], doc["kind"])
     return {**entry(db, doc, user), "text": text, "truncated": cut, "empty": not text.strip()}
 

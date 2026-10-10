@@ -157,6 +157,8 @@ def restore_doc(doc_id: str, user=Depends(must_user), db=Depends(get_db)):
 @router.delete("/docs/{doc_id}/permanent")
 def delete_forever(doc_id: str, user=Depends(must_user), db=Depends(get_db)):
     trashed_doc(db, user, doc_id)
+    from .extstore import service as ext
+    ext.forget_doc(db, user["id"], doc_id)   # its file in the person's own storage goes too
     quota.drop_uploads(db, "id = ?", (doc_id,))
     db.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
     return {"ok": True}
@@ -164,6 +166,9 @@ def delete_forever(doc_id: str, user=Depends(must_user), db=Depends(get_db)):
 
 @router.post("/trash/empty")
 def empty_trash(user=Depends(must_user), db=Depends(get_db)):
+    from .extstore import service as ext
+    for r in db.execute("SELECT id FROM documents WHERE owner_id = ? AND deleted_at IS NOT NULL", (user["id"],)).fetchall():
+        ext.forget_doc(db, user["id"], r["id"])
     quota.drop_uploads(db, "owner_id = ? AND deleted_at IS NOT NULL", (user["id"],))
     cur = db.execute("DELETE FROM documents WHERE owner_id = ? AND deleted_at IS NOT NULL", (user["id"],))
     return {"deleted": cur.rowcount}

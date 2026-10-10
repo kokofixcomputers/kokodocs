@@ -127,6 +127,11 @@ def require(db, doc_id: str, token: str | None, doc_token: str | None, minimum: 
         raise HTTPException(status, {"code": acc.reason, "message": "You don't have access to this document"})
     if RANK[acc.role] < RANK[minimum]:
         raise HTTPException(403, {"code": "forbidden", "message": f"{minimum} access required"})
+    from .extstore import service as ext   # a document kept in its owner's own storage is fetched back before it is used
+    ext.touch(doc_id)
+    if doc["remote_state"] == "remote":
+        ext.hydrate(db, doc_id)
+        doc = db.execute("SELECT * FROM documents WHERE id = ?", (doc_id,)).fetchone()
     return doc, acc
 
 

@@ -66,6 +66,13 @@ export interface AiAdminModel { id: string; label: string; base_url: string; mod
 export interface AiAdmin { models: AiAdminModel[]; env: { configured: boolean; url: string; model: string }; using_env: boolean; people_own: number }
 export interface SearchHit { id: string; title: string; kind: DocKind; owner: string; updated_at: number; title_match: boolean; snippet: string }
 export interface LinkPreview { url: string; title: string; description: string; image: string; site: string; favicon: string; host: string }
+export interface StorageStats { docs_remote: number; docs_cached: number; docs_local: number; docs_encrypted: number; files_remote: number; files_local: number; bytes_remote: number }
+export interface StorageState {
+  available: ('s3' | 'webdav' | 'folder')[]
+  connection: { kind: 's3' | 'webdav' | 'folder'; config: Record<string, string | boolean>; enabled: boolean; idle_minutes: number; keep_search: boolean; last_ok: number | null; last_error: string; moving_now: boolean } | null
+  stats: StorageStats; job: { running: boolean; done: number; total: number; error: string } | null; message?: string
+}
+export interface StorageIn { kind: 's3' | 'webdav' | 'folder'; config: Record<string, string>; enabled: boolean; idle_minutes: number; keep_search: boolean }
 export interface Notice { id: string; kind: 'mention' | 'comment' | 'share'; doc_id: string; doc_title: string; actor: string; text: string; link: string; created_at: number; read: boolean }
 export interface MentionSkip { email: string; reason: 'not_shared' }
 export interface Comment { anchor: Record<string, unknown> | null; id: string; parent_id: string | null; body: string; quote: string; resolved: boolean; created_at: number; user_id: string; author: string; mentions: string[] }
@@ -258,6 +265,23 @@ export const api = {
     const fd = new FormData()
     fd.append('file', file)
     return (await request<{ url: string }>(`/api/docs/${id}/images`, { method: 'POST', body: fd }, id)).url
+  },
+  storage: () => request<StorageState>('/api/storage'),
+  saveStorage: (b: StorageIn) => request<StorageState>('/api/storage', { method: 'PUT', ...json(b) }),
+  testStorage: (b: StorageIn) => request<{ ok: boolean; message: string }>('/api/storage/test', { method: 'POST', ...json(b) }),
+  moveStorage: () => request<{ ok: true }>('/api/storage/move', { method: 'POST' }),
+  restoreStorage: () => request<{ ok: true }>('/api/storage/restore', { method: 'POST' }),
+  disconnectStorage: () => request<{ ok: true }>('/api/storage', { method: 'DELETE' }),
+  /** a document as a .kokodocs file to keep */
+  downloadKokodocs: async (id: string, title: string) => {
+    const res = await rawFetch(`/api/docs/${id}/kokodocs`, {}, id)
+    if (!res.ok) { let m = res.statusText; try { const d = (await res.json()).detail; m = typeof d === 'string' ? d : d?.message ?? m } catch { /* keep */ } throw new ApiError(res.status, null, m) }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await res.blob()); a.download = `${title || 'Untitled'}.kokodocs`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+  },
+  /** open a .kokodocs file as a new document */
+  importKokodocs: async (file: File, folderId?: string | null) => {
+    const fd = new FormData(); fd.append('file', file)
+    return request<{ id: string; title: string; kind: DocKind }>(`/api/import/kokodocs${folderId ? `?folder_id=${encodeURIComponent(folderId)}` : ''}`, { method: 'POST', body: fd })
   },
   aiSettings: () => request<AiSettings>('/api/ai/settings'),
   adminAiModels: () => request<AiAdmin>('/api/admin/ai/models'),
