@@ -10,3 +10,6 @@
 .tp-btns, .tp-speed { display: flex; align-items: center; gap: 2px; } .tp-speed { padding-left: 12px; border-left: 1px solid rgba(255, 255, 255, .22); } .tp-speed b { min-width: 42px; text-align: center; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .tp-text { display: grid; line-height: 1.2; min-width: 96px; } .tp-text b { font-size: 14px; font-weight: 600; } .tp-text em { font-style: normal; font-size: 12px; opacity: .72; }
 @media (max-width: 720px) { .tts-pill { bottom: calc(86px + var(--kb, 0px) + env(safe-area-inset-bottom)); gap: 8px; padding: 0 8px 0 10px; } .tp-text { display: none; } .tp-speed { padding-left: 8px; } }
+
+.tts-hint.small { font-size: 12.5px; line-height: 1.45; }
+.tts-pill .tp-text { min-width: 120px; max-width: 210px; } .tp-text b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -1,5 +1,6 @@
 import { api } from '../api'
 import { toast } from '../ui/Toast'
+import { loadNeural, neuralChosen, neuralReady, speakNeural } from './neural'
 
 /** Read aloud: the page's text is cut into sentences, and a sentence at a time is spoken by the browser's own voices, or (if the administrator switched it on)
  *  by the server's voice, which is fetched a few sentences ahead. One reader for the whole app, so only one thing is ever speaking; the floating pill and the
@@ -8,7 +9,7 @@ import { toast } from '../ui/Toast'
 export type Phase = 'idle' | 'loading' | 'playing' | 'paused'
 export const RATES = [0.75, 0.9, 1, 1.15, 1.25, 1.5, 1.75, 2]
 interface Unit { text: string; lang: string; range: Range }
-export interface Snapshot { phase: Phase; index: number; total: number; rate: number; engine: 'browser' | 'server'; text: string }
+export interface Snapshot { phase: Phase; index: number; total: number; rate: number; engine: 'browser' | 'server' | 'neural'; text: string; note: string }
 
 const BLOCKS = 'p,h1,h2,h3,h4,h5,h6,li,td,th,pre,blockquote,figcaption,summary,dt,dd'
 const SKIP = '.ProseMirror-widget,.ProseMirror-separator,.ProseMirror-gapcursor,[data-tts-skip],script,style'
@@ -61,7 +62,9 @@ export function bestVoice(lang: string): SpeechSynthesisVoice | null {
   const saved = read(KEY_VOICE)
   const mine = saved && all.find((v) => v.voiceURI === saved)
   if (mine) return mine
-  const score = (v: SpeechSynthesisVoice) => (/natural|premium|enhanced|neural|siri|google/i.test(v.name) ? 2 : 0) + (v.localService ? 1 : 0) + (v.default ? 1 : 0)
+  // the best-sounding voice, not just the system default (which is often the plain "Samantha"): downloaded premium and enhanced voices and Siri voices first
+  const odd = /^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Deranged|Good News|Hysterical|Jester|Junior|Kathy|Organ|Princess|Ralph|Trinoids|Whisper|Wobble|Zarvox|Fred|Eddy|Flo|Grandma|Grandpa|Reed|Rocko|Sandy|Shelley)\b/i
+  const score = (v: SpeechSynthesisVoice) => (/premium/i.test(v.name) ? 5 : /enhanced|siri/i.test(v.name) ? 4 : /natural|neural/i.test(v.name) ? 4 : /google/i.test(v.name) ? 2 : 0) + (v.localService ? 1 : 0) - (odd.test(v.name) ? 6 : 0) - (/compact/i.test(v.voiceURI) ? 1 : 0)
   return [...all].sort((a, b) => score(b) - score(a))[0] ?? null
 }
 export const chosenVoice = () => read(KEY_VOICE) ?? ''
@@ -73,7 +76,8 @@ class Reader {
   private i = 0
   private phase: Phase = 'idle'
   private rate = Number(read(KEY_RATE)) || 1
-  private engine: 'browser' | 'server' = 'browser'
+  private engine: 'browser' | 'server' | 'neural' = 'browser'
+  private note = ''
   private token = 0
   private audio: HTMLAudioElement | null = null
   private clips = new Map<number, Promise<string>>()
@@ -84,7 +88,7 @@ class Reader {
 
   subscribe = (f: () => void) => { this.subs.add(f); return () => { this.subs.delete(f) } }
   getSnapshot = () => this.snap
-  private make(): Snapshot { return { phase: this.phase, index: this.i, total: Math.max(0, this.end - this.first), rate: this.rate, engine: this.engine, text: this.units[this.i]?.text ?? '' } }
+  private make(): Snapshot { return { phase: this.phase, index: this.i, total: Math.max(0, this.end - this.first), rate: this.rate, engine: this.engine, text: this.units[this.i]?.text ?? '', note: this.note } }
   private emit() { this.snap = this.make(); this.subs.forEach((f) => f()) }
 
   private async serverOn() {
@@ -106,7 +110,8 @@ class Reader {
     }
     if (!units.length) { toast('There is nothing to read here.'); return }
     this.units = units; this.first = 0; this.end = units.length; this.i = 0
-    this.engine = !opts.plain && (await this.serverOn()) ? 'server' : 'browser'
+    this.engine = neuralChosen() ? 'neural' : !opts.plain && (await this.serverOn()) ? 'server' : 'browser'   // (the neural voice runs on this device, so it is fine for encrypted documents too)
+    this.note = ''
     if (this.engine === 'browser' && typeof speechSynthesis === 'undefined') { toast("This browser can't read aloud."); return }
     this.phase = 'loading'; this.emit()
     void this.play(0)
@@ -117,9 +122,11 @@ class Reader {
   private async play(i: number) {
     const me = ++this.token
     if (i >= this.end) return this.stop()
-    this.i = i; this.mark(); this.phase = this.engine === 'server' ? 'loading' : 'playing'; this.emit()
+    this.i = i; this.mark()
     const u = this.units[i]
-    if (this.engine === 'browser') {
+    const dev = this.engine === 'browser' || (this.engine === 'neural' && u.lang !== 'en')   // (the neural voice speaks English; other languages use the device's voices)
+    this.phase = dev ? 'playing' : 'loading'; this.emit()
+    if (dev) {
       try { speechSynthesis.cancel() } catch { /* ignore */ }
       const s = new SpeechSynthesisUtterance(u.text)
       s.rate = this.rate; s.lang = u.lang
@@ -130,7 +137,12 @@ class Reader {
       return
     }
     try {
+      if (this.engine === 'neural' && !neuralReady()) {   // the first time: the voice is downloaded (about 90 MB), with its progress shown in the pill
+        this.note = 'Getting the voice ready…'; this.emit()
+        await loadNeural((p) => { if (me === this.token) { this.note = `Downloading the voice… ${Math.round(p * 100)}%`; this.emit() } })
+      }
       const url = await this.clip(i)
+      if (this.note) { this.note = ''; this.emit() }
       if (me !== this.token) return
       for (let k = 1; k <= AHEAD; k++) if (i + k < this.end) void this.clip(i + k).catch(() => {})
       const a = this.audio = new Audio(url)
@@ -146,8 +158,9 @@ class Reader {
 
   /** the server voice failed: carry on with this device's voice from the same sentence */
   private fallBack(i: number, why?: string) {
-    toast(`The server voice isn't working${why ? ` (${why})` : ''}. Using this device's voice instead.`)
-    this.engine = 'browser'; this.server = false; this.clips.clear()
+    toast(`${this.engine === 'neural' ? 'The neural voice' : 'The server voice'} isn't working${why ? ` (${why})` : ''}. Using this device's voice instead.`)
+    if (this.engine === 'server') this.server = false
+    this.engine = 'browser'; this.clips.clear()
     void this.play(i)
   }
 
@@ -155,7 +168,7 @@ class Reader {
     let c = this.clips.get(i)
     if (!c) {
       const u = this.units[i]
-      c = api.ttsSpeak(u.text, u.lang).then((b) => URL.createObjectURL(b))
+      c = (this.engine === 'neural' ? speakNeural(u.text) : api.ttsSpeak(u.text, u.lang)).then((b) => URL.createObjectURL(b))
       c.catch(() => this.clips.delete(i))
       this.clips.set(i, c)
     }
@@ -174,12 +187,12 @@ class Reader {
 
   pause() {
     if (this.phase !== 'playing' && this.phase !== 'loading') return
-    if (this.engine === 'server') this.audio?.pause(); else { this.token++; try { speechSynthesis.cancel() } catch { /* ignore */ } }   // (this device's voice restarts the sentence when you resume)
+    if (this.engine !== 'browser' && this.audio) this.audio.pause(); else { this.token++; try { speechSynthesis.cancel() } catch { /* ignore */ } }   // (this device's voice restarts the sentence when you resume)
     this.phase = 'paused'; this.emit()
   }
   resume() {
     if (this.phase !== 'paused') return
-    if (this.engine === 'server' && this.audio) { this.phase = 'playing'; this.emit(); void this.audio.play().catch(() => this.fallBack(this.i)) } else void this.play(this.i)
+    if (this.engine !== 'browser' && this.audio) { this.phase = 'playing'; this.emit(); void this.audio.play().catch(() => this.fallBack(this.i)) } else void this.play(this.i)
   }
   toggle() { if (this.phase === 'paused') this.resume(); else this.pause() }
 
