@@ -68,3 +68,4 @@
 .wb-full .ed-top::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 12px; }
 .wb-full .ed-top:hover, .wb-full .ed-top:focus-within { transform: none; }
 .wb-full .wb-body { padding: 0; } .wb-full .wb-main { border-radius: 0; border: 0; }
+:root[data-theme='dark'] .wb-sw { border-color: rgba(255,255,255,.34); }

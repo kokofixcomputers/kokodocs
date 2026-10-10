@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, BookOpen, Bot, Check, ClipboardList, FileDown, FolderTree, History, Keyboard, Languages, ListChecks, Mic, Moon, Presentation, ServerCog, ShieldCheck, Smartphone,
-  Sparkles, SpellCheck, Table2, Tags, Users, FileText, HardDrive, Webhook, Kanban,
+  Sparkles, SpellCheck, Table2, Tags, Users, FileText, HardDrive, Webhook, Kanban, PenTool, Pencil, Wand2,
 } from 'lucide-react'
 import { Cta, MarketingLayout, useSignup } from '../marketing/Layout'
-import { Frame, Phone, Shot } from '../marketing/Shot'
+import { Frame, Phone, Shot, Tablet } from '../marketing/Shot'
 import { MicTest } from '../marketing/MicTest'
 
 const TOOLS = [
@@ -15,6 +15,7 @@ const TOOLS = [
   { id: 'forms', icon: ClipboardList, name: 'Forms', shot: 'form', url: 'docs.example.com/d/customer-feedback', title: 'Ask, collect, understand', text: 'Build a form together, share a link, and read the answers as charts.', bullets: ['13 question types, pages, media and file uploads', 'Show-if rules and jumps, with validation on the server too', 'Summary charts, one-by-one view, table and CSV export', 'Accent colour that themes the whole form'], link: '/features#forms' },
   { id: 'wikis', icon: BookOpen, name: 'Wikis', shot: 'wiki', url: 'docs.example.com/d/api-reference', title: 'Documentation people can try', text: 'A sidebar of pages and folders, and request blocks readers can send.', bullets: ['Collapsible contents, drag to reorder', 'Request blocks with a Send button, cURL, JavaScript and Python', 'Badges, variables and parameter tables', 'Version history, assistant and voice typing too'], link: '/features#wikis' },
   { id: 'boards', icon: Kanban, name: 'Boards', shot: 'board', url: 'docs.example.com/d/q3-launch-board', title: 'Plan work your way', text: 'A kanban board you shape with your own fields, then see as a table, a roadmap or a calendar.', bullets: ['Drag cards between columns, with a finger too', 'Your own fields: select, multi select, date, number, checkbox, link', 'Mark a field required, with limits for numbers and dates', 'Comments and @mentions on every card'], link: '/features#boards' },
+  { id: 'whiteboards', icon: PenTool, name: 'Whiteboards', shot: 'whiteboard', url: 'docs.example.com/d/checkout-redesign', title: 'Think on an endless canvas', text: 'Sketch, diagram and plan together on a hand-drawn board that never runs out of room.', bullets: ['Hand-drawn shapes, arrows that follow, a pen, text in any of 1,950 fonts and pictures', 'Layers, lasso, bucket fill, frames and flowcharts that draw the next step for you', 'Draw with an Apple Pencil or any pen: it feels pressure, and holding still makes shapes perfect', 'Koko can see the board and draw on it, and turns a sketch into a working website'], link: '/features#whiteboards' },
 ] as const
 
 const SPOTS = [
@@ -24,6 +25,7 @@ const SPOTS = [
   { icon: SpellCheck, eyebrow: 'Writing', shot: 'proofread', title: 'Proofreading that speaks your English', text: 'Spelling and grammar checks run on your own server. Choose US, UK, Canadian, Australian and other variants, so “colour” is right when it should be.', bullets: ['Eight English variants, with suggestions in your spelling', 'Optional LanguageTool server for deeper grammar rules', 'Right-click menus, a slash menu and keyboard shortcuts'] },
   { icon: Webhook, eyebrow: 'Wikis', shot: 'wiki', title: 'API docs with a Try it button', text: 'Readers can change the address, headers or body and press Send. Their changes stay in their browser, and your docs stay as you wrote them.', bullets: ['Method badges, status and timing, formatted replies', 'Variables for the server address, and private ones for tokens', 'A server fallback for APIs that block browser requests', 'Not tied to one API: it is just an HTTP request you can document'] },
   { icon: Kanban, eyebrow: 'Boards', shot: 'board-roadmap', title: 'One board, four ways to look at it', text: 'The same cards as columns, a sortable table, a roadmap with bars between dates, or a calendar. Drag a bar to reschedule it.', bullets: ['Pick which date fields start and end each bar', 'Zoom the roadmap by days, weeks or months', 'Download the table as CSV', 'Cards missing a required field are flagged'] },
+  { icon: Wand2, eyebrow: 'Whiteboards', shot: 'whiteboard-site', title: 'Draw a screen, get a working website', text: 'Box a sketch in an AI frame and press Bring to life. Koko looks at what you drew, with every box, word and position, and builds the page. It lands next to your sketch as an object you can move, try out and ask to change.', bullets: ['Faithful keeps every button you drew exactly and only makes it work; Creative treats your sketch as a brief and redesigns it', 'A calculator has exactly the keys you drew, and they all work', 'The page runs in a sandbox that cannot reach your data or the network', 'Koko can also read the board, draw shapes with text inside, join them with arrows and lay out whole flowcharts'] },
   { icon: HardDrive, eyebrow: 'Control', shot: 'settings', title: 'Know where every byte is', text: 'See what takes up space, by file and by kind. Identical pictures are stored once, and admins set limits per person.', bullets: ['A colour-coded storage breakdown for you and for each file', 'Duplicate pictures merged automatically', 'Two-factor sign-in, Google sign-in and email confirmation', 'An admin panel for people, files and server settings'] },
 ] as const
 
@@ -33,19 +35,21 @@ const GRID = [
   { icon: FolderTree, title: 'Search inside files', text: 'Find a title or a sentence inside any document, sheet, slide or wiki.' },
   { icon: FileDown, title: 'Take it anywhere', text: 'PDF, Word, Markdown, HTML, Excel, CSV, JSON and PowerPoint.' },
   { icon: Languages, title: '1,950 fonts', text: 'The full Google Fonts catalogue, previewed in its own typeface.' },
+  { icon: Pencil, title: 'Apple Pencil and pens', text: 'Pressure, palm rejection and hold-to-perfect shapes on whiteboards, with an iPad, a Surface or any pen.' },
   { icon: Keyboard, title: 'Shortcuts for everything', text: 'Press ? anywhere to see the shortcuts for the file you are in.' },
   { icon: Moon, title: 'Light and dark', text: 'Follows your system, or switch any time. Even the settings page.' },
   { icon: Smartphone, title: 'Works on a phone', text: 'Long-press for menus, tap to dictate, and pages that reflow to fit.' },
   { icon: ShieldCheck, title: 'Private by default', text: 'Restricted to the people you choose, with roles enforced on the server.' },
 ] as const
 
-const STATS = [['6', 'kinds of file in one place'], ['370+', 'spreadsheet functions'], ['1,950', 'fonts to choose from'], ['8', 'English spelling variants']]
+const STATS = [['7', 'kinds of file in one place'], ['370+', 'spreadsheet functions'], ['1,950', 'fonts to choose from'], ['8', 'English spelling variants']]
 
 const FAQ = [
   ['Is it free?', 'KokoDocs is software you run on your own server, so there is no subscription and no per-person fee. You only pay for the machine it runs on, and for an AI provider if you choose to connect one.'],
   ['Where are my documents stored?', 'On your server, in a single folder with a SQLite database and your uploaded files. Nothing is sent to us. Spelling and grammar checks run on your server too, unless you point them at a LanguageTool server you choose.'],
   ['Which AI models can the assistant use?', 'Any service that speaks the OpenAI chat format: Mistral, OpenAI, OpenRouter, Groq or a local Ollama, for example. You add your own key under Settings, and it is stored encrypted. Without a key the assistant simply stays off.'],
   ['Can I bring my Word, Excel and PowerPoint files?', 'Yes. Word, Markdown, HTML and text open as documents, Excel and CSV as spreadsheets, and PowerPoint as presentations. Everything exports back out too.'],
+  ['Does it work with an Apple Pencil?', 'Yes. Whiteboards read any pen the browser reports, which includes every Apple Pencil on an iPad, a Microsoft Surface Pen, a Samsung S Pen and Wacom tablets. You get pressure-sensitive lines, palm rejection (a resting hand is ignored, and one finger moves the board) and hold-to-perfect shapes. A button on the pen, such as an eraser end, works where the pen has one. Apple does not let web pages see the Pencil’s double-tap or squeeze, so those do nothing.'],
   ['Does it work on my phone?', 'Yes. The editors reflow to fit, menus open with a long-press, and there is a floating microphone button for dictation.'],
   ['What happens if I lose my connection?', 'Keep typing. Your changes are kept in the page, and when you are back online they are merged with everyone else’s, with a short notice about what happened.'],
   ['Can people sign in with Google or GitHub?', 'Yes. In the admin panel you can add Google, GitHub, GitLab, Microsoft or Discord with a client ID and secret, or any OAuth 2.0 / OpenID Connect provider such as Keycloak, Authentik or Okta by pasting its address. Email sign-up with confirmation codes and two-factor sign-in are built in as well.'],
@@ -58,7 +62,7 @@ export function Home() {
   return (
     <MarketingLayout>
       <section className="home-hero">
-        <span className="home-pill"><Sparkles size={14} />Documents, sheets, slides, forms, wikis, boards and an AI coworker</span>
+        <span className="home-pill"><Sparkles size={14} />Documents, sheets, slides, forms, wikis, boards, whiteboards and an AI coworker</span>
         <h1>Your whole workspace,<br />on your own terms.</h1>
         <p>A fast, modern home for the things you write, calculate, present and document. Real-time collaboration, an assistant that asks before it edits, and everything you expect from the big names, running on a server you control.</p>
         <Cta>{signup ? 'Create a free account' : 'Sign in'}</Cta>
@@ -73,7 +77,7 @@ export function Home() {
       </section>
 
       <section id="tools" className="mk-sec">
-        <div className="mk-head"><span className="mk-eyebrow">One place for all of it</span><h2>Six tools that feel like one</h2><p className="lead">Same look, same sharing, same history and the same assistant in every one of them.</p></div>
+        <div className="mk-head"><span className="mk-eyebrow">One place for all of it</span><h2>Seven tools that feel like one</h2><p className="lead">Same look, same sharing, same history and the same assistant in every one of them.</p></div>
         <div className="mk-tabs" role="tablist">
           {TOOLS.map((x) => <button key={x.id} role="tab" aria-selected={tool === x.id} className={tool === x.id ? 'on' : ''} onClick={() => setTool(x.id)}><x.icon size={17} />{x.name}</button>)}
         </div>
@@ -97,6 +101,24 @@ export function Home() {
           <div className="mk-spot-shot"><Frame name={s.shot} alt={s.title} /></div>
         </section>
       ))}
+
+      <section id="pencil" className="mk-spot flip">
+        <div className="mk-spot-copy">
+          <span className="mk-eyebrow"><Pencil size={15} />Apple Pencil and other pens</span>
+          <h2>Draw with a real pen</h2>
+          <p>Whiteboards are made for a pencil in your hand. Press harder for a thicker line, rest your palm on the screen without leaving marks, and hold still at the end of a stroke to turn a rough shape into a perfect one.</p>
+          <ul className="mk-ticks">
+            <li><Check size={16} />Pressure-sensitive lines, drawn smoothly from every point the pen reports</li>
+            <li><Check size={16} />Palm rejection, with one finger to move the board and two to zoom</li>
+            <li><Check size={16} />Hold to make perfect circles, rectangles, triangles, diamonds and straight lines</li>
+            <li><Check size={16} />Works with a mouse, a finger and a keyboard too, and in the desktop app</li>
+          </ul>
+          <ul className="mk-pens" aria-label="Pens that work">
+            <li><Pencil size={14} />Apple Pencil (iPad)</li><li><Pencil size={14} />Microsoft Surface Pen</li><li><Pencil size={14} />Samsung S Pen</li><li><Pencil size={14} />Wacom and other tablets</li><li><Pencil size={14} />Any pen your browser reports as a pen</li>
+          </ul>
+        </div>
+        <div className="mk-spot-shot"><Tablet name="whiteboard-pencil" alt="A whiteboard on an iPad, with pen strokes, a perfect circle and a flowchart" /></div>
+      </section>
 
       <section id="voice" className="mk-spot mk-gif">
         <div className="mk-spot-copy">

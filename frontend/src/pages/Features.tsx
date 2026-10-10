@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { BookOpen, Bot, Mic, Check, ClipboardList, Kanban, FileText, FolderTree, Presentation, ShieldCheck, Table2, Users } from 'lucide-react'
+import { BookOpen, Bot, Mic, Check, ClipboardList, Kanban, PenTool, FileText, FolderTree, Presentation, ShieldCheck, Table2, Users } from 'lucide-react'
 import { Cta, MarketingLayout } from '../marketing/Layout'
 import { Frame } from '../marketing/Shot'
 import { MicTest } from '../marketing/MicTest'
@@ -57,10 +57,21 @@ const GROUPS: Group[] = [
     ['Comments', 'Every card has its own thread beside it, with @mentions that notify people, and a count on the card. They arrive live over the connection you already have.'],
     ['Together', 'Live editing with presence, undo and redo, sharing and permissions like every other file. Viewers see everything and can’t change it.'],
   ] },
+  { id: 'whiteboards', icon: PenTool, name: 'Whiteboards', lead: 'An endless, hand-drawn canvas to sketch, diagram and plan on together, made for a pen.', shot: 'whiteboard', url: 'docs.example.com/d/checkout-redesign', items: [
+    ['Draw anything', 'Rectangles, ellipses, diamonds, triangles, data shapes, hexagons, databases, stars, clouds and documents with a hand-sketched look you can turn up, down or off; lines and arrows (straight, curved or square-cornered, with any arrowheads); a pen, a highlighter, text, pictures and frames. Arrows tie themselves to shapes and follow them when they move.'],
+    ['Everything stays editable', 'Move, resize, rotate, recolour and restyle anything afterwards: one colour for outlines, pen and all text, a background fill and fill pattern, line width, style and sloppiness (with sliders), rounded corners and opacity. Type inside shapes and on arrows, in any of 1,950 fonts.'],
+    ['Layers', 'Bring forward or send back, or open the Layers panel to drag things up and down, hide them and lock them. New things go in front, so text always sits above what you drew before it. Group things, and align or space them evenly.'],
+    ['Select and fill', 'Click, drag a box, or lasso: draw around what you want. Bucket fill colours a shape, a closed pen stroke, text or the board itself. Eraser, hand, zoom and fit, a grid, and undo and redo that only take back your own changes.'],
+    ['Flowcharts and diagrams', 'Click the plus beside a shape to draw the next step with its arrow, or start from a flowchart, process, org chart, decision tree or system diagram. Export to PNG or SVG with the fonts included.'],
+    ['Apple Pencil and other pens', 'Pressure-sensitive lines, palm rejection (a resting hand is ignored, one finger moves the board, two zoom) and, if you hold the pen still at the end of a stroke, rough circles, rectangles, triangles, diamonds and wobbly lines turn into perfect ones. Works with an Apple Pencil on an iPad, a Surface Pen, a Samsung S Pen, Wacom tablets and any pen the browser reports, plus mouse and touch.'],
+    ['Together', 'Live cursors and selections, comments through sharing, and version history. Share a whiteboard in a meeting and everyone draws on it right there. Full screen hides the browser tabs and everything but the board.'],
+    ['Koko draws too', 'The assistant sees every shape with its place, size, text, colours and what each arrow joins. It draws shapes with words in them, arrows between them, frames and whole flowcharts laid out for you, and changes, moves or deletes things, asking before it edits.'],
+    ['Bring a sketch to life', 'Box a screen in an AI frame and press Bring to life: Koko builds the website it shows, next to your sketch, as an object you can move, try out and ask to change. Faithful keeps every box and word you drew and only makes it work; Creative redesigns it from your sketch. The page runs in a sandbox with no access to your data or the network.'],
+  ] },
   { id: 'assistant', icon: Bot, name: 'Assistant and proofreading', lead: 'Help when you want it, quiet when you do not.', shot: 'assistant', url: 'docs.example.com/d/q3-launch-plan', items: [
     ['Bring your own model', 'Connect any OpenAI-compatible service under Settings. The key is stored encrypted and never returned to the browser.'],
     ['Approval first', 'The assistant reads freely but shows each edit as a card you approve, or approve for the session.'],
-    ['Knows each file', 'It has tools for documents, spreadsheets, slides, wikis, forms and boards, and keeps a history of past conversations.'],
+    ['Knows each file', 'It has tools for documents, spreadsheets, slides, wikis, forms, boards and whiteboards, and keeps a history of past conversations.'],
     ['Proofreading', 'A built-in offline spelling and grammar checker with one-click fixes, in eight English variants. Optional LanguageTool for more.'],
   ] },
   { id: 'voice', icon: Mic, name: 'Voice typing', lead: 'Talk instead of typing, anywhere you can type.', shot: 'voice-typing', gif: true, url: 'docs.example.com/d/weekly-sync', items: [
@@ -102,7 +113,7 @@ export function Features() {
       <section className="mk-page-head">
         <span className="mk-eyebrow">Features</span>
         <h1>Everything in the box</h1>
-        <p>Six kinds of file, one assistant, and the details that make them feel finished. Jump to a section:</p>
+        <p>Seven kinds of file, one assistant, and the details that make them feel finished. Jump to a section:</p>
         <nav className="mk-chips" aria-label="Sections">{GROUPS.map((g) => <a key={g.id} href={`#${g.id}`} onClick={(e) => { e.preventDefault(); document.getElementById(g.id)?.scrollIntoView({ behavior: 'smooth' }) }}><g.icon size={15} />{g.name.split(',')[0].split(' and ')[0]}</a>)}</nav>
       </section>
       {GROUPS.map((g, i) => (

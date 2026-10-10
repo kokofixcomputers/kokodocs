@@ -2,7 +2,7 @@ import { ShieldCheck } from 'lucide-react'
 
 /** Product screenshots live in /public/shots as <name>.jpg and <name>-dark.jpg; the one that matches the theme is shown. */
 const SIZE: Record<string, [number, number]> = {
-  'voice-typing': [760, 440], dashboard: [2160, 1650], wiki: [2160, 1725], 'phone-doc': [975, 2110], 'phone-dashboard': [975, 2110],
+  'voice-typing': [760, 440], dashboard: [2160, 1650], wiki: [2160, 1725], 'phone-doc': [975, 2110], 'phone-dashboard': [975, 2110], 'whiteboard-pencil': [2049, 1536],
 }
 const dims = (n: string) => SIZE[n] ?? [2160, 1350]
 
@@ -29,4 +29,9 @@ export function Frame({ name, alt, url = 'docs.example.com', eager, ext }: { nam
 /** A phone around a screenshot. */
 export function Phone({ name, alt }: { name: string; alt: string }) {
   return <div className="phone" role="figure" aria-label={alt}><div className="phone-screen"><Shot name={name} alt={alt} /></div></div>
+}
+
+/** a tablet around a screenshot (for the pencil) */
+export function Tablet({ name, alt }: { name: string; alt: string }) {
+  return <div className="tablet" role="figure" aria-label={alt}><div className="tablet-screen"><Shot name={name} alt={alt} /></div></div>
 }
