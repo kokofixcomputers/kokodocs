@@ -16,32 +16,44 @@ export const setNeuralChosen = (on: boolean) => write(KEY_ON, on ? '1' : null)
 export const neuralVoice = () => { const v = read(KEY_VOICE); return NEURAL_VOICES.some((x) => x.id === v) ? v! : 'af_heart' }
 export const setNeuralVoice = (id: string) => write(KEY_VOICE, id)
 
-type Model = { generate(text: string, o: { voice: string }): Promise<{ toBlob(): Blob }> }
-let model: Promise<Model> | null = null
+/** The model lives in a worker (see neural.worker.ts), so downloading it, starting it and speaking never freeze the page. */
 let ready = false
 export const neuralReady = () => ready
+let worker: Worker | null = null
+let nextId = 1
+const waiting = new Map<number, { ok: (v: unknown) => void; fail: (e: Error) => void }>()
+let onProgress: ((p: number) => void) | undefined
 
-/** download (first time) and start the model; `progress` is 0 to 1 for the download */
-export function loadNeural(progress?: (p: number) => void): Promise<Model> {
-  model ??= (async () => {
-    const { KokoroTTS, env } = await import('kokoro-js')
-    try { env.wasmPaths = `${location.origin}/ocr/ort/` } catch { /* the runtime's own default */ }   // (the same local copy of the runtime that "Scan a page" uses)
-    const files = new Map<string, { loaded: number; total: number }>()
-    const m = await KokoroTTS.from_pretrained(MODEL, {
-      dtype: 'q8', device: 'wasm',
-      progress_callback: (e: { status?: string; file?: string; loaded?: number; total?: number }) => {
-        if (e.status === 'progress' && e.file && e.total) { files.set(e.file, { loaded: e.loaded ?? 0, total: e.total }); let l = 0, t = 0; files.forEach((f) => { l += f.loaded; t += f.total }); progress?.(t ? l / t : 0) }
-      },
-    })
-    ready = true
-    return m as unknown as Model
-  })().catch((e) => { model = null; throw e })   // a failed download can be tried again
-  return model
+function start(): Worker {
+  if (worker) return worker
+  const w = new Worker(new URL('./neural.worker.ts', import.meta.url), { type: 'module' })
+  w.onmessage = (e: MessageEvent) => {
+    const m = e.data as { type: string; id?: number; p?: number; buf?: ArrayBuffer; message?: string }
+    if (m.type === 'progress') { onProgress?.(m.p ?? 0); return }
+    const w = m.id !== undefined ? waiting.get(m.id) : undefined
+    if (!w) return
+    waiting.delete(m.id!)
+    if (m.type === 'error') w.fail(new Error(m.message))
+    else w.ok(m.type === 'audio' ? new Blob([m.buf!], { type: 'audio/wav' }) : undefined)
+  }
+  w.onerror = (e) => { const err = new Error(e.message || 'The voice could not start'); waiting.forEach((x) => x.fail(err)); waiting.clear(); w.terminate(); worker = null }
+  worker = w
+  return w
+}
+function call<T>(msg: object): Promise<T> {
+  return new Promise<T>((ok, fail) => { const id = nextId++; waiting.set(id, { ok: ok as (v: unknown) => void, fail }); start().postMessage({ ...msg, id }) })
 }
 
-let chain: Promise<unknown> = Promise.resolve()   // one sentence at a time: the model runs on one thread
-export function speakNeural(text: string, voice = neuralVoice()): Promise<Blob> {
-  const run = chain.then(async () => (await (await loadNeural()).generate(text, { voice })).toBlob())
-  chain = run.catch(() => {})
-  return run
+/** download (the first time) and start the model; `progress` is 0 to 1 for the download */
+export async function loadNeural(progress?: (p: number) => void): Promise<void> {
+  if (ready) return
+  if (progress) onProgress = progress
+  await call<void>({ type: 'load' })
+  ready = true
+}
+
+export async function speakNeural(text: string, voice = neuralVoice()): Promise<Blob> {
+  const b = await call<Blob>({ type: 'speak', text, voice })
+  ready = true
+  return b
 }
