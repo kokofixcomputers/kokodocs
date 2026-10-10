@@ -27,6 +27,15 @@ const store = (p, type, buf) => { try { fs.mkdirSync(cacheDir(), { recursive: tr
 const saved = (p) => { try { return { body: fs.readFileSync(slot(p) + '.bin'), type: fs.readFileSync(slot(p) + '.type', 'utf8') } } catch { return null } }
 const have = (p) => fs.existsSync(slot(p) + '.bin')
 
+// Cross-origin isolation lets the page run work on several threads (the read-aloud neural voice is about twice as fast with them). `credentialless` keeps pictures,
+// fonts and other things from other sites loading as before (without their cookies).
+const isolate = (res) => {
+  const h = new Headers(res.headers)
+  h.delete('content-encoding'); h.delete('content-length')   // (the body here is already decoded)
+  h.set('Cross-Origin-Opener-Policy', 'same-origin'); h.set('Cross-Origin-Embedder-Policy', 'credentialless')
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h })
+}
+
 function offlineFiles() {
   const scheme = new URL(server).protocol.slice(0, -1)
   protocol.handle(scheme, async (req) => {
@@ -42,10 +51,10 @@ function offlineFiles() {
         if (cacheable(p)) store(p, type, Buffer.from(await res.clone().arrayBuffer()))
         else if (type.includes('text/html')) store('/index.html', type, Buffer.from(await res.clone().arrayBuffer()))   // every page address is the same app
       }
-      return res
+      return isolate(res)
     } catch (e) {
       const c = cacheable(p) ? saved(p) : isNav ? saved('/index.html') : null
-      if (c) return new Response(c.body, { headers: { 'content-type': c.type, 'cache-control': 'no-store' } })
+      if (c) return isolate(new Response(c.body, { headers: { 'content-type': c.type, 'cache-control': 'no-store' } }))
       throw e
     }
   })

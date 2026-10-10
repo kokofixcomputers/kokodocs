@@ -62,6 +62,17 @@ class SelectiveGZip:
 
 
 app.add_middleware(SelectiveGZip)
+
+
+if os.environ.get("KOKO_CROSS_ORIGIN_ISOLATION") == "1":
+    # Optional. Lets pages use several threads (the read-aloud neural voice is about twice as fast). `credentialless` keeps things from other sites loading as before
+    # (without their cookies), but pop-ups that need to talk back to the page and embedded pages from other sites can be affected, so it is off by default.
+    @app.middleware("http")
+    async def cross_origin_isolation(request, call_next):
+        resp = await call_next(request)
+        resp.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        resp.headers["Cross-Origin-Embedder-Policy"] = "credentialless"
+        return resp
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("KOKO_CORS", "http://localhost:5173,http://127.0.0.1:5173").split(","),

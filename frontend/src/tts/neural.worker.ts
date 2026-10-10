@@ -8,7 +8,10 @@ let cfg: { device: 'wasm' | 'webgpu'; dtype: 'q8' | 'fp32' | 'fp16' } = { device
 function load(): Promise<Model> {
   model ??= (async () => {
     const { KokoroTTS, env } = await import('kokoro-js')
-    try { env.wasmPaths = `${self.location.origin}/ocr/tts/` } catch { /* the runtime's own default */ }   // (the runtime build that matches this model, with WebGPU as well as the processor)
+    try { env.wasmPaths = `${self.location.origin}/ocr/tts/` } catch { /* the runtime's own default */ }
+    if (self.crossOriginIsolated) {   // (only possible when the site is cross-origin isolated, as the desktop app is: then the model can use several threads)
+      try { const { env: t } = await import('@huggingface/transformers'); t.backends.onnx.wasm!.numThreads = Math.max(2, Math.min(4, (navigator.hardwareConcurrency || 4) >> 1)) } catch { /* one thread */ }
+    }   // (the runtime build that matches this model, with WebGPU as well as the processor)
     const files = new Map<string, { loaded: number; total: number }>()
     const build = (c: typeof cfg) => KokoroTTS.from_pretrained(MODEL, {
       dtype: c.dtype, device: c.device,
