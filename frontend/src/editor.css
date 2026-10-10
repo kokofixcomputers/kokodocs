@@ -496,3 +496,10 @@ img.emoji.emoji-failed { width: auto; height: auto; font-size: 1em; color: inher
 html.embed .ed-top, html.embed .side, html.embed .stats-pill, html.embed .voice-fab, html.embed .assistant-fab { display: none !important; }
 html.embed body, html.embed .editor-shell { background: var(--surface); }
 html.embed .ed-body { padding: 0; }
+
+/* non-printing characters (see NonPrinting.ts): drawn over the text, never printed or copied */
+.np-space, .np-nbsp, .np-tab { position: relative; }
+.np-space::before, .np-nbsp::before, .np-tab::before { position: absolute; left: 0; right: 0; text-align: center; color: var(--faint, #9a9aa6); pointer-events: none; user-select: none; font-family: system-ui, sans-serif; font-size: .9em; }
+.np-space::before { content: '·'; } .np-nbsp::before { content: '°'; } .np-tab::before { content: '→'; text-align: left; }
+.np-para, .np-brk { color: var(--faint, #9a9aa6); user-select: none; pointer-events: none; font-family: system-ui, sans-serif; font-size: .85em; padding: 0 2px; }
+@media print { .np-para, .np-brk { display: none !important; } .np-space::before, .np-nbsp::before, .np-tab::before { content: none !important; } }

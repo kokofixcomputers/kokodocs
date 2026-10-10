@@ -1,3 +1,4 @@
+import { nonPrintKey } from './NonPrinting'
 import { EmojiButton } from './EmojiPicker'
 import { OcrDialog } from './OcrDialog'
 import { useEffect, useRef, useState } from 'react'
@@ -5,7 +6,7 @@ import type { Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, ChevronDown, Code, Highlighter, ImagePlus, Italic,
   FileCog, Search, Info, Link2, List, ListChecks, KeyboardOff, IndentDecrease, IndentIncrease, ListOrdered, Minus, PanelTop, Paintbrush, Plus, Printer, Quote, Redo2, RemoveFormatting, Strikethrough,
-  Subscript, Superscript, Table2, Underline, Undo2, ScanText } from 'lucide-react'
+  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow } from 'lucide-react'
 import { DEFAULT_FONT } from '../fonts'
 import { ShapeButton } from './ShapePicker'
 import { useKeyboardOpen } from '../ui/KeyboardFit'
@@ -87,6 +88,7 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
         <TBtn icon={<Redo2 size={17} />} label="Redo" onClick={() => (editor.commands as any).redo()} disabled={!can} />
         {onFind && <TBtn icon={<Search size={17} />} label="Find and replace (Ctrl+F)" onClick={onFind} />}
         <TBtn icon={<Printer size={17} />} label="Print" onClick={() => window.print()} />
+        <TBtn icon={<Pilcrow size={17} />} label="Show non-printing characters (Ctrl+Shift+8)" active={!!nonPrintKey.getState(editor.state)?.on} onClick={() => (editor.commands as any).toggleNonPrinting()} />
         <TBtn icon={<Paintbrush size={17} />} label="Paint format (double-click to keep painting)" active={painter.active} onClick={painter.toggle} disabled={!can} />
       </div>
 

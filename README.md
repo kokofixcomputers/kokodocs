@@ -485,6 +485,10 @@ Same admin page, same one-upload-for-everyone idea.
 
 Tests: `backend/tests/test_sfu.py` (Cloudflare and Metered, against mocks) and `backend/tests/test_livekit.py`.
 
+## Non-printing characters
+
+The ¶ button in the toolbar of a document or wiki (or ⌘⇧8 / Ctrl+Shift+8, Word's own shortcut) shows the characters you can't normally see: ¶ at the end of every paragraph, a dot on every space, → on tabs, ° on non-breaking spaces and ↵ on line breaks. They are only drawn over the text: the document is never changed, they don't print, and they can't be selected or copied. The choice is remembered. A very long document shows them for its first part only, so typing stays quick (typing measured at about 1 ms a key with 19,000 spaces marked). Tests: see `frontend/src/editor/NonPrinting.ts`.
+
 ## Read aloud (text to speech)
 
 The speaker button in the top bar of a document or wiki reads the page aloud, or just what you have selected. A floating pill (like the voice typing one) has play and pause, a sentence back and forward, and slower and faster (0.75× to 2×); the sentence being read is highlighted and scrolled into view.

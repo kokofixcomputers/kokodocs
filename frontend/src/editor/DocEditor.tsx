@@ -23,6 +23,7 @@ import { SlashCommand, SlashMenu } from './SlashMenu'
 import { EmojiSuggest, EmojiSuggestMenu } from './EmojiSuggest'
 import { FindBar } from './FindBar'
 import { FindReplace } from './FindReplace'
+import { NonPrinting } from './NonPrinting'
 import { CalloutMenu, CommentMenu, ImageMenu, ShapeMenu, TableMenu } from './BubbleMenus'
 import { CommentMark } from './CommentMark'
 import { CommentsPanel, useComments, type Draft } from './Comments'
@@ -168,6 +169,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       ProofreadMarks,
       AiFlash,
       FindReplace,
+      NonPrinting,
       SlashCommand,
       EmojiSuggest,
       CommentMark,

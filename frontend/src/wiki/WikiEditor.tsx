@@ -46,6 +46,7 @@ import { WikiTab, WikiTabs } from './WikiTabs'
 import { METHODS, type KV, type Vars } from './request'
 import { ancestors, children, descendants, nextPos, place, reading, uid, type Entry, type Tree } from './tree'
 import { ProofMenu, ProofreadMarks, ProofreadPanel, useProofread } from '../editor/Proofread'
+import { NonPrinting } from '../editor/NonPrinting'
 import { NotionImport } from './NotionImport'
 import './wiki.css'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -416,7 +417,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
     EmojiSuggest,
-    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor,
+    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions, shouldRerenderOnTransaction: false }, [])
