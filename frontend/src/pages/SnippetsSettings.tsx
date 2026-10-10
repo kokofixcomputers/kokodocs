@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
-import { LOCAL_MODELS, loadLocalModel, chooseLocalModel, removeLocalModel, useLocalModel } from '../editor/ai/local'
+import { LOCAL_MODEL, loadLocalModel, removeLocalModel, useLocalModel } from '../editor/ai/local'
 import { aiConnected } from '../editor/ai/model'
 import { Plus, Trash2 } from 'lucide-react'
 import { saveSnippets, saveWriting, usePrefs, type Snippet } from '../prefs'
@@ -51,7 +51,6 @@ function AiHelpers() {
   const lm = useLocalModel()
   const [conn, setConn] = useState<boolean | null>(null)
   useEffect(() => { void aiConnected().then(setConn) }, [])
-  useEffect(() => { chooseLocalModel(w.localModel) }, [w.localModel])   // eslint-disable-line react-hooks/exhaustive-deps
   const save = (p: Partial<typeof w>) => saveWriting(p).catch((e) => toast((e as Error).message))
   return (
     <>
@@ -66,13 +65,10 @@ function AiHelpers() {
         {w.autocomplete && (
           <div className="st-row" style={{ alignItems: 'flex-start' }}><div><b>Where suggestions come from</b>
             <span>{w.engine === 'device'
-              ? `${LOCAL_MODELS[w.localModel].name}, a model that runs on this device. Nothing you write leaves it, and it works offline once downloaded (about ${LOCAL_MODELS[w.localModel].mb} MB, kept by the browser). ${LOCAL_MODELS[w.localModel].note}`
+              ? `${LOCAL_MODEL.name}, a small model that runs on this device. Nothing you write leaves it, and it works offline once downloaded (about ${LOCAL_MODEL.mb} MB, kept by the browser). It is modest: expect short, plain continuations.`
               : conn === false ? 'Uses the AI model connected under Assistant, but none is connected yet. Connect one there first.' : 'Uses the AI model connected under Assistant. The text before your cursor is sent to that provider. It is not used for encrypted documents.'}</span>
             {w.engine === 'device' && (
-              <span className="st-inline" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-                <span className="seg mini" role="radiogroup" aria-label="Which model">
-                  {(Object.keys(LOCAL_MODELS) as (keyof typeof LOCAL_MODELS)[]).map((k) => <button key={k} role="radio" aria-checked={w.localModel === k} className={w.localModel === k ? 'on' : ''} onClick={() => { chooseLocalModel(k); void save({ localModel: k }) }}>{LOCAL_MODELS[k].name}</button>)}
-                </span>
+              <span className="st-inline" style={{ gap: 10, marginTop: 8 }}>
                 {lm.status === 'loading' ? <><Loader2 size={15} className="spin" /> {lm.downloaded ? 'Starting' : `Downloading ${Math.round(lm.progress * 100)}%`}</>
                   : lm.status === 'ready' ? <>Ready{lm.device === 'webgpu' ? ' (using the graphics card)' : ' (using the processor)'}</>
                   : lm.status === 'error' ? <span className="form-error" style={{ margin: 0 }}>{lm.error}</span>

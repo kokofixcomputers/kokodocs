@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 export {}   // (a module of its own, so its names stay out of the other workers)
 /** The small language model for inline suggestions runs here, off the page's main thread. SmolLM2 360M (Apache 2.0, Hugging Face), through transformers.js. */
-let MODEL = 'HuggingFaceTB/SmolLM2-360M-Instruct'   // (the base 360M model has no browser build; the instruct one continues text just as well)
+const MODEL = 'HuggingFaceTB/SmolLM2-360M-Instruct'   // (the base 360M model has no browser build; the instruct one continues text just as well)
 type Gen = (prompt: string, o: Record<string, unknown>) => Promise<{ generated_text: string }[]>
 type Cfg = { device: 'wasm' | 'webgpu'; dtype: 'q8' | 'q4f16' }
 let cfg: Cfg = { device: 'wasm', dtype: 'q8' }
@@ -39,9 +39,9 @@ function load(): Promise<Gen> {
 
 let queue: Promise<unknown> = Promise.resolve()
 self.onmessage = (e: MessageEvent) => {
-  const m = e.data as { type: 'load'; id: number; cfg?: Cfg; model?: string } | { type: 'complete'; id: number; prompt: string; max: number } | { type: 'cancel' }
+  const m = e.data as { type: 'load'; id: number; cfg?: Cfg } | { type: 'complete'; id: number; prompt: string; max: number } | { type: 'cancel' }
   if (m.type === 'cancel') { stopper?.interrupt(); return }   // (not queued: it has to reach a generation that is running)
-  if (m.type === 'load' && !gen) { if (m.cfg) cfg = m.cfg; if (m.model) MODEL = m.model }
+  if (m.type === 'load' && m.cfg && !gen) cfg = m.cfg
   queue = queue.then(async () => {
     try {
       if (m.type === 'load') { await load(); self.postMessage({ type: 'done', id: m.id, device: used }) }
