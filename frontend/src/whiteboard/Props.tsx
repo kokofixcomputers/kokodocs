@@ -20,6 +20,16 @@ function Colors({ value, list, onPick, label, none }: { value: string; list: str
 function Seg<T extends string | number>({ value, items, onPick, label }: { value: T; items: { v: T; t: React.ReactNode; title: string }[]; onPick: (v: T) => void; label: string }) {
   return <div className="wb-seg" role="radiogroup" aria-label={label}>{items.map((i) => <button key={String(i.v)} type="button" role="radio" aria-checked={value === i.v} title={i.title} aria-label={i.title} className={value === i.v ? 'on' : ''} onClick={() => onPick(i.v)}>{i.t}</button>)}</div>
 }
+/** a slider with its number beside it, for fine control */
+function Slide({ value, min, max, step = 1, onPick, label, unit = '' }: { value: number; min: number; max: number; step?: number; onPick: (n: number) => void; label: string; unit?: string }) {
+  const clamp = (n: number) => Math.max(min, Math.min(max, n))
+  return (
+    <div className="wb-slide">
+      <input type="range" className="wb-range" min={min} max={max} step={step} value={clamp(value)} aria-label={label} onChange={(e) => onPick(Number(e.target.value))} />
+      <span className="wb-num"><input type="number" min={min} max={max} step={step} value={Math.round(value * 10) / 10} aria-label={`${label} (number)`} onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n) && e.target.value !== '') onPick(clamp(n)) }} />{unit}</span>
+    </div>
+  )
+}
 const Row = ({ t, children }: { t: string; children: React.ReactNode }) => <div className="wb-prop"><label>{t}</label>{children}</div>
 
 /** The look of what is selected, or of what you draw next when nothing is selected. */
@@ -31,7 +41,7 @@ export function Props({ tool, selected, style, apply, act, readOnly }: {
   const types = selected.length ? selected.map((e) => e.type) : [tool === 'highlight' ? 'draw' : tool === 'select' || tool === 'hand' || tool === 'lasso' || tool === 'eraser' || tool === 'bucket' || tool === 'image' ? 'rect' : tool]
   const any = (f: (t: string) => boolean) => types.some((t) => f(t))
   const v: Style & { bold: boolean; italic: boolean } = first
-    ? { stroke: first.stroke, fill: first.fill, fs: first.fs, sw: first.sw, ss: first.ss, ro: first.ro, op: first.op, rad: first.rad, font: first.font ?? style.font, size: first.size ?? style.size, ta: first.ta ?? style.ta, tc: first.tc ?? first.stroke, hs: first.hs ?? 'none', he: first.he ?? 'arrow', curve: first.curve ?? 'straight', bold: !!first.bold, italic: !!first.italic }
+    ? { stroke: first.stroke, fill: first.fill, fs: first.fs, sw: first.sw, ss: first.ss, ro: first.ro, op: first.op, rad: first.rad, fgap: first.fgap ?? 0, font: first.font ?? style.font, size: first.size ?? style.size, ta: first.ta ?? style.ta, tc: first.tc ?? first.stroke, hs: first.hs ?? 'none', he: first.he ?? 'arrow', curve: first.curve ?? 'straight', bold: !!first.bold, italic: !!first.italic }
     : { ...style, bold: false, italic: false }
   if (readOnly || (tool === 'hand' && !selected.length) || (tool === 'image' && !selected.length) || (tool === 'eraser' && !selected.length)) return null
   const onlyImage = types.every((t) => t === 'image' || t === 'embed')
@@ -48,11 +58,11 @@ export function Props({ tool, selected, style, apply, act, readOnly }: {
       {pad && <p className="wb-hint">Click a shape to fill it with this colour, or the board to colour the background.</p>}
       {hasStroke && !pad && <Row t="Stroke"><Colors label="stroke" value={v.stroke} list={PALETTE} onPick={(c) => apply({ stroke: c })} /></Row>}
       {(hasFill || pad) && <Row t={pad ? 'Fill colour' : 'Background'}><Colors label="fill" value={v.fill} list={FILLS} none={!pad} onPick={(c) => apply({ fill: c })} /></Row>}
-      {hasFill && !pad && v.fill !== 'transparent' && <Row t="Fill style"><Seg label="Fill style" value={v.fs} items={FS} onPick={(fs) => apply({ fs })} /></Row>}
-      {hasStroke && !pad && <Row t="Stroke width"><Seg label="Stroke width" value={v.sw} items={[{ v: 1, t: <i className="wb-w w1" />, title: 'Thin' }, { v: 2, t: <i className="wb-w w2" />, title: 'Medium' }, { v: 4, t: <i className="wb-w w4" />, title: 'Bold' }, { v: 7, t: <i className="wb-w w7" />, title: 'Extra bold' }]} onPick={(sw) => apply({ sw })} /></Row>}
+      {hasFill && !pad && v.fill !== 'transparent' && <Row t="Fill style"><Seg label="Fill style" value={v.fs} items={FS} onPick={(fs) => apply({ fs })} />{v.fs !== 'solid' && <Slide label="Fill line spacing" value={v.fgap || Math.max(7, v.sw * 4)} min={3} max={40} onPick={(fgap) => apply({ fgap })} unit="px" />}</Row>}
+      {hasStroke && !pad && <Row t="Stroke width"><Seg label="Stroke width" value={v.sw} items={[{ v: 1, t: <i className="wb-w w1" />, title: 'Thin' }, { v: 2, t: <i className="wb-w w2" />, title: 'Medium' }, { v: 4, t: <i className="wb-w w4" />, title: 'Bold' }, { v: 7, t: <i className="wb-w w7" />, title: 'Extra bold' }]} onPick={(sw) => apply({ sw })} /><Slide label="Stroke width" value={v.sw} min={1} max={40} onPick={(sw) => apply({ sw })} unit="px" /></Row>}
       {hasStroke && !pad && !any((t) => t === 'draw') && <Row t="Stroke style"><Seg label="Stroke style" value={v.ss} items={[{ v: 'solid', t: '——', title: 'Solid' }, { v: 'dashed', t: '- -', title: 'Dashed' }, { v: 'dotted', t: '···', title: 'Dotted' }]} onPick={(ss) => apply({ ss })} /></Row>}
-      {hasStroke && !pad && !any((t) => t === 'draw') && <Row t="Sloppiness"><Seg label="Sloppiness" value={v.ro} items={[{ v: 0, t: 'Clean', title: 'Clean lines' }, { v: 1, t: 'Sketch', title: 'Hand-drawn' }, { v: 2, t: 'Messy', title: 'Very hand-drawn' }]} onPick={(ro) => apply({ ro })} /></Row>}
-      {any((t) => t === 'rect') && !pad && <Row t="Corners"><Seg label="Corners" value={v.rad >= 999 ? 999 : v.rad > 0 ? 18 : 0} items={[{ v: 0, t: '▢', title: 'Square corners' }, { v: 18, t: '▭', title: 'Rounded corners' }, { v: 999, t: '⬭', title: 'Pill' }]} onPick={(rad) => apply({ rad })} /></Row>}
+      {hasStroke && !pad && !any((t) => t === 'draw') && <Row t="Sloppiness"><Seg label="Sloppiness" value={v.ro} items={[{ v: 0, t: 'Clean', title: 'Clean lines' }, { v: 1, t: 'Sketch', title: 'Hand-drawn' }, { v: 2, t: 'Messy', title: 'Very hand-drawn' }]} onPick={(ro) => apply({ ro })} /><Slide label="Sloppiness" value={v.ro} min={0} max={3} step={0.1} onPick={(ro) => apply({ ro })} /></Row>}
+      {any((t) => t === 'rect') && !pad && <Row t="Corners"><Seg label="Corners" value={v.rad >= 999 ? 999 : v.rad > 0 ? 18 : 0} items={[{ v: 0, t: '▢', title: 'Square corners' }, { v: 18, t: '▭', title: 'Rounded corners' }, { v: 999, t: '⬭', title: 'Pill' }]} onPick={(rad) => apply({ rad })} /><Slide label="Corner roundness" value={v.rad >= 999 ? 120 : v.rad} min={0} max={120} onPick={(rad) => apply({ rad })} unit="px" /></Row>}
       {linear && !pad && <Row t="Path"><Seg label="Path" value={v.curve} items={[{ v: 'straight', t: '╱', title: 'Straight' }, { v: 'curved', t: '⌒', title: 'Curved' }, { v: 'elbow', t: '┐', title: 'Elbow (square corners)' }]} onPick={(curve) => apply({ curve })} /></Row>}
       {arrow && !pad && <Row t="Start"><Seg label="Start of the arrow" value={v.hs} items={HEADS} onPick={(hs) => apply({ hs })} /></Row>}
       {arrow && !pad && <Row t="End"><Seg label="End of the arrow" value={v.he} items={HEADS} onPick={(he) => apply({ he })} /></Row>}
@@ -64,7 +74,7 @@ export function Props({ tool, selected, style, apply, act, readOnly }: {
             </Popover>
           </Row>
           <Row t="Size"><div className="wb-size"><Seg label="Text size" value={v.size} items={[{ v: 16, t: 'S', title: 'Small' }, { v: 24, t: 'M', title: 'Medium' }, { v: 36, t: 'L', title: 'Large' }, { v: 56, t: 'XL', title: 'Extra large' }]} onPick={(size) => apply({ size })} />
-            <input type="number" min={6} max={400} value={Math.round(v.size)} aria-label="Font size" onChange={(e) => { const n = Number(e.target.value); if (n >= 6 && n <= 400) apply({ size: n }) }} /></div></Row>
+            </div><Slide label="Font size" value={v.size} min={8} max={200} onPick={(size) => apply({ size })} unit="px" /></Row>
           <Row t="Text"><div className="wb-line">
             <Seg label="Alignment" value={v.ta} items={[{ v: 'left', t: <AlignLeft size={15} />, title: 'Left' }, { v: 'center', t: <AlignCenter size={15} />, title: 'Centre' }, { v: 'right', t: <AlignRight size={15} />, title: 'Right' }]} onPick={(ta) => apply({ ta })} />
             <button type="button" className={`wb-mini ${v.bold ? 'on' : ''}`} title="Bold" aria-label="Bold" aria-pressed={v.bold} onClick={() => apply({ bold: !v.bold })}><Bold size={15} /></button>

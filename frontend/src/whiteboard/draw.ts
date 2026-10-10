@@ -8,14 +8,15 @@ import type { El, Head } from './types'
 export interface Part { d: string; stroke: string; fill: string; sw: number; dash?: string; round?: boolean }
 
 const gen = new RoughGenerator()
-const ROUGH = [0, 1, 2.3], BOW = [0, 1, 2.2]
+/** how hand-drawn: 0 is clean, 1 sketchy, 2 very sketchy, and anything in between or beyond */
+const rough = (ro: number) => (ro <= 1 ? ro : 1 + (ro - 1) * 1.3), bow = (ro: number) => (ro <= 1 ? ro : 1 + (ro - 1) * 1.2)
 
 function opts(e: El, fill: boolean): Options {
   const sw = e.sw, solid = e.fs === 'solid'
   const o: Options = {
-    seed: e.seed, roughness: ROUGH[e.ro], bowing: BOW[e.ro], strokeWidth: sw, stroke: e.stroke, disableMultiStroke: e.ro === 0, preserveVertices: e.ro === 0,
+    seed: e.seed, roughness: rough(e.ro), bowing: bow(e.ro), strokeWidth: sw, stroke: e.stroke, disableMultiStroke: e.ro < 0.15, preserveVertices: e.ro < 0.15,
     fill: fill && e.fill !== 'transparent' && e.fill !== 'none' ? e.fill : undefined,
-    fillStyle: e.fs === 'cross-hatch' ? 'cross-hatch' : e.fs, hachureGap: solid ? undefined : Math.max(7, sw * 4), fillWeight: Math.max(1, sw * 0.7), hachureAngle: -41,
+    fillStyle: e.fs === 'cross-hatch' ? 'cross-hatch' : e.fs, hachureGap: solid ? undefined : e.fgap && e.fgap > 0 ? e.fgap : Math.max(7, sw * 4), fillWeight: Math.max(1, sw * 0.7), hachureAngle: -41,
     curveStepCount: 12, maxRandomnessOffset: 2 + sw * 0.2,
   }
   if (e.ss === 'dashed') o.strokeLineDash = [sw * 4 + 4, sw * 3 + 3]
@@ -53,7 +54,7 @@ const heads = (e: El, tip: Pt, from: Pt, kind: Head): Part[] => {
   if (kind === 'none') return []
   const a = Math.atan2(tip[1] - from[1], tip[0] - from[0]), L = 11 + e.sw * 3.2
   const at = (ang: number, len = L): Pt => [tip[0] - Math.cos(a + ang) * len, tip[1] - Math.sin(a + ang) * len]
-  const o = { ...opts({ ...e, ss: 'solid', fill: e.stroke, fs: 'solid' }, kind !== 'arrow' && kind !== 'bar'), roughness: Math.min(ROUGH[e.ro], 1) }
+  const o = { ...opts({ ...e, ss: 'solid', fill: e.stroke, fs: 'solid' }, kind !== 'arrow' && kind !== 'bar'), roughness: Math.min(rough(e.ro), 1) }
   if (kind === 'arrow') return parts(gen.linearPath([at(0.5), tip, at(-0.5)], o), e)
   if (kind === 'triangle') return parts(gen.polygon([tip, at(0.42), at(-0.42)], o), e)
   if (kind === 'diamond') { const m = at(0, L * 0.6), b = at(0, L * 1.2); return parts(gen.polygon([tip, [m[0] + (at(0.6)[1] - m[1]) * 0.0 + Math.sin(a) * L * 0.36, m[1] - Math.cos(a) * L * 0.36], b, [m[0] - Math.sin(a) * L * 0.36, m[1] + Math.cos(a) * L * 0.36]], o), e) }

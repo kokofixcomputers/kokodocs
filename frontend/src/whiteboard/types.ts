@@ -12,7 +12,8 @@ export interface El {
   x: number; y: number; w: number; h: number; a: number          // top-left corner, size, and angle in radians (about the middle)
   z: number                                                       // stacking order: higher is in front
   stroke: string; fill: string; fs: FillStyle; sw: number; ss: 'solid' | 'dashed' | 'dotted'
-  ro: 0 | 1 | 2                                                   // how hand-drawn it looks: 0 clean, 1 sketchy, 2 very sketchy
+  ro: number                                                      // how hand-drawn it looks: 0 clean, 1 sketchy, 2 very sketchy, up to 3
+  fgap?: number                                                   // how far apart the fill's lines are (0 or unset: chosen from the line width)
   op: number; rad: number; seed: number
   // text: standalone text, the words inside a shape, or the label on an arrow
   text?: string; font?: string; size?: number; ta?: 'left' | 'center' | 'right'; bold?: boolean; italic?: boolean; tc?: string; wrap?: boolean
@@ -26,11 +27,11 @@ export interface El {
 }
 
 export interface Style {
-  stroke: string; fill: string; fs: FillStyle; sw: number; ss: El['ss']; ro: El['ro']; op: number; rad: number
+  stroke: string; fill: string; fs: FillStyle; sw: number; ss: El['ss']; ro: number; op: number; rad: number; fgap: number
   font: string; size: number; ta: NonNullable<El['ta']>; tc: string; hs: Head; he: Head; curve: NonNullable<El['curve']>
 }
 export const DEFAULT_STYLE: Style = {
-  stroke: '#1e1e2e', fill: 'transparent', fs: 'hachure', sw: 2, ss: 'solid', ro: 1, op: 100, rad: 0,
+  stroke: '#1e1e2e', fill: 'transparent', fs: 'hachure', sw: 2, ss: 'solid', ro: 1, op: 100, rad: 0, fgap: 0,
   font: 'Caveat', size: 24, ta: 'center', tc: '#1e1e2e', hs: 'none', he: 'arrow', curve: 'straight',
 }
 

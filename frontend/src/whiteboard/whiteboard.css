@@ -61,3 +61,5 @@
 .wb-mode.creative .wb-mode-knob { transform: translateX(100%); background: linear-gradient(135deg, #7c3aed, #db2777); }
 .wb-mode-a, .wb-mode-b { position: relative; z-index: 1; text-align: center; transition: color .2s; } .wb-mode:not(.creative) .wb-mode-a, .wb-mode.creative .wb-mode-b { color: #fff; }
 .wb-mode:disabled { opacity: .6; cursor: default; }
+.wb-slide { display: flex; align-items: center; gap: 8px; margin-top: 7px; } .wb-slide .wb-range { flex: 1; min-width: 0; }
+.wb-num { display: inline-flex; align-items: center; gap: 2px; font: 600 11px 'Lexend', sans-serif; color: var(--muted); } .wb-num input { width: 46px; height: 26px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); padding: 0 4px; font: 600 12px 'Lexend', sans-serif; text-align: right; }

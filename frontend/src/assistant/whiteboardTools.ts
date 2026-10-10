@@ -96,9 +96,9 @@ export function createWhiteboardAdapter(d: WhiteboardDeps): Adapter {
     const st = color(a.stroke ?? a.color), fl = color(a.fill ?? a.background)
     if (st) o.stroke = st; if (fl) { o.fill = fl; if (fl !== 'transparent' && !a.fill_style) o.fs = 'solid' }
     if (a.fill_style && ['solid', 'hachure', 'cross-hatch', 'zigzag', 'dots'].includes(a.fill_style)) o.fs = a.fill_style
-    if (a.stroke_width !== undefined) o.sw = Math.max(1, Math.min(12, num(a.stroke_width, 2)))
+    if (a.stroke_width !== undefined) o.sw = Math.max(1, Math.min(40, num(a.stroke_width, 2)))
     if (a.stroke_style && ['solid', 'dashed', 'dotted'].includes(a.stroke_style)) o.ss = a.stroke_style
-    if (a.sketchiness !== undefined) o.ro = (['clean', 'sketchy', 'messy'].indexOf(String(a.sketchiness)) as 0 | 1 | 2) >= 0 ? (['clean', 'sketchy', 'messy'].indexOf(String(a.sketchiness)) as 0 | 1 | 2) : 1
+    if (a.sketchiness !== undefined) { const k = ['clean', 'sketchy', 'messy'].indexOf(String(a.sketchiness)); o.ro = k >= 0 ? k : Math.max(0, Math.min(3, num(a.sketchiness, 1))) }
     if (a.opacity !== undefined) o.op = Math.max(5, Math.min(100, num(a.opacity, 100)))
     if (typeof a.font === 'string' && a.font.trim()) o.font = a.font.trim()
     if (a.font_size !== undefined) o.size = Math.max(8, Math.min(200, num(a.font_size, 24)))
@@ -109,8 +109,8 @@ export function createWhiteboardAdapter(d: WhiteboardDeps): Adapter {
   }
   const STYLE_PROPS = {
     stroke: { type: 'string', description: 'Outline colour: a name (red, blue…) or #hex' }, fill: { type: 'string', description: 'Fill colour (a name or #hex), or "none"' },
-    fill_style: { type: 'string', enum: ['solid', 'hachure', 'cross-hatch', 'zigzag', 'dots'] }, stroke_width: { type: 'number' }, stroke_style: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
-    sketchiness: { type: 'string', enum: ['clean', 'sketchy', 'messy'], description: 'How hand-drawn the lines look (sketchy by default)' }, opacity: { type: 'number' },
+    fill_style: { type: 'string', enum: ['solid', 'hachure', 'cross-hatch', 'zigzag', 'dots'] }, stroke_width: { type: 'number', description: '1 to 40 (2 is normal)' }, stroke_style: { type: 'string', enum: ['solid', 'dashed', 'dotted'] },
+    sketchiness: { type: 'string', description: 'How hand-drawn the lines look: clean, sketchy (default) or messy, or a number from 0 (clean) to 3' }, opacity: { type: 'number' },
     font: { type: 'string', description: 'Any Google font name, e.g. Caveat (handwriting, the default), Inter, Lora, Permanent Marker' }, font_size: { type: 'number' }, text_align: { type: 'string', enum: ['left', 'center', 'right'] },
     text_color: { type: 'string' }, bold: { type: 'boolean' }, italic: { type: 'boolean' },
   }

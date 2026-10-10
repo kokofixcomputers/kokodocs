@@ -170,6 +170,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
       if (p.ro !== undefined && !text) u.ro = p.ro
       if (p.op !== undefined) u.op = p.op
       if (p.rad !== undefined && e.type === 'rect') u.rad = p.rad
+      if (p.fgap !== undefined && (shape || e.type === 'draw')) u.fgap = p.fgap
       if (p.font !== undefined) u.font = p.font
       if (p.size !== undefined && (text || shape || line)) u.size = p.size
       if (p.ta !== undefined) u.ta = p.ta
