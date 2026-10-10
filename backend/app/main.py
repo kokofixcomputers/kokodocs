@@ -37,7 +37,7 @@ from .tags import router as tags_router
 from .wikiproxy import router as wikiproxy_router
 from . import forms
 from .notifications import router as notifications_router
-from . import imagededupe, searchindex, snapshots
+from . import imagecompress, imagededupe, searchindex, snapshots
 from .emailauth import router as emailauth_router
 from .db import init_db
 from .routes import router
@@ -45,7 +45,7 @@ from .routes import router
 init_db()
 searchindex.start_backfill()
 snapshots.start_compaction()
-imagededupe.start_merge()
+imagecompress.start(imagededupe.start_merge())
 forms.start_sweeper()
 app = FastAPI(title="KokoDocs", docs_url="/api/docs-ui", openapi_url="/api/openapi.json")
 class SelectiveGZip:

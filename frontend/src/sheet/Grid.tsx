@@ -63,11 +63,14 @@ interface Props {
   onFormat: (action: 'bold' | 'italic' | 'underline') => void
   overlay?: (layout: Layout) => ReactNode
   onPasteDone?: (r: Rect) => void
+  /** 1 = normal size. The cells are laid out at normal size and drawn at this zoom, so scroll positions and mouse positions (in screen pixels) are divided by it. */
+  zoom?: number
 }
 
 export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
   const { model, sheet, sheetName, sel, editing } = p
   const scroller = useRef<HTMLDivElement>(null)
+  const z = p.zoom ?? 1
   const [scroll, setScroll] = useState({ x: 0, y: 0, w: 900, h: 500 })
   const [live, setLive] = useState<{ c?: [number, number]; r?: [number, number] }>({})
   const [fillRect, setFillRect] = useState<Rect | null>(null)
@@ -93,19 +96,19 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
   const fr = Math.min(fz.rows, nRows), fc = Math.min(fz.cols, nCols)
 
   // keep latest values for window-level handlers
-  const st = useRef({ ...p, layout, scroll, fr, fc, nRows, nCols, frozenW, frozenH })
-  st.current = { ...p, layout, scroll, fr, fc, nRows, nCols, frozenW, frozenH }
+  const st = useRef({ ...p, layout, scroll, fr, fc, nRows, nCols, frozenW, frozenH, z })
+  st.current = { ...p, layout, scroll, fr, fc, nRows, nCols, frozenW, frozenH, z }
 
   useEffect(() => {
     const el = scroller.current!
     let raf = 0
-    const read = () => { raf = 0; setScroll({ x: el.scrollLeft, y: el.scrollTop, w: el.clientWidth, h: el.clientHeight }) }
+    const read = () => { raf = 0; const k = st.current.z; setScroll({ x: el.scrollLeft / k, y: el.scrollTop / k, w: el.clientWidth / k, h: el.clientHeight / k }) }
     const on = () => { if (!raf) raf = requestAnimationFrame(read) }
     read()
     el.addEventListener('scroll', on, { passive: true })
     const ro = new ResizeObserver(on); ro.observe(el)
     return () => { el.removeEventListener('scroll', on); ro.disconnect(); if (raf) cancelAnimationFrame(raf) }
-  }, [])
+  }, [z])
 
   const rect = selRect(model, sheet, sel)
   const scrollToCell = useCallback((r: number, c: number) => {
@@ -113,8 +116,9 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
     const s = st.current, L = s.layout
     const fW = L.colX[s.fc], fH = L.rowY[s.fr]
     const x0 = L.X(c), x1 = L.X(c + 1), y0 = L.Y(r), y1 = L.Y(r + 1)
-    if (c >= s.fc) { if (x0 < el.scrollLeft + HEADER_W + fW) el.scrollLeft = x0 - HEADER_W - fW; else if (x1 > el.scrollLeft + el.clientWidth) el.scrollLeft = x1 - el.clientWidth + 4 }
-    if (r >= s.fr) { if (y0 < el.scrollTop + HEADER_H + fH) el.scrollTop = y0 - HEADER_H - fH; else if (y1 > el.scrollTop + el.clientHeight) el.scrollTop = y1 - el.clientHeight + 4 }
+    const k = s.z   // (the scroller's positions are screen pixels; the cells' are at normal size)
+    if (c >= s.fc) { if (x0 < el.scrollLeft / k + HEADER_W + fW) el.scrollLeft = (x0 - HEADER_W - fW) * k; else if (x1 > (el.scrollLeft + el.clientWidth) / k) el.scrollLeft = x1 * k - el.clientWidth + 4 }
+    if (r >= s.fr) { if (y0 < el.scrollTop / k + HEADER_H + fH) el.scrollTop = (y0 - HEADER_H - fH) * k; else if (y1 > (el.scrollTop + el.clientHeight) / k) el.scrollTop = y1 * k - el.clientHeight + 4 }
   }, [])
   useImperativeHandle(ref, () => ({ focus: () => scroller.current?.focus({ preventScroll: true }), scrollToCell, scroller: () => scroller.current }), [scrollToCell])
   useEffect(() => {
@@ -133,9 +137,9 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
     const box = el.getBoundingClientRect()
     let vx = clientX - box.left, vy = clientY - box.top
     if (!clamp && (vx > el.clientWidth || vy > el.clientHeight || vx < 0 || vy < 0)) return null
-    vx = Math.max(0, Math.min(vx, el.clientWidth)); vy = Math.max(0, Math.min(vy, el.clientHeight))
+    vx = Math.max(0, Math.min(vx, el.clientWidth)) / s.z; vy = Math.max(0, Math.min(vy, el.clientHeight)) / s.z   // (now at normal size)
     const fW = HEADER_W + L.colX[s.fc], fH = HEADER_H + L.rowY[s.fr]
-    const cx = vx < fW ? vx : vx + el.scrollLeft, cy = vy < fH ? vy : vy + el.scrollTop
+    const cx = vx < fW ? vx : vx + el.scrollLeft / s.z, cy = vy < fH ? vy : vy + el.scrollTop / s.z
     const onH = cy < HEADER_H, onW = cx < HEADER_W
     const c = onW ? -1 : idx(L.colX, cx - HEADER_W), r = onH ? -1 : idx(L.rowY, cy - HEADER_H)
     if (onH && onW) return { kind: 'corner', r: 0, c: 0 }
@@ -225,7 +229,7 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
     const timer = window.setInterval(() => { // edge auto-scroll while dragging
       const el = scroller.current, m = lastMouse.current; if (!el || !m || !drag.current) return
       const b = el.getBoundingClientRect()
-      const dx = m.x > b.right - 20 ? 24 : m.x < b.left + HEADER_W + 10 ? -24 : 0, dy = m.y > b.bottom - 20 ? 24 : m.y < b.top + HEADER_H + 10 ? -24 : 0
+      const dx = m.x > b.right - 20 ? 24 : m.x < b.left + HEADER_W * z + 10 ? -24 : 0, dy = m.y > b.bottom - 20 ? 24 : m.y < b.top + HEADER_H * z + 10 ? -24 : 0
       if (dx || dy) { el.scrollLeft += dx; el.scrollTop += dy; applyDrag(m.x, m.y) }
     }, 40)
     window.addEventListener('mousemove', move); window.addEventListener('mouseup', up)
@@ -234,8 +238,8 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
   const applyDrag = (clientX: number, clientY: number) => {
     const d = drag.current; if (!d) return
     const s = st.current
-    if (d.type === 'rzc') { const w = Math.max(24, d.startSize! + clientX - d.startPos!); setLive({ c: [d.idx!, w] }); return }
-    if (d.type === 'rzr') { const h = Math.max(14, d.startSize! + clientY - d.startPos!); setLive({ r: [d.idx!, h] }); return }
+    if (d.type === 'rzc') { const w = Math.max(24, d.startSize! + (clientX - d.startPos!) / z); setLive({ c: [d.idx!, w] }); return }
+    if (d.type === 'rzr') { const h = Math.max(14, d.startSize! + (clientY - d.startPos!) / z); setLive({ r: [d.idx!, h] }); return }
     const h = hitAt(clientX, clientY, true); if (!h) return
     if (d.type === 'select' && h.kind === 'cell') select(d.anchor![0], d.anchor![1], h.r, h.c)
     else if (d.type === 'col') select(0, d.anchor![1], s.nRows - 1, h.kind === 'cell' || h.kind === 'col' ? h.c : s.sel.fc)
@@ -616,7 +620,7 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
   return (
     <div ref={scroller} className="sg-scroll" tabIndex={0} onKeyDown={onKeyDown} onMouseDown={onMouseDown} onDoubleClick={onDoubleClick} onContextMenu={onContextMenu}
       onCopy={(e) => onCopy(e, false)} onCut={(e) => onCopy(e, true)} onPaste={onPaste}>
-      <div className="sg-content" style={{ width: layout.totalW, height: layout.totalH }}>
+      <div className="sg-content" style={{ width: layout.totalW, height: layout.totalH, ...(z !== 1 ? { zoom: z } : {}) }}>
         {/* scrolling body */}
         <div className="sg-layer">
           {lines(mainRows, mainCols, 'm')}

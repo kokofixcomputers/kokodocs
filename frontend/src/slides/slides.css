@@ -10,8 +10,9 @@
 .sl-add { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--line); } .sl-add .sl-add-main { flex: 1; }
 .sl-toolbar .tb-group.dim { opacity: .5; } .sl-toolbar .tb-group.dim > * { pointer-events: none; }
 .sl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; margin-bottom: 12px; }
-.sl-canvas-wrap { flex: 1; min-height: 0; background: var(--canvas); border-radius: var(--r-lg); display: grid; place-items: center; overflow: hidden; }
-.sl-stage-host { box-shadow: 0 4px 24px rgba(0,0,0,.18); border-radius: 4px; overflow: hidden; background: #fff; }
+
+.sl-canvas-wrap { flex: 1; min-height: 0; background: var(--canvas); border-radius: var(--r-lg); display: flex; overflow: auto; }   /* (auto margins centre the slide, and let it scroll from its edge when zoomed in) */
+.sl-stage-host { margin: auto; flex: none; box-shadow: 0 4px 24px rgba(0,0,0,.18); border-radius: 4px; overflow: hidden; background: #fff; }
 .sl-overlay { touch-action: none; } .sl-hit { position: absolute; cursor: move; outline: 0 solid transparent; } .sl-hit:hover { outline-width: var(--ow); outline-color: color-mix(in srgb, #3b82f6 45%, transparent); } .sl-hit.on { outline-width: var(--ow); outline-color: #3b82f6; }
 .sl-remote { position: absolute; inset: 0; outline-style: solid; pointer-events: none; } .sl-remote em { position: absolute; left: 0; top: 0; transform: translateY(-100%); color: #fff; font-style: normal; padding: 1px 6px; border-radius: 4px 4px 4px 0; white-space: nowrap; }
 .sl-handles { position: absolute; pointer-events: none; } .sl-handles i { position: absolute; background: #fff; border: solid #3b82f6; border-radius: 3px; pointer-events: auto; box-sizing: border-box; }

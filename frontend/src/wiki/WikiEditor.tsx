@@ -35,6 +35,7 @@ import { useVoiceTyping } from '../voice/useVoiceTyping'
 import { VoicePill } from '../voice/VoicePill'
 import { VoiceFab } from '../voice/VoiceControl'
 import { ReadAloud } from '../tts/ReadAloud'
+import { useWheelZoom, useZoom, ZoomPill } from '../ui/zoom'
 import { Outline } from '../editor/Outline'
 import { ShareDialog } from '../editor/ShareDialog'
 import { VersionHistory, fullLabel } from '../editor/VersionHistory'
@@ -93,6 +94,8 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const [verKey, setVerKey] = useState(0)
   const proof = useProofread(ed, info.id)
   const voice = useVoiceTyping({ editor: ed, docId: info.id, enabled: !readOnly && !preview })
+  const uz = useZoom('wiki'), canvasRef = useRef<HTMLDivElement>(null)
+  useWheelZoom(canvasRef, uz)
   const { status, synced } = useProviderStatus(provider)
   const people = usePresence(provider)
 
@@ -337,7 +340,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             </div>
           </aside>
 
-          <div className="canvas wiki-canvas">
+          <div className="canvas wiki-canvas" ref={canvasRef} style={{ ['--uz' as string]: uz.z }}>
             {!synced && status !== 'denied' && <div className="sync-banner">Loading wiki</div>}
             {preview ? <WikiPreview live={ydoc} docId={info.id} version={preview} onRestore={restoreVersion} onClose={() => setPreview(null)} /> : cur && tree[cur] ? (
               <PageView key={cur} id={cur} entry={tree[cur]} crumbs={ancestors(tree, cur).map((a) => tree[a].title)} prev={order[order.indexOf(cur) - 1]} next={order[order.indexOf(cur) + 1]}
@@ -348,6 +351,11 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
                 {!readOnly && <button className="btn btn-pill btn-primary" onClick={() => add('page', null)}><FilePlus2 size={17} />New page</button>}</div>
             ) : null}
           </div>
+          <ZoomPill zoom={uz} anchor={canvasRef} fitLabel="Fit the whole page" onFit={() => {
+            const c = canvasRef.current, w = c?.querySelector('.wiki-wrap'); if (!c || !w) return
+            const r = w.getBoundingClientRect(), nw = r.width / uz.z, nh = r.height / uz.z   // (sizes on the screen are zoomed, so divide the zoom out)
+            uz.set(Math.max(0.1, Math.min(1, (c.clientWidth - 48) / nw, (c.clientHeight - 56) / nh))); c.scrollTo({ top: 0 })
+          }} />
           <aside className={`side right ${panel === 'assistant' ? 'wide' : ''} ${panel !== 'none' ? 'open' : ''}`}>
             <button className="side-close" aria-label="Close panel" onClick={() => setPanel('none')}><X size={18} /></button>
             <div className="side-inner">

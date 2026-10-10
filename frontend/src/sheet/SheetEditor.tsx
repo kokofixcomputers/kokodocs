@@ -1,3 +1,4 @@
+import { useWheelZoom, useZoom, ZoomPill } from '../ui/zoom'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { openSettings } from '../ui/settingsStore'
@@ -25,7 +26,7 @@ import { ContextMenu, type MenuItem } from './ContextMenu'
 import { addr, colName } from './engine/refs'
 import { FormulaBar } from './FormulaBar'
 import { Grid, expandRect, selRect, type Editing, type GridHandle, type Remote, type Sel } from './Grid'
-import { SheetModel, type Chart, type ClipPayload, type Rect, type Style, type Tab } from './model'
+import { HEADER_H, HEADER_W, SheetModel, type Chart, type ClipPayload, type Rect, type Style, type Tab } from './model'
 import { SheetTabs } from './SheetTabs'
 import { SheetToolbar } from './SheetToolbar'
 import './sheet.css'
@@ -72,6 +73,7 @@ function useStatus(p: KokoProvider) {
 const normSel = (s: Sel): Sel => s
 
 function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc: Y.Doc; model: SheetModel; provider: KokoProvider; readOnly: boolean }) {
+  const uz = useZoom('sheet')
   const { user, logout } = useAuth()
   const { theme, toggle: toggleTheme } = useTheme()
   const version = useModelVersion(model)
@@ -92,6 +94,8 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const [chartDlg, setChartDlg] = useState<(Omit<Chart, 'id' | 'x' | 'y'> & { id?: string }) | null>(null)
   const [remotes, setRemotes] = useState<Remote[]>([])
   const grid = useRef<GridHandle>(null)
+  const gridAnchor = useMemo(() => ({ get current() { return grid.current?.scroller() ?? null } }) as React.RefObject<HTMLElement | null>, [])
+  useWheelZoom(gridAnchor, uz)
   const clipRef = useRef<ClipPayload | null>(null)
 
   // first client to open an empty spreadsheet creates the default sheet (fixed id, so concurrent creators converge)
@@ -335,14 +339,21 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
           ) : (
             <>
               {!synced && status !== 'denied' && <div className="sync-banner sheet-sync"><Loader2 size={15} className="spin" />Loading spreadsheet</div>}
-              <Grid ref={grid} model={model} sheet={sheet} sheetName={sheetName} version={version} sel={sel} setSel={setSel} editing={editing} startEdit={startEdit}
+              <Grid zoom={uz.z} ref={grid} model={model} sheet={sheet} sheetName={sheetName} version={version} sel={sel} setSel={setSel} editing={editing} startEdit={startEdit}
                 setEditingText={setEditingText} commit={commit} cancel={cancel} readOnly={readOnly} clipRef={clipRef} copyRect={copyRect} setCopyRect={setCopyRect}
                 remotes={remotes} onContext={setCtx} onFormat={applyFormat}
                 overlay={(layout) => (<>
-                  <ChartLayer model={model} sheet={sheet} version={version} selected={chartSel} setSelected={setChartSel} readOnly={readOnly}
+                  <ChartLayer zoom={uz.z} model={model} sheet={sheet} version={version} selected={chartSel} setSelected={setChartSel} readOnly={readOnly}
                     onEdit={(c) => setChartDlg({ id: c.id, type: c.type, range: c.range, title: c.title, w: c.w, h: c.h, headers: c.headers, stacked: c.stacked })} />
                   {openRoots.filter((c) => c.anchor?.sheet === sheet).map((c) => <i key={c.id} className="cm-corner" style={{ left: layout.X(Number(c.anchor!.c) + 1) - 10, top: layout.Y(Number(c.anchor!.r)) }} />)}
                 </>)} />
+              <ZoomPill zoom={uz} anchor={gridAnchor} fitLabel="Fit all the data" onFit={() => {
+                const el = grid.current?.scroller(), u = model.used(sheet); if (!el) return
+                let w = HEADER_W + 24, h = HEADER_H + 24   // (the size of the part of the sheet that has anything in it, at normal size)
+                for (let c = 0; c < Math.max(1, u.cols); c++) w += model.colWidth(sheet, c)
+                for (let r = 0; r < Math.max(1, u.rows); r++) h += model.rowHeight(sheet, r)
+                uz.set(Math.max(0.1, Math.min(1, el.clientWidth / w, el.clientHeight / h))); el.scrollTo({ left: 0, top: 0 })
+              }} />
               <div className="sheet-foot">
                 <SheetTabs model={model} tabs={tabs} active={sheet} setActive={setActive} readOnly={readOnly} />
                 {stats && (
@@ -375,7 +386,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
             if (chartDlg.id) model.updateChart(sheet, chartDlg.id, c)
             else {
               const gridEl = grid.current?.scroller()
-              model.addChart(sheet, { ...c, x: (gridEl?.scrollLeft ?? 0) + 80, y: (gridEl?.scrollTop ?? 0) + 60 })
+              model.addChart(sheet, { ...c, x: (gridEl?.scrollLeft ?? 0) / uz.z + 80, y: (gridEl?.scrollTop ?? 0) / uz.z + 60 })
             }
           }} />
       )}

@@ -19,7 +19,9 @@ interface Gesture {
 }
 
 /** The editable slide: select, drag, resize and edit text directly on the stage. */
-export function Canvas({ model, slide, theme, sel, setSel, editing, setEditing, readOnly, remotes, onEditChart, onActiveCell, pins, onContext }: {
+export function Canvas({ model, slide, theme, sel, setSel, editing, setEditing, readOnly, remotes, onEditChart, onActiveCell, pins, onContext, zoom = 1 }: {
+  /** 1 fits the slide in the window; below shows it smaller, above larger (the area then scrolls) */
+  zoom?: number
   model: SlidesModel; slide: Slide; theme: Theme; sel: string[]; setSel: (ids: string[]) => void
   editing: string | null; setEditing: (id: string | null) => void; readOnly: boolean; remotes: RemoteSel[]
   onEditChart?: (id: string) => void; onActiveCell?: (r: number, c: number) => void; pins?: { id: string; el?: string; n: number }[]
@@ -36,9 +38,9 @@ export function Canvas({ model, slide, theme, sel, setSel, editing, setEditing, 
 
   useLayoutEffect(() => {
     const el = wrap.current; if (!el) return
-    const fit = () => setScale(Math.max(0.1, Math.min((el.clientWidth - 24) / W, (el.clientHeight - 24) / H)))
+    const fit = () => setScale(Math.max(0.05, Math.min((el.clientWidth - 24) / W, (el.clientHeight - 24) / H) * zoom))
     fit(); const ro = new ResizeObserver(fit); ro.observe(el); return () => ro.disconnect()
-  }, [])
+  }, [zoom])
 
   const rectOf = (e: El) => live?.[e.id] ?? { x: e.x, y: e.y, w: e.w, h: e.h }
   const toStage = useCallback((cx: number, cy: number) => { const r = stage.current!.getBoundingClientRect(); return { x: (cx - r.left) / scale, y: (cy - r.top) / scale } }, [scale])

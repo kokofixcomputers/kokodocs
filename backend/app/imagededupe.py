@@ -55,7 +55,7 @@ def merge_duplicates() -> dict:
     return {"merged": merged, "bytes": saved}
 
 
-def start_merge() -> None:
+def start_merge() -> threading.Thread:
     def run():
         try:
             r = merge_duplicates()
@@ -63,4 +63,6 @@ def start_merge() -> None:
                 print(f"KokoDocs: merged {r['merged']} duplicate picture(s), freeing {r['bytes']:,} bytes", flush=True)
         except Exception as e:  # never stop the app from starting over housekeeping
             print("KokoDocs: picture merge skipped:", e, flush=True)
-    threading.Thread(target=run, daemon=True).start()
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    return t

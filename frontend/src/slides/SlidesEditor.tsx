@@ -1,3 +1,4 @@
+import { useWheelZoom, useZoom, ZoomPill } from '../ui/zoom'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { openSettings } from '../ui/settingsStore'
@@ -61,6 +62,8 @@ export default function SlidesEditor({ info }: { info: DocInfo }) {
 }
 
 function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc: Y.Doc; model: SlidesModel; provider: KokoProvider; readOnly: boolean }) {
+  const uz = useZoom('slides'), mainRef = useRef<HTMLElement>(null)
+  useWheelZoom(mainRef, uz)
   const { user, logout } = useAuth()
   const { theme: uiTheme, toggle: toggleTheme } = useTheme()
   const version = useModelVersion(model)
@@ -267,13 +270,14 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
         {preview ? <SlidesPreview live={ydoc} docId={info.id} version={preview} onRestore={restoreVersion} onClose={() => setPreview(null)} /> : (
           <>
             <Rail model={model} slides={slides} theme={theme} cur={slide.id} setCur={setCur} readOnly={readOnly} remotes={remotes} commentCounts={perSlide} onContext={onSlideContext} />
-            <main className="sl-main">
-              <Canvas model={model} slide={slide} theme={theme} sel={sel} setSel={setSel} editing={editing} setEditing={(id) => { setEditing(id); if (!id) setActiveCell(null) }} readOnly={readOnly} remotes={remotes} onContext={onContext} onEditChart={setChartEdit} onActiveCell={(r, c) => setActiveCell({ r, c })} pins={pins} />
+            <main className="sl-main" ref={mainRef}>
+              <Canvas zoom={uz.z} model={model} slide={slide} theme={theme} sel={sel} setSel={setSel} editing={editing} setEditing={(id) => { setEditing(id); if (!id) setActiveCell(null) }} readOnly={readOnly} remotes={remotes} onContext={onContext} onEditChart={setChartEdit} onActiveCell={(r, c) => setActiveCell({ r, c })} pins={pins} />
               <div className="sl-notes">
                 <label htmlFor="sl-notes-box">Speaker notes</label>
                 <textarea id="sl-notes-box" rows={2} readOnly={readOnly} value={slide.notes} placeholder={readOnly ? 'No notes' : 'Add notes for this slide. Only you see them while presenting.'} onChange={(e) => model.setNotes(slide.id, e.target.value)} />
               </div>
             </main>
+            <ZoomPill zoom={uz} anchor={mainRef} fitLabel="Fit the slide to the window" onFit={() => uz.reset()} />
           </>
         )}
         <aside className={`side right ${panel === 'assistant' ? 'wide' : ''} ${panel !== 'none' ? 'open' : ''}`}>

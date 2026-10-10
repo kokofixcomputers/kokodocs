@@ -206,6 +206,12 @@ def migrate(db: sqlite3.Connection) -> None:
     if "hash" not in {r["name"] for r in db.execute("PRAGMA table_info(uploads)")}:
         db.execute("ALTER TABLE uploads ADD COLUMN hash TEXT")
     db.execute("CREATE INDEX IF NOT EXISTS idx_uploads_hash ON uploads(owner_id, hash)")
+    # pictures are made smaller once, in place (see imagecompress.py); the original's fingerprint is kept so adding the same file again still reuses this copy
+    cols = {r["name"] for r in db.execute("PRAGMA table_info(uploads)")}
+    if "compressed" not in cols:
+        db.execute("ALTER TABLE uploads ADD COLUMN compressed INTEGER NOT NULL DEFAULT 0")
+    if "orig_hash" not in cols:
+        db.execute("ALTER TABLE uploads ADD COLUMN orig_hash TEXT")
     db.execute("""CREATE TABLE IF NOT EXISTS meetings (
         code TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', host_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         provider TEXT NOT NULL DEFAULT 'mesh', provider_ref TEXT NOT NULL DEFAULT '', guests INTEGER NOT NULL DEFAULT 1,

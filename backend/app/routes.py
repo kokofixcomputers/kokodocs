@@ -428,7 +428,7 @@ def sniff(data: bytes) -> str | None:
 def store_image(db, doc, doc_id: str, data: bytes, ext: str, who: str) -> str:
     """Save a picture, or reuse the copy the owner already has when the bytes are identical (it then costs no extra storage)."""
     h = hashlib.sha256(data).hexdigest()
-    row = db.execute("SELECT name FROM uploads WHERE owner_id = ? AND hash = ? AND size = ?", (doc["owner_id"], h, len(data))).fetchone()
+    row = db.execute("SELECT name FROM uploads WHERE owner_id = ? AND ((hash = ? AND size = ?) OR orig_hash = ?)", (doc["owner_id"], h, len(data), h)).fetchone()   # (orig_hash: the same file that was later made smaller)
     if row and (UPLOAD_DIR / row["name"]).exists():
         db.execute("INSERT OR IGNORE INTO upload_refs (name, doc_id) VALUES (?,?)", (row["name"], doc_id))
         db.commit()

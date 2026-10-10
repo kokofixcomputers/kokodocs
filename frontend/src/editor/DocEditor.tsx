@@ -39,6 +39,7 @@ import { useVoiceTyping } from '../voice/useVoiceTyping'
 import { VoicePill } from '../voice/VoicePill'
 import { VoiceFab } from '../voice/VoiceControl'
 import { ReadAloud } from '../tts/ReadAloud'
+import { useWheelZoom, useZoom, ZoomPill } from '../ui/zoom'
 import { LinkHover } from './LinkHover'
 import { useBatchedRerender } from './useBatchedRerender'
 import { DocContextMenu } from './TextContextMenu'
@@ -182,7 +183,9 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
     if (p) { p.apply(editor); toast('Imported ' + p.title) }
   }, [synced, editor, readOnly, info.id])
 
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(1)   // what makes the page fit the width of the screen
+  const uz = useZoom('doc')   // what the person chose on top of that (zoom out to see more of the document)
+  useWheelZoom(canvas, uz)
   const G = geometry(meta)
   const widthRef = useRef(G.width); widthRef.current = G.width
   // browser print (Ctrl+P / Print button) follows the page setup
@@ -389,11 +392,18 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         <div className="canvas" ref={canvas}>
           {!synced && status !== 'denied' && <div className="sync-banner"><Loader2 size={15} className="spin" />Loading document</div>}
           {preview && <VersionPreview live={ydoc} docId={info.id} version={preview} zoom={zoom} narrow={narrow} onRestore={restoreVersion} onClose={() => setPreview(null)} />}
-          <div className={`sheet ${readOnly ? 'is-readonly' : ''}`} hidden={!!preview} style={narrow ? { width: '100%', ['--pad-l' as string]: '18px', ['--pad-r' as string]: '18px', ['--bleed' as string]: '10px' } : { width: G.width, zoom, ...sheetVars(G) }}>
+          <div className={`sheet ${readOnly ? 'is-readonly' : ''}`} hidden={!!preview} style={narrow ? { width: '100%', zoom: uz.z, ['--pad-l' as string]: '18px', ['--pad-r' as string]: '18px', ['--bleed' as string]: '10px' } : { width: G.width, zoom: zoom * uz.z, ...sheetVars(G) }}>
             <EditorContent editor={editor} />
           </div>
           <div className="canvas-foot" />
         </div>
+        <ZoomPill zoom={uz} anchor={canvas} fitLabel="Fit the whole document" onFit={() => {
+          const c = canvas.current, s = c?.querySelector('.sheet'); if (!c || !s) return
+          const e = (narrow ? 1 : zoom) * uz.z, natural = s.getBoundingClientRect().height / e   // (sizes on the screen are zoomed, so divide the zoom out)
+          const target = Math.min((c.clientWidth - 48) / (narrow ? c.clientWidth : G.width), (c.clientHeight - 56) / natural)
+          uz.set(Math.max(0.1, Math.min(1, target / (narrow ? 1 : zoom))))
+          c.scrollTo({ top: 0 })
+        }} />
 
         <aside className={`side right ${panel === 'assistant' ? 'wide' : ''} ${panel !== 'none' ? 'open' : ''}`}>
           <button className="side-close" aria-label="Close panel" onClick={() => setPanel('none')}><X size={18} /></button>

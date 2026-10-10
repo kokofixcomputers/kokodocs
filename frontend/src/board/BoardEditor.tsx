@@ -14,6 +14,7 @@ import { Select } from '../ui/Select'
 import { useVoiceTyping } from '../voice/useVoiceTyping'
 import { VoicePill } from '../voice/VoicePill'
 import { VoiceFab } from '../voice/VoiceControl'
+import { useZoom, Zoomed } from '../ui/zoom'
 import { useContextMenu, type CtxItem } from '../ui/ContextMenu'
 import { DatePicker } from '../ui/DatePicker'
 import { Logo } from '../ui/Logo'
@@ -88,6 +89,7 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
   useEffect(() => { if (synced && !readOnly) model.ensure() }, [synced, model, readOnly])
   // voice typing: only while the cursor is in a text box (the title, a card's title or notes, a field, the filter, Koko's message box)
   const voice = useVoiceTyping({ editor: null, docId: info.id, enabled: !readOnly, fieldsOnly: true })
+  const uz = useZoom('board')
   const [inField, setInField] = useState(false)
   useEffect(() => {
     const check = () => { const a = document.activeElement; setInField(a instanceof HTMLTextAreaElement || (a instanceof HTMLInputElement && /^(text|search|url)$/.test(a.type))) }
@@ -158,11 +160,13 @@ function Inner({ info, model, provider, readOnly }: { info: DocInfo; model: Boar
         {tab !== 'fields' && <input className="bd-filter" type="search" placeholder="Filter cards" aria-label="Filter cards" value={filter} onChange={(e) => setFilter(e.target.value)} />}
       </nav>
 
+      <Zoomed zoom={uz} fitLabel="Fit the whole board">
       {tab === 'board' && <Columns model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} comments={comments} />}
       {tab === 'table' && <TableView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} title={title} />}
       {tab === 'roadmap' && <RoadmapView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} />}
       {tab === 'calendar' && <CalendarView model={model} cols={cols} fields={fields} readOnly={readOnly} filter={filter} onOpen={setOpen} />}
       {tab === 'fields' && !readOnly && <FieldsPage model={model} fields={fields} />}
+      </Zoomed>
 
       {open && <CardDialog model={model} fields={fields} cols={cols} target={open} readOnly={readOnly} onClose={() => setOpen(null)} docId={info.id} user={user} comments={comments} refreshComments={refreshComments} />}
       <VoicePill voice={voice} />

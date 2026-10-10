@@ -494,6 +494,14 @@ The speaker button in the top bar of a document or wiki reads the page aloud, or
 
 Tests: `backend/tests/test_tts.py`.
 
+## Zoom (every kind of file)
+
+Documents, wikis, spreadsheets, presentations, boards and forms all have a zoom control at the bottom right: **−**, the level (click it to go back to 100%), **+**, and **fit** (shows the whole file at once: the whole document or page, all the data in a sheet, the slide in the window, the whole board or form). Ctrl or ⌘ with the mouse wheel, or a pinch on a trackpad, zooms too. The level is remembered for each kind of file. In the spreadsheet and slides the pointer maths accounts for the zoom, so clicking, dragging, resizing columns and moving charts stay accurate.
+
+## Smaller pictures
+
+Pictures people add are made smaller once, in place, by the server: on startup (after duplicates are merged) and every few hours after that. JPEGs and WebPs are re-encoded at a good quality, PNGs are optimised without losing anything, anything over 2560 pixels on its longest side is scaled down, and camera metadata (location, device) is dropped. The file keeps its name and type, so every picture already in a document still shows. A result is used only if it is at least 5% smaller, and animated pictures are left alone. The person's storage is counted from each picture's size, so what is saved is given back to them straight away, and adding the same original file again reuses the smaller copy. Needs `Pillow` (in `requirements.txt`); `KOKO_IMAGE_COMPRESS=0` turns it off, `KOKO_IMAGE_MAX_SIDE` and `KOKO_IMAGE_QUALITY` (default 2560 and 82) change how hard it works. Tests: `backend/tests/test_imagecompress.py`.
+
 ## Scan a page (reading text from a photo)
 
 In a document or wiki, the toolbar's **Scan a page** button lets you choose a photo or scan (or drop one in) and adds the text on it where your cursor is. Undo works like any other edit. Two ways to read it, remembered per browser:

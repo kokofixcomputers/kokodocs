@@ -137,7 +137,8 @@ export function ChartSvg({ type, data, w, h, title, stacked, colors, legend: sho
 }
 
 /** Floating, draggable, resizable chart objects drawn on top of the grid. */
-export function ChartLayer({ model, sheet, version, selected, setSelected, readOnly, onEdit }: {
+export function ChartLayer({ model, sheet, version, selected, setSelected, readOnly, onEdit, zoom = 1 }: {
+  zoom?: number
   model: SheetModel; sheet: string; version: number; selected: string | null; setSelected: (id: string | null) => void; readOnly: boolean; onEdit: (c: Chart) => void
 }) {
   const charts = model.charts(sheet)
@@ -152,7 +153,7 @@ export function ChartLayer({ model, sheet, version, selected, setSelected, readO
     drag.current = { id: c.id, mode, sx: e.clientX, sy: e.clientY, o: c }
     const move = (ev: MouseEvent) => {
       const d = drag.current; if (!d) return
-      const dx = ev.clientX - d.sx, dy = ev.clientY - d.sy
+      const dx = (ev.clientX - d.sx) / zoom, dy = (ev.clientY - d.sy) / zoom   // (the mouse moves in screen pixels; the chart is at normal size)
       setLive({ [d.id]: d.mode === 'move' ? { x: Math.max(0, d.o.x + dx), y: Math.max(0, d.o.y + dy) } : { w: Math.max(200, d.o.w + dx), h: Math.max(140, d.o.h + dy) } })
     }
     const up = () => {

@@ -1,3 +1,4 @@
+import { useZoom, Zoomed } from '../ui/zoom'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { openSettings } from '../ui/settingsStore'
@@ -76,6 +77,7 @@ export default function FormEditor({ info }: { info: DocInfo }) {
 }
 
 function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; provider: KokoProvider }) {
+  const uz = useZoom('form')
   const { user, logout } = useAuth()
   const { theme: uiTheme, toggle: toggleTheme } = useTheme()
   const version = useModelVersion(model)
@@ -184,6 +186,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
         </div>
       )}
 
+      <Zoomed zoom={uz} fitLabel="Fit the whole form">
       <div className="fm-body">
         {tab === 'questions' && (
           <div className="fm-col">
@@ -232,6 +235,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
           </div>
         )}
       </div>
+      </Zoomed>
       {share && <ShareDialog info={info} onClose={() => setShare(false)} />}
       {user && assistant && <aside className="ai-drawer" aria-label="Assistant"><Suspense fallback={null}><AssistantHost docId={info.id} user={user} onClose={() => setAssistant(false)} source={{ kind: 'form', deps: { model, docId: info.id, getTitle: () => title, setTitle: onTitle, canEdit: () => true } }} /></Suspense></aside>}
     </div>
