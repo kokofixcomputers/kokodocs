@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
-import { ClipboardCheck, ClipboardPaste, Copy, ExternalLink, CopyPlus, Download, Grid3x3, Magnet, History, Layers as LayersIcon, Loader2, LogIn, Maximize, Minus, Moon, Plus, RotateCcw, Share2, Sparkles, Sun, Trash2, X } from 'lucide-react'
+import { ClipboardCheck, ClipboardPaste, Copy, ExternalLink, CopyPlus, Download, Grid3x3, Magnet, History, Maximize2, Minimize2, Layers as LayersIcon, Loader2, LogIn, Maximize, Minus, Moon, Plus, RotateCcw, Share2, Sparkles, Sun, Trash2, X } from 'lucide-react'
 import { api, type ApiError, type DocInfo, type Version } from '../api'
 import { useAuth } from '../auth'
 import { KokoProvider } from '../collab'
@@ -90,6 +90,23 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const [remotes, setRemotes] = useState<Remote[]>([])
   const [people, setPeople] = useState<{ id: number; name: string; color: string }[]>([])
   const [snap, setSnap] = useState<boolean>(() => { try { return localStorage.getItem('koko.wb.snap') !== '0' } catch { return true } })
+  const [full, setFull] = useState(false)   // full screen: the browser's own tabs and address bar are hidden, and so is this page's header (it slides down when the pointer is at the top)
+  const fsEl = () => (document as unknown as { fullscreenElement?: Element; webkitFullscreenElement?: Element }).fullscreenElement ?? (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement
+  const toggleFull = useCallback(async () => {
+    const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> }
+    if (fsEl() || full) {
+      setFull(false)
+      try { if (fsEl()) await (document.exitFullscreen?.() ?? (document as unknown as { webkitExitFullscreen?: () => Promise<void> }).webkitExitFullscreen?.()) } catch { /* already out */ }
+      return
+    }
+    setFull(true)   // (even where a browser will not go full screen, such as a phone, the page is cleared of everything but the board)
+    try { await (root.requestFullscreen?.() ?? root.webkitRequestFullscreen?.()) } catch { /* the page is still cleared */ }
+  }, [full])
+  useEffect(() => {
+    const f = () => { if (!fsEl()) setFull(false) }   // leaving with Esc or the browser's own controls
+    document.addEventListener('fullscreenchange', f); document.addEventListener('webkitfullscreenchange', f)
+    return () => { document.removeEventListener('fullscreenchange', f); document.removeEventListener('webkitfullscreenchange', f) }
+  }, [])
   const [undoState, setUndoState] = useState({ u: 0, r: 0 })
   const fileInput = useRef<HTMLInputElement>(null)
   const imageAt = useRef<Pt | null>(null)
@@ -278,6 +295,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
       const t = ev.target as HTMLElement | null
       if (editing || draftText || preview || t?.closest('input, textarea, select, [contenteditable="true"], .modal, .popover')) return
       const mod = ev.ctrlKey || ev.metaKey, key = ev.key.toLowerCase()
+      if (mod && ev.shiftKey && key === 'f') { ev.preventDefault(); void toggleFull(); return }
       if (mod && key === 'z') { ev.preventDefault(); if (!readOnly) (ev.shiftKey ? model.undo.redo() : model.undo.undo()); return }
       if (mod && key === 'y') { ev.preventDefault(); if (!readOnly) model.undo.redo(); return }
       if (mod && key === 'a') { ev.preventDefault(); setSel(els.filter((e) => !e.hide).map((e) => e.id)); return }
@@ -346,7 +364,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const assistantDeps = { bringFrameToLife: async (id: string, instruction?: string) => { await bringFrame(id, instruction); return 'Built it. The website is next to the frame.' }, reviseWebsite: async (id: string, instruction: string) => { await reviseEmbed(id, instruction); return 'Updated.' }, model, getSel: () => sel, setSel, getTitle: () => title, canEdit: () => !readOnly, docId: info.id, getView: () => view, setView, fit: () => fit(), size: () => board.current?.size() ?? { w: 800, h: 600 }, here }
 
   return (
-    <div className="editor-shell wb-shell">
+    <div className={`editor-shell wb-shell ${full ? 'wb-full' : ''}`}>
       <header className="ed-top">
         <div className="ed-left">
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
@@ -388,6 +406,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
               <button className="wb-zoom-pct" title="Reset to 100% (Ctrl/Cmd+0)" onClick={() => zoomTo(1)}>{Math.round(view.z * 100)}%</button>
               <button className="wb-mini" title="Zoom in (+)" aria-label="Zoom in" onClick={() => zoomBy(1.25)}><Plus size={15} /></button>
               <button className="wb-mini" title="Fit everything (Shift+1)" aria-label="Fit everything" onClick={() => fit()}><Maximize size={15} /></button>
+              <button className={`wb-mini ${full ? 'on' : ''}`} title={full ? 'Leave full screen (Esc)' : 'Full screen: hide the browser tabs and everything but the board (Ctrl/Cmd+Shift+F)'} aria-label={full ? 'Leave full screen' : 'Full screen'} aria-pressed={full} onClick={() => void toggleFull()}>{full ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
               <button className={`wb-mini ${snap ? 'on' : ''}`} title="Hold the pen still at the end of a stroke to turn a rough shape into a perfect one" aria-label="Hold to make perfect shapes" aria-pressed={snap} disabled={readOnly} onClick={() => setSnap((v) => !v)}><Magnet size={15} /></button>
               <button className={`wb-mini ${grid ? 'on' : ''}`} title="Grid" aria-label="Grid" aria-pressed={grid} disabled={readOnly} onClick={() => model.setMeta('grid', !grid)}><Grid3x3 size={15} /></button>
             </div>
