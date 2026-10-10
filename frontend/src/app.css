@@ -598,3 +598,4 @@ a.brand { color: var(--ink); text-decoration: none; }
 .modal > .st-stack { padding: 8px 24px 24px; display: grid; gap: 16px; } .modal > .st-stack > * { min-width: 0; }
 .modal > .form-error { padding: 0 24px 16px; margin: 0; }
 @media (max-width: 720px) { .modal > .st-stack { padding: 6px 16px 18px; gap: 14px; } }
+.st-section h2.st-sub { font-size: 17px; margin: 26px 0 14px; }

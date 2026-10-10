@@ -64,6 +64,7 @@ export interface AiSettings { configured: boolean; models: AiModelEntry[]; selec
 export interface AiAdminModel { id: string; label: string; base_url: string; model: string; key_set: boolean; enabled: boolean; default: boolean }
 export interface AiAdmin { models: AiAdminModel[]; env: { configured: boolean; url: string; model: string }; using_env: boolean; people_own: number }
 export interface SearchHit { id: string; title: string; kind: DocKind; owner: string; updated_at: number; title_match: boolean; snippet: string }
+export interface LinkPreview { url: string; title: string; description: string; image: string; site: string; favicon: string; host: string }
 export interface Notice { id: string; kind: 'mention' | 'comment' | 'share'; doc_id: string; doc_title: string; actor: string; text: string; link: string; created_at: number; read: boolean }
 export interface MentionSkip { email: string; reason: 'not_shared' }
 export interface Comment { anchor: Record<string, unknown> | null; id: string; parent_id: string | null; body: string; quote: string; resolved: boolean; created_at: number; user_id: string; author: string; mentions: string[] }
@@ -389,6 +390,7 @@ export const api = {
   adminMeetSave: (b: MeetAdminIn) => request<MeetAdmin>('/api/admin/meet', { method: 'PUT', ...json(b) }),
   adminMeetTest: () => request<{ ok: boolean; message: string; turn?: boolean }>('/api/admin/meet/test', { method: 'POST' }),
   prefs: () => request<Record<string, any>>('/api/me/prefs'),
+  linkPreview: (url: string) => request<LinkPreview>(`/api/link-preview?url=${encodeURIComponent(url)}`),
   savePref: (key: 'snippets' | 'writing', value: unknown) => request<{ ok: true }>(`/api/me/prefs/${key}`, { method: 'PUT', ...json({ value }) }),
   ttsConfig: () => request<{ engine: 'browser' | 'cloudflare'; langs: string[] }>('/api/tts/config'),
   /** the server's voice reading one sentence (only when the administrator has switched it on) */

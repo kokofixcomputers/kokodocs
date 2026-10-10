@@ -492,6 +492,12 @@ Tests: `backend/tests/test_sfu.py` (Cloudflare and Metered, against mocks) and `
 - **Save indicator.** Every editor's top bar shows "Saving…" with a spinner while an edit is on its way, then "Saved just now", "Saved 2 min ago" and so on. It follows what the connection has actually written out.
 - **Snippets (text expansion).** *Settings → Snippets*: type a trigger like `;sig` and it becomes the saved text, as soon as the trigger is typed, or after a space when another trigger starts the same way (`;a` and `;addr`). Not inside a word and not in code blocks. Placeholders: `{date}`, `{time}`, `{datetime}`, `{name}`, `{email}`. Snippets are kept on the server per person (`/api/me/prefs`, tests in `backend/tests/test_prefs.py`), so they follow you between devices and still work offline.
 
+## Link previews
+
+Paste a web address on an empty line of a document or wiki and it expands by itself: YouTube, Vimeo, Loom, Spotify, X posts, CodePen, Figma and Google Maps links become a player or embedded page; any other page (GitHub, articles, …) becomes a card with its title, description and picture. The little switch on the preview goes back to a plain link, to a card, or (where the site has a player) to the embed, any time. A link pasted inside a sentence stays an ordinary link, and a link that is alone on its line has a *Show a preview* button in its hover pill. Settings → Writing → *Link previews* turns the automatic expansion off.
+
+Cards are made by the server (`GET /api/link-preview?url=`), which reads the page's title, description and picture. Only signed-in people can use it, only the public internet is reachable (every redirect is checked), size and time are capped, and answers are kept for an hour. The card's text is saved in the document, so people reading it don't each fetch the page. Embedded players load from the provider's own site in a sandboxed frame.
+
 ## Tables and sticky notes
 
 - **Fill handle.** Select a cell (or several) in a table and drag the small square at its corner down, up, left or right. Numbers continue (1, 2 → 3, 4, 5), as do dates (`2026-01-30`), weekdays, months and text ending in a number (`Item 1` → `Item 2`). A single cell, or anything else, is copied with its formatting.

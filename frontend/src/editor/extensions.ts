@@ -16,6 +16,7 @@ import { FontFamily, FontSize } from './FontExtensions'
 import { ResizableImage } from './ResizableImage'
 import { KokoTable, KokoTableCell, KokoTableHeader } from './TableExtensions'
 import { KokoTaskItem } from './TaskItem'
+import { LinkEmbed } from './LinkEmbed'
 
 /** Everything that defines the document schema. The live editor and version previews share this list. */
 export const baseExtensions = () => [
@@ -27,5 +28,5 @@ export const baseExtensions = () => [
   DocLink.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' } }),
   TaskList, KokoTaskItem.configure({ nested: true }),
   KokoTable.configure({ resizable: true, lastColumnResizable: false }), TableRow, KokoTableHeader, KokoTableCell,
-  ResizableImage.configure({ inline: true, allowBase64: false }), DocShape,
+  ResizableImage.configure({ inline: true, allowBase64: false }), DocShape, LinkEmbed,
 ]

@@ -2,9 +2,10 @@ import { viewBottom, viewRight } from '../ui/viewport'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
-import { ArrowRight, Check, Copy, ExternalLink, Link2, Pencil, Unlink, X } from 'lucide-react'
+import { ArrowRight, Check, Copy, ExternalLink, Link2, LayoutPanelTop, Pencil, Unlink, X } from 'lucide-react'
 import { HeadingPicker, findHeading, isInternal, jumpTo } from './headingLinks'
 import { toast } from '../ui/Toast'
+import { embedAt } from './LinkEmbed'
 
 interface Hit { el: HTMLAnchorElement; href: string; rect: DOMRect }
 const normalize = (u: string) => (/^(https?:|mailto:|#h-)/i.test(u.trim()) ? u.trim() : `https://${u.trim()}`)
@@ -68,6 +69,11 @@ export function LinkHover({ editor }: { editor: Editor }) {
     else { select(); editor.chain().focus().setLink({ href: normalize(url) }).run() }
     setEditing(false); setHit(null)
   }
+  // a link that is the only thing on its line can be turned into a preview
+  const lone = (() => {
+    if (!editable || internal || !/^https?:\/\//i.test(hit.href)) return null
+    try { const $p = editor.state.doc.resolve(editor.view.posAtDOM(hit.el, 0)); return $p.parent.type.name === 'paragraph' && $p.parent.textContent === hit.el.textContent ? $p : null } catch { return null }
+  })()
   const keep = () => window.clearTimeout(timer.current)
   const later = () => { if (!editing) { window.clearTimeout(timer.current); timer.current = window.setTimeout(() => { if (!editingRef.current) setHit(null) }, 220) } }
 
@@ -97,6 +103,7 @@ export function LinkHover({ editor }: { editor: Editor }) {
               <button type="button" className="lp-btn" aria-label="Copy link" title="Copy link" onClick={() => navigator.clipboard.writeText(hit.href).then(() => toast('Link copied'), () => toast(hit.href))}><Copy size={15} /></button>
             </>
           )}
+          {lone && <button type="button" className="lp-btn" aria-label="Show a preview" title="Show a preview or player" onClick={() => { embedAt(editor.view, lone.before(), lone.after(), hit.href); setHit(null) }}><LayoutPanelTop size={15} /></button>}
           {editable && <button type="button" className="lp-btn" aria-label="Edit link" title="Edit link" onClick={() => setEditing(true)}><Pencil size={15} /></button>}
           {editable && <button type="button" className="lp-btn" aria-label="Remove link" title="Remove link" onClick={() => { select(); editor.chain().focus().unsetLink().run(); setHit(null) }}><Unlink size={15} /></button>}
         </>

@@ -36,6 +36,7 @@ from .search import router as search_router
 from .forms import router as forms_router
 from .tags import router as tags_router
 from .wikiproxy import router as wikiproxy_router
+from .linkpreview import router as linkpreview_router
 from . import forms
 from .notifications import router as notifications_router
 from . import imagecompress, imagededupe, searchindex, snapshots
@@ -90,6 +91,7 @@ app.include_router(search_router)
 app.include_router(forms_router)
 app.include_router(tags_router)
 app.include_router(wikiproxy_router)
+app.include_router(linkpreview_router)
 app.include_router(notifications_router)
 app.include_router(emailauth_router)
 app.include_router(ai_router)

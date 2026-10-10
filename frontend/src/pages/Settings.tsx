@@ -26,7 +26,7 @@ const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string 
   { id: 'appearance', label: 'Appearance', icon: <Palette size={17} />, group: 'App settings' },
   { id: 'assistant', label: 'AI assistant', icon: <Sparkles size={17} />, group: 'App settings' },
   { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'App settings' },
-  { id: 'snippets', label: 'Snippets', icon: <Zap size={17} />, group: 'App settings' },
+  { id: 'snippets', label: 'Writing', icon: <Zap size={17} />, group: 'App settings' },
   { id: 'device', label: 'On this device', icon: <Laptop size={17} />, group: 'App settings' },
 ]
 
