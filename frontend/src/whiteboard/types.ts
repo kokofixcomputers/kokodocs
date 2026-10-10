@@ -19,8 +19,8 @@ export interface El {
   // lines, arrows and pen strokes: points relative to x, y
   pts?: [number, number][]; hs?: Head; he?: Head; curve?: 'straight' | 'curved' | 'elbow'; from?: Bind; to?: Bind
   src?: string                                                    // image address
-  html?: string; prompt?: string; busy?: boolean; frame?: string  // a website made by Koko: its page, what was asked, and the frame it came from
-  name?: string; ai?: boolean                                     // frames: a title, and whether Koko can bring it to life
+  html?: string; prompt?: string; busy?: number; frame?: string   // a website made by Koko: its page, what was asked, when it started being made, and the frame it came from
+  name?: string; ai?: boolean; mode?: 'exact' | 'creative'                                     // frames: a title, and whether Koko can bring it to life
   hl?: boolean                                                    // pen strokes: a highlighter (wide and see-through)
   grp?: string; lock?: boolean; hide?: boolean
 }

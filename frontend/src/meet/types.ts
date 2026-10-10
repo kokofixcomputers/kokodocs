@@ -45,7 +45,7 @@ export const PERM_LABELS: Record<PermKey, { label: string; hint: string }> = {
 }
 export const DEFAULT_PERMS: Perms = { mic: true, camera: true, screen: true, chat: true, react: true, collab: true, present: true, edit: true, seek: true }
 /** The document being edited together, or presented, in the meeting. */
-export interface Share { id: string; kind: 'collab' | 'present'; doc_id: string; title: string; doc_kind: 'doc' | 'sheet' | 'slides'; by: string; by_id: string; edit: boolean; seek: boolean; slide: number; since: number }
+export interface Share { id: string; kind: 'collab' | 'present'; doc_id: string; title: string; doc_kind: 'doc' | 'sheet' | 'slides' | 'whiteboard'; by: string; by_id: string; edit: boolean; seek: boolean; slide: number; since: number }
 export interface Consents { yes: string[]; no: string[]; pending: string[] }
 export type Answer = 'yes' | 'no' | null
 

@@ -203,7 +203,7 @@ def _whiteboard(d: Doc) -> str:
     names = {str(e.get("id")): (str(e.get("text") or e.get("name") or e.get("type"))[:40]) for e in order}
     out = []
     for e in order:
-        if e.get("hidden"):
+        if e.get("hide"):
             continue
         t, x, y = e.get("type"), round(e.get("x", 0)), round(e.get("y", 0))
         if t in ("arrow", "line"):

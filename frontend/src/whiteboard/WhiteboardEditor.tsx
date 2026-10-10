@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
-import { ClipboardPaste, Copy, CopyPlus, Download, Grid3x3, History, Layers as LayersIcon, Loader2, LogIn, Maximize, Minus, Moon, Plus, RotateCcw, Share2, Sparkles, Sun, Trash2, X } from 'lucide-react'
+import { ClipboardCheck, ClipboardPaste, Copy, ExternalLink, CopyPlus, Download, Grid3x3, History, Layers as LayersIcon, Loader2, LogIn, Maximize, Minus, Moon, Plus, RotateCcw, Share2, Sparkles, Sun, Trash2, X } from 'lucide-react'
 import { api, type ApiError, type DocInfo, type Version } from '../api'
 import { useAuth } from '../auth'
 import { KokoProvider } from '../collab'
@@ -28,6 +28,8 @@ import { fitText } from './text'
 import { DEFAULT_STYLE, isLinear, type El, type ShapeKind, type Style, type Tool } from './types'
 import { exportPng, exportSvg } from './export'
 import { buildFlowchart, type FlowSpec } from './flowchart'
+import { bringToLife, reviseSite } from './aiFrame'
+import { aiConnected } from '../editor/ai/model'
 import './whiteboard.css'
 
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -93,6 +95,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const clip = useRef<El[]>([])
   const cm = useContextMenu()
   useEffect(() => { (window as unknown as { __wb?: WhiteboardModel }).__wb = model; return () => { delete (window as unknown as { __wb?: WhiteboardModel }).__wb } }, [model])   // (for tests and debugging)
+  ;(window as unknown as { __wbView?: View }).__wbView = view
   const bg = model.getMeta<string>('bg', '#ffffff'), grid = model.getMeta<boolean>('grid', true)
 
   useEffect(() => lsSet('koko.wb.style', style), [style])
@@ -323,7 +326,21 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
     model.restoreFrom(snap); setPreview(null); setVerKey((n) => n + 1)
     toast(`Restored ${v.label ?? fullLabel(v.created_at)}. The previous state is saved in version history.`)
   }
-  const assistantDeps = { model, getSel: () => sel, setSel, getTitle: () => title, canEdit: () => !readOnly, docId: info.id, getView: () => view, setView, fit: () => fit(), size: () => board.current?.size() ?? { w: 800, h: 600 }, here }
+  // ── Koko turns a frame into a website ──
+  const [life, setLife] = useState<Record<string, number>>({})
+  const lifeRef = useRef(life); lifeRef.current = life
+  const make = useCallback(async (key: string, job: (progress: (n: number) => void) => Promise<string>): Promise<string> => {
+    if (lifeRef.current[key] !== undefined) return 'Already working on that.'
+    if (!(await aiConnected())) { toast('Connect an AI model in Settings → Assistant first'); throw new Error('No AI model is connected. Connect one in Settings → Assistant.') }
+    setLife((l) => ({ ...l, [key]: 0 }))
+    try { const id = await job((n) => setLife((l) => ({ ...l, [key]: n }))); setSel([id]); const b = model.get(id); if (b) { const s0 = board.current?.size(); if (s0) { const z = Math.max(0.2, Math.min(1, (s0.w - 360) / Math.max(1, b.w * 2), (s0.h - 200) / Math.max(1, b.h))); setView({ z, x: s0.w / 2 - (b.x + b.w / 2) * z, y: s0.h / 2 - (b.y + b.h / 2) * z }) } } return id }
+    catch (e) { toast((e as Error).message || 'Koko could not build that'); throw e }
+    finally { setLife((l) => { const n = { ...l }; delete n[key]; return n }) }
+  }, [model])
+  const bringFrame = useCallback((frameId: string, instruction?: string) => make(frameId, (p) => bringToLife(model, frameId, { instruction, bg, onProgress: p })), [make, model, bg])
+  const reviseEmbed = useCallback((embedId: string, instruction: string) => make(embedId, async (p) => { await reviseSite(model, embedId, instruction, { bg, onProgress: p }); return embedId }), [make, model, bg])
+  useEffect(() => { const f = (e: Event) => void bringFrame((e as CustomEvent<string>).detail).catch(() => undefined); window.addEventListener('koko:aiframe', f); return () => window.removeEventListener('koko:aiframe', f) }, [bringFrame])
+  const assistantDeps = { bringFrameToLife: async (id: string, instruction?: string) => { await bringFrame(id, instruction); return 'Built it. The website is next to the frame.' }, reviseWebsite: async (id: string, instruction: string) => { await reviseEmbed(id, instruction); return 'Updated.' }, model, getSel: () => sel, setSel, getTitle: () => title, canEdit: () => !readOnly, docId: info.id, getView: () => view, setView, fit: () => fit(), size: () => board.current?.size() ?? { w: 800, h: 600 }, here }
 
   return (
     <div className="editor-shell wb-shell">
@@ -371,7 +388,10 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
               <button className={`wb-mini ${grid ? 'on' : ''}`} title="Grid" aria-label="Grid" aria-pressed={grid} disabled={readOnly} onClick={() => model.setMeta('grid', !grid)}><Grid3x3 size={15} /></button>
             </div>
             {selected.length === 1 && selected[0].type === 'frame' && selected[0].ai && !readOnly && user && (
-              <FrameButton el={selected[0]} view={view} onGo={() => window.dispatchEvent(new CustomEvent('koko:aiframe', { detail: selected[0].id }))} />
+              <FrameButton el={selected[0]} view={view} busy={life[selected[0].id]} onMode={(mode) => model.update(selected[0].id, { mode })} onGo={() => window.dispatchEvent(new CustomEvent('koko:aiframe', { detail: selected[0].id }))} />
+            )}
+            {selected.length === 1 && selected[0].type === 'embed' && !readOnly && (
+              <EmbedBar key={selected[0].id} el={selected[0]} view={view} busy={life[selected[0].id]} signedIn={!!user} onChange={(t) => void reviseEmbed(selected[0].id, t).catch(() => undefined)} onInteract={() => setInteractive(selected[0].id)} />
             )}
           </main>
         )}
@@ -391,9 +411,35 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   )
 }
 
-function FrameButton({ el, view, onGo }: { el: El; view: View; onGo: () => void }) {
+function FrameButton({ el, view, onGo, onMode, busy }: { el: El; view: View; onGo: () => void; onMode: (m: 'exact' | 'creative') => void; busy?: number }) {
+  const creative = el.mode === 'creative'
   return (
-    <button type="button" className="wb-frame-go" style={{ left: el.x * view.z + view.x + el.w * view.z, top: el.y * view.z + view.y - 38, transform: 'translateX(-100%)' }} onClick={onGo}><Sparkles size={15} />Bring to life</button>
+    <div className="wb-frame-ctl" style={{ left: el.x * view.z + view.x + el.w * view.z, top: el.y * view.z + view.y - 46, transform: 'translateX(-100%)' }} onPointerDown={(e) => e.stopPropagation()}>
+      <button type="button" role="switch" aria-checked={creative} className={`wb-mode ${creative ? 'creative' : ''}`} disabled={busy !== undefined} aria-label="How closely to follow my drawing"
+        title={creative ? 'Creative: Koko treats your drawing as a brief and may redesign it. Click to follow it closely instead.' : 'Faithful: Koko keeps everything you drew exactly and only makes it work. Click to let it be creative instead.'} onClick={() => onMode(creative ? 'exact' : 'creative')}>
+        <span className="wb-mode-knob" /><span className="wb-mode-a">Faithful</span><span className="wb-mode-b">Creative</span>
+      </button>
+      <button type="button" className="wb-frame-go" disabled={busy !== undefined} onClick={onGo}>
+        {busy !== undefined ? <><Loader2 size={15} className="spin" />Building{busy ? ` · ${(busy / 1000).toFixed(1)}k` : '…'}</> : <><Sparkles size={15} />Bring to life</>}
+      </button>
+    </div>
+  )
+}
+
+/** over a website Koko made: ask for changes, open it, copy or save its code */
+function EmbedBar({ el, view, onChange, onInteract, busy, signedIn }: { el: El; view: View; onChange: (t: string) => void; onInteract: () => void; busy?: number; signedIn: boolean }) {
+  const [t, setT] = useState('')
+  const go = () => { if (t.trim()) { onChange(t.trim()); setT('') } }
+  const page = () => new Blob([el.html ?? ''], { type: 'text/html' })
+  return (
+    <div className="wb-embed-bar-ui" style={{ left: Math.max(8, el.x * view.z + view.x), top: Math.max(64, el.y * view.z + view.y - 50) }} onPointerDown={(e) => e.stopPropagation()}>
+      {signedIn && <input value={t} placeholder="Ask Koko to change it: make the header dark, add a contact form…" aria-label="Ask Koko to change this website" disabled={busy !== undefined} onChange={(e) => setT(e.target.value)} onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') go() }} />}
+      {signedIn && <button type="button" className="wb-mini" title="Change it" aria-label="Change it" disabled={busy !== undefined || !t.trim()} onClick={go}>{busy !== undefined ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}</button>}
+      <button type="button" className="wb-mini" title="Try it here (double-click the website also works)" aria-label="Try it" onClick={onInteract}>▶</button>
+      <button type="button" className="wb-mini" title="Open in a new tab" aria-label="Open in a new tab" disabled={!el.html} onClick={() => { const u = URL.createObjectURL(page()); window.open(u, '_blank', 'noopener'); setTimeout(() => URL.revokeObjectURL(u), 60000) }}><ExternalLink size={15} /></button>
+      <button type="button" className="wb-mini" title="Copy the HTML" aria-label="Copy the HTML" disabled={!el.html} onClick={() => navigator.clipboard.writeText(el.html ?? '').then(() => toast('HTML copied'), () => undefined)}><ClipboardCheck size={15} /></button>
+      <button type="button" className="wb-mini" title="Download the HTML file" aria-label="Download" disabled={!el.html} onClick={() => { const a = document.createElement('a'); a.href = URL.createObjectURL(page()); a.download = `${el.name || 'website'}.html`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000) }}><Download size={15} /></button>
+    </div>
   )
 }
 

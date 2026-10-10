@@ -5,6 +5,11 @@ import { linePath, partsOf, type Part } from './draw'
 import { layout } from './text'
 import { isLinear, isShape, type El } from './types'
 
+const building = (e: El) => !!e.busy && Date.now() - e.busy < 4 * 60 * 1000
+/** A page Koko wrote runs in a frame that cannot reach this site, and (by this policy) cannot send anything anywhere: no network calls, no outside scripts. Pictures and fonts may load. */
+const POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob: https:; media-src data: blob: https:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src data: https://fonts.gstatic.com; script-src 'unsafe-inline'; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">`
+export const safePage = (html: string) => (/<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + POLICY) : /<html[^>]*>/i.test(html) ? html.replace(/<html[^>]*>/i, (m) => m + '<head>' + POLICY + '</head>') : POLICY + html)
+
 const PathNode = ({ p }: { p: Part }) => (
   <path d={p.d} fill={p.fill} stroke={p.stroke} strokeWidth={p.sw} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={p.dash} pointerEvents="none" />
 )
@@ -42,9 +47,9 @@ export const ElNode = memo(function ElNode({ e, dx = 0, dy = 0, bg, interactive 
     <foreignObject width={Math.max(1, e.w)} height={Math.max(1, e.h)} pointerEvents={interactive ? 'auto' : 'none'}>
       <div className="wb-embed" style={{ width: '100%', height: '100%' }}>
         <div className="wb-embed-bar"><span>{e.name || 'Website'}</span></div>
-        {e.html ? <iframe title={e.name || 'Website made by Koko'} srcDoc={e.html} sandbox="allow-scripts allow-forms allow-popups allow-modals" style={{ pointerEvents: interactive ? 'auto' : 'none' }} />
-          : <div className="wb-embed-empty">{e.busy ? <><Loader2 size={18} className="spin" />Koko is building this…</> : 'Nothing here yet'}</div>}
-        {e.busy && e.html && <div className="wb-embed-busy"><Loader2 size={16} className="spin" />Updating…</div>}
+        {e.html ? <iframe title={e.name || 'Website made by Koko'} srcDoc={safePage(e.html)} sandbox="allow-scripts allow-forms allow-popups allow-modals" style={{ pointerEvents: interactive ? 'auto' : 'none' }} />
+          : <div className="wb-embed-empty">{building(e) ? <><Loader2 size={18} className="spin" />Koko is building this…</> : 'Nothing here yet'}</div>}
+        {building(e) && e.html && <div className="wb-embed-busy"><Loader2 size={16} className="spin" />Updating…</div>}
       </div>
     </foreignObject>)
   else if (e.type === 'frame') body = (

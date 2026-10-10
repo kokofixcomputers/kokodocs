@@ -18,6 +18,8 @@ export interface WhiteboardDeps {
   fit: () => void
   size: () => { w: number; h: number }
   here: () => Pt
+  bringFrameToLife: (frameId: string, instruction?: string) => Promise<string>
+  reviseWebsite: (embedId: string, instruction: string) => Promise<string>
 }
 
 const SHAPE_KINDS = SHAPES.map((s) => s.kind)
@@ -251,6 +253,22 @@ export function createWhiteboardAdapter(d: WhiteboardDeps): Adapter {
     },
   })
 
+  const frameTool: Tool = tool('add_frame', 'Draw a frame (a titled box) around an area. An "AI frame" is one you can turn into a working website with bring_frame_to_life: use it when the person sketched a screen inside it. Plain frames just group and label things.', {
+    x: { type: 'number' }, y: { type: 'number' }, w: { type: 'number' }, h: { type: 'number' }, name: { type: 'string' }, ai: { type: 'boolean', description: 'An AI frame (can be brought to life as a website)' },
+  }, ['x', 'y', 'w', 'h'], {
+    edit: true, describe: (a) => ({ title: `Add ${a.ai ? 'an AI ' : 'a '}frame${a.name ? ` “${a.name}”` : ''}` }),
+    run: (a) => { const [id] = m.add([m.make('frame', { x: num(a.x, 0), y: num(a.y, 0), w: Math.max(40, num(a.w, 400)), h: Math.max(40, num(a.h, 300)), name: String(a.name ?? (a.ai ? 'AI frame' : 'Frame')), ai: !!a.ai, stroke: '#9ca3af', fill: 'transparent' })]); d.setSel([id]); return `Added the frame: id ${id}` },
+  })
+  const life: Tool = tool('bring_frame_to_life', 'Turn what is drawn inside a frame into a working website: Koko looks at the shapes, text, positions and colours inside it and builds the page it shows, placed beside the frame as an object the person can move, resize and try out. Takes a little while. Use read_board with the frame first if you need to know what is in it.', {
+    frame: { type: 'string', description: 'Id of the frame' }, style: { type: 'string', enum: ['faithful', 'creative'], description: 'faithful (default): keep everything drawn exactly and only make it work; creative: treat the drawing as a brief and redesign it' }, instruction: { type: 'string', description: 'Anything extra to know, e.g. "a dark theme" or "for a bakery"' },
+  }, ['frame'], {
+    edit: true, describe: (a) => ({ title: 'Build a website from a frame', detail: clip(`${find(a.frame).name || 'Frame'}${a.instruction ? ` — ${a.instruction}` : ''}`, 200) }),
+    label: () => 'Building the website', run: async (a) => { const f = find(a.frame); if (f.type !== 'frame') throw new Error('That is not a frame.'); if (a.style === 'creative' || a.style === 'faithful') m.update(f.id, { mode: a.style === 'creative' ? 'creative' : 'exact' }); return d.bringFrameToLife(f.id, a.instruction ? String(a.instruction) : undefined) },
+  })
+  const revise: Tool = tool('change_website', 'Change a website that was made from a frame (an "embed" on the board), as the person describes it.', { website: { type: 'string', description: 'Id of the website object' }, change: { type: 'string' } }, ['website', 'change'], {
+    edit: true, describe: (a) => ({ title: 'Change the website', detail: clip(String(a.change ?? ''), 200) }), label: () => 'Changing the website',
+    run: async (a) => { const e = find(a.website); if (e.type !== 'embed') throw new Error('That is not a website object.'); return d.reviseWebsite(e.id, String(a.change)) },
+  })
   const bgTool: Tool = tool('set_board', 'Set the colour of the board itself, or rename it.', { background: { type: 'string' }, title: { type: 'string' } }, [], {
     edit: true, describe: (a) => ({ title: a.title ? `Rename the board to “${a.title}”` : 'Change the board colour' }),
     run: (a) => { const c = color(a.background); if (c) m.setMeta('bg', c === 'transparent' ? '#ffffff' : c); if (a.title) m.setMeta('title', String(a.title)); return 'Done.' },
@@ -270,10 +288,10 @@ export function createWhiteboardAdapter(d: WhiteboardDeps): Adapter {
 - Join shapes with arrows by id (or ref), not by guessing coordinates, so the arrows follow when shapes move. For flowcharts, process diagrams, org charts and mind maps with many steps use create_flowchart. Decisions are diamonds with arrows labelled Yes/No.
 - Layers: things are stacked in the order they were added, so later things are in front. Text you add after a shape is above it; if something is hidden behind another, use arrange_layers.
 - Colour: use a few soft fills for meaning (for example green for done, yellow for a warning), a dark outline, and the default handwriting font (Caveat) unless asked for another; any Google font name works.
-- To recreate a sketch the person made, read the board and match its shapes, text, positions and sizes closely.
+- To recreate a sketch the person made, read the board and match its shapes, text, positions and sizes closely. If they want a sketched screen turned into a real website, use bring_frame_to_life on the frame around it (draw a frame with add_frame first if there is none); the result is a moveable website object beside the frame, which change_website can edit.
 - Reply in a sentence or two saying what you drew; do not list ids.`,
     context: () => `The whiteboard is "${d.getTitle() || 'Untitled whiteboard'}". The middle of the person's screen is at (${r(d.here()[0])}, ${r(d.here()[1])}). ${d.getSel().length ? `They have selected: ${d.getSel().map((i) => { const e = m.get(i); return e ? `${e.type}${e.text ? ` “${clip(e.text, 24)}”` : ''} (${i})` : i }).join(', ')}.` : 'Nothing is selected.'}\n${dump()}`,
     suggestions: ['Draw a flowchart of how a bug gets fixed', 'Make a mind map about my project', 'Tidy up and align everything', 'Add a title and a legend'],
-    tools: [readBoard, addShapes, flowchart, edit, del, layers, show, bgTool],
+    tools: [readBoard, addShapes, flowchart, edit, del, layers, frameTool, life, revise, show, bgTool],
   }
 }

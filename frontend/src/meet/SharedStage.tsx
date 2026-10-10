@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { FileText, Presentation, Sheet, Square } from 'lucide-react'
+import { FileText, PenTool, Presentation, Sheet, Square } from 'lucide-react'
 import { setDocToken } from '../api'
 import { DeckViewer } from './DeckViewer'
 import { hue } from './util'
 import type { Call, Share } from './types'
 
-const ICON = { doc: FileText, sheet: Sheet, slides: Presentation }
+const ICON = { doc: FileText, sheet: Sheet, slides: Presentation, whiteboard: PenTool }
 
 /** The document being edited together. It is the real editor, inside the meeting, opened with a key for this meeting (so people without an account can edit too). */
 function EmbeddedDoc({ call, share }: { call: Call; share: Share }) {

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FileText, Presentation, Search, Sheet, Plus } from 'lucide-react'
+import { FileText, PenTool, Presentation, Search, Sheet, Plus } from 'lucide-react'
 import { api, type DocSummary } from '../api'
 import { Modal } from '../ui/Modal'
 import { toast } from '../ui/Toast'
 import type { Call } from './types'
 
 type Mode = 'collab' | 'present'
-const ICON = { doc: FileText, sheet: Sheet, slides: Presentation } as const
-const NEW = [{ kind: 'doc', label: 'New document' }, { kind: 'sheet', label: 'New spreadsheet' }, { kind: 'slides', label: 'New presentation' }] as const
+const ICON = { doc: FileText, sheet: Sheet, slides: Presentation, whiteboard: PenTool } as const
+const NEW = [{ kind: 'doc', label: 'New document' }, { kind: 'sheet', label: 'New spreadsheet' }, { kind: 'slides', label: 'New presentation' }, { kind: 'whiteboard', label: 'New whiteboard' }] as const
 
 /** Choose what to share in the meeting: one of your documents, spreadsheets or presentations (or a new one), to edit together or to present. */
 export function SharePicker({ call, mode: first, onClose }: { call: Call; mode: Mode; onClose: () => void }) {
@@ -18,10 +18,10 @@ export function SharePicker({ call, mode: first, onClose }: { call: Call; mode: 
   const [seek, setSeek] = useState(call.settings().seek)
   const [busy, setBusy] = useState(false)
   const perms = call.perms()
-  useEffect(() => { api.listDocs().then((r) => setDocs(r.mine.filter((d) => ['doc', 'sheet', 'slides'].includes(d.kind) && !d.zk))).catch(() => setDocs([])) }, [])
+  useEffect(() => { api.listDocs().then((r) => setDocs(r.mine.filter((d) => ['doc', 'sheet', 'slides', 'whiteboard'].includes(d.kind) && !d.zk))).catch(() => setDocs([])) }, [])
   const list = useMemo(() => (docs ?? []).filter((d) => (mode === 'present' ? d.kind === 'slides' : true) && d.title.toLowerCase().includes(q.toLowerCase())), [docs, mode, q])
   const start = (id: string) => { call.startShare(id, mode, mode === 'collab' ? { edit } : { seek }); onClose() }
-  const create = async (kind: 'doc' | 'sheet' | 'slides') => {
+  const create = async (kind: 'doc' | 'sheet' | 'slides' | 'whiteboard') => {
     setBusy(true)
     try { const d = await api.createDoc(undefined, null, kind); start(d.id) } catch (e) { toast((e as Error).message); setBusy(false) }
   }
