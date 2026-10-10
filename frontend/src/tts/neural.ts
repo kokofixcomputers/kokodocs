@@ -16,50 +16,79 @@ export const setNeuralChosen = (on: boolean) => write(KEY_ON, on ? '1' : null)
 export const neuralVoice = () => { const v = read(KEY_VOICE); return NEURAL_VOICES.some((x) => x.id === v) ? v! : 'af_heart' }
 export const setNeuralVoice = (id: string) => write(KEY_VOICE, id)
 
-/** The model lives in a worker (see neural.worker.ts), so downloading it, starting it and speaking never freeze the page. */
+/** The model lives in background workers (see neural.worker.ts), so downloading it, starting it and speaking never freeze the page. There are several copies, each
+ *  making a different upcoming sentence at the same moment: making speech takes longer than saying it, so one copy alone falls behind. The first copy downloads the
+ *  model (the browser keeps it); the others start from that saved copy once it is there. */
 let ready = false
 export const neuralReady = () => ready
-let worker: Worker | null = null
+interface Slot { w: Worker; ready: boolean; busy: number }
+const pool: Slot[] = []
+const waiting = new Map<number, { slot: Slot; ok: (v: unknown) => void; fail: (e: Error) => void }>()
 let nextId = 1
-const waiting = new Map<number, { ok: (v: unknown) => void; fail: (e: Error) => void }>()
 let onProgress: ((p: number) => void) | undefined
 
-function start(): Worker {
-  if (worker) return worker
+/** how many copies: about half the processor's cores, at most 3; one where the model already uses several threads (the page is cross-origin isolated) or memory is short */
+function wanted(): number {
+  const cores = navigator.hardwareConcurrency || 4, mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory ?? 8
+  if (typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated) return 1
+  return Math.max(1, Math.min(3, (cores >> 1) - 0, mem >= 4 ? 3 : 1))
+}
+
+function spawn(): Slot {
   const w = new Worker(new URL('./neural.worker.ts', import.meta.url), { type: 'module' })
+  const slot: Slot = { w, ready: false, busy: 0 }
+  const first = pool.length === 0
   w.onmessage = (e: MessageEvent) => {
     const m = e.data as { type: string; id?: number; p?: number; buf?: ArrayBuffer; message?: string; ms?: number }
-    if (m.type === 'progress') { onProgress?.(m.p ?? 0); return }
-    const w = m.id !== undefined ? waiting.get(m.id) : undefined
-    if (!w) return
-    waiting.delete(m.id!)
-    if (m.type === 'error') w.fail(new Error(m.message))
+    if (m.type === 'progress') { if (first) onProgress?.(m.p ?? 0); return }   // (only the first copy downloads)
+    const x = m.id !== undefined ? waiting.get(m.id) : undefined
+    if (!x) return
+    waiting.delete(m.id!); x.slot.busy = Math.max(0, x.slot.busy - 1)
+    if (m.type === 'error') x.fail(new Error(m.message))
     else {
       if (m.type === 'audio' && m.buf) {   // (for tuning: how long a sentence took to make, against how long it lasts)
         const v = new DataView(m.buf), secs = (m.buf.byteLength - 44) / (v.getUint32(24, true) * (v.getUint16(34, true) / 8))
-        ;((window as unknown as { __neural?: object[] }).__neural ??= []).push({ ms: m.ms, secs: Math.round(secs * 100) / 100 })
+        ;((window as unknown as { __neural?: object[] }).__neural ??= []).push({ ms: m.ms, secs: Math.round(secs * 100) / 100, copies: pool.filter((p) => p.ready).length })
       }
-      w.ok(m.type === 'audio' ? new Blob([m.buf!], { type: 'audio/wav' }) : undefined)
+      x.ok(m.type === 'audio' ? new Blob([m.buf!], { type: 'audio/wav' }) : undefined)
     }
   }
-  w.onerror = (e) => { const err = new Error(e.message || 'The voice could not start'); waiting.forEach((x) => x.fail(err)); waiting.clear(); w.terminate(); worker = null }
-  worker = w
-  return w
+  w.onerror = (e) => {
+    const err = new Error(e.message || 'The voice could not start')
+    waiting.forEach((x, id) => { if (x.slot === slot) { x.fail(err); waiting.delete(id) } })
+    w.terminate(); const i = pool.indexOf(slot); if (i >= 0) pool.splice(i, 1)
+  }
+  pool.push(slot)
+  return slot
 }
-function call<T>(msg: object): Promise<T> {
-  return new Promise<T>((ok, fail) => { const id = nextId++; waiting.set(id, { ok: ok as (v: unknown) => void, fail }); start().postMessage({ ...msg, id }) })
+function call<T>(slot: Slot, msg: object): Promise<T> {
+  return new Promise<T>((ok, fail) => { const id = nextId++; slot.busy++; waiting.set(id, { slot, ok: ok as (v: unknown) => void, fail }); slot.w.postMessage({ ...msg, id }) })
+}
+
+let grown = false
+/** once the first copy has the model, start the other copies in the background (they read it from the browser's saved copy) */
+function grow() {
+  if (grown) return
+  grown = true
+  for (let i = 1; i < wanted(); i++) {
+    const s = spawn()
+    call<void>(s, { type: 'load' }).then(() => { s.ready = true }).catch(() => { const k = pool.indexOf(s); if (k >= 0) pool.splice(k, 1) })
+  }
 }
 
 /** download (the first time) and start the model; `progress` is 0 to 1 for the download */
 export async function loadNeural(progress?: (p: number) => void): Promise<void> {
   if (ready) return
   if (progress) onProgress = progress
-  await call<void>({ type: 'load' })
-  ready = true
+  const s = pool[0] ?? spawn()
+  await call<void>(s, { type: 'load' })
+  s.ready = true; ready = true
+  grow()
 }
 
 export async function speakNeural(text: string, voice = neuralVoice()): Promise<Blob> {
-  const b = await call<Blob>({ type: 'speak', text, voice })
-  ready = true
-  return b
+  if (!pool.length) { ready = false; grown = false }   // every copy has stopped: start again
+  await loadNeural()
+  const s = pool.filter((p) => p.ready).sort((a, b) => a.busy - b.busy)[0] ?? pool[0]   // the copy with the least to do
+  return call<Blob>(s, { type: 'speak', text, voice })
 }

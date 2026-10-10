@@ -13,7 +13,7 @@ export interface Snapshot { phase: Phase; index: number; total: number; rate: nu
 
 const BLOCKS = 'p,h1,h2,h3,h4,h5,h6,li,td,th,pre,blockquote,figcaption,summary,dt,dd'
 const SKIP = '.ProseMirror-widget,.ProseMirror-separator,.ProseMirror-gapcursor,[data-tts-skip],script,style'
-const AHEAD = 3
+const AHEAD = 6   // sentences made in advance (several copies of the neural voice make them side by side)
 
 const hasWords = (s: string) => /[\p{L}\p{N}]/u.test(s)
 function langOf(s: string): string {
