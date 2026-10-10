@@ -35,7 +35,7 @@ def q(sql, *a):
 # ── mock WebDAV and S3 servers ──
 class Mock:
     def __init__(self, kind):
-        self.kind, self.files, self.cols, self.puts, self.down, self.corrupt = kind, {}, {"/"}, 0, False, False
+        self.kind, self.files, self.cols, self.puts, self.down, self.corrupt, self.fail_put = kind, {}, {"/"}, 0, False, False, set()
         mock = self
         class H(http.server.BaseHTTPRequestHandler):
             def log_message(self, *a): pass
@@ -66,6 +66,7 @@ class Mock:
                     if p.rstrip("/") in mock.cols: return self._reply(405)
                     mock.cols.add(p.rstrip("/")); return self._reply(201)
                 if m == "PUT":
+                    if any(x in p for x in mock.fail_put): return self._reply(500, b"boom")
                     parent = p.rsplit("/", 1)[0] or "/"
                     if mock.kind == "webdav" and parent not in mock.cols: return self._reply(409)
                     mock.files[p] = body; mock.puts += 1; return self._reply(201)
@@ -201,4 +202,54 @@ for kind in ("folder", "webdav", "s3"):
     if kind == "webdav":
         bad = json.loads(json.dumps(CONFIGS[kind])); bad["config"]["password"] = "wrong"
         s, e = call("PUT", "/api/storage", bad, T); ok("a wrong password is caught when connecting", s == 422 and "password" in json.dumps(e).lower(), s, e)
+
+# ── an error does not stop the rest, and progress is reported ──
+print("===== errors and progress (webdav)")
+T = signup("prog@x.io")
+ids = []
+for i in range(3):
+    s_, d_ = call("POST", "/api/docs", {"title": f"Doc {i}", "kind": "doc"}, T); ids.append(d_["id"]); doc_text(d_["id"], f"Words in document number {i} " * 20)
+    call("POST", f"/api/docs/{d_['id']}/comments", {"body": f"comment {i}", "quote": ""}, T)
+bad = ids[1]
+dav.fail_put.add(bad)
+call("PUT", "/api/storage", {**CONFIGS["webdav"], "enabled": True, "idle_minutes": 5, "keep_search": False}, T)
+call("POST", "/api/storage/move", None, T)
+ok("the others are moved even though one fails", wait(lambda: q("SELECT remote_state FROM documents WHERE id = ?", ids[0])[0][0] == "remote" and q("SELECT remote_state FROM documents WHERE id = ?", ids[2])[0][0] == "remote", 40))
+wait(lambda: not ((call("GET", "/api/storage", None, T)[1]["progress"] or {}).get("running", True)), 40)
+st = call("GET", "/api/storage", None, T)[1]; pr = st["progress"]
+ok("the one that failed stays on this server, untouched", q("SELECT remote_state FROM documents WHERE id = ?", bad)[0][0] is None and q("SELECT length(ydoc) FROM documents WHERE id = ?", bad)[0][0] > 0 and len(q("SELECT 1 FROM comments WHERE doc_id = ?", bad)) == 1)
+ok("progress says how much was there and how much is done", pr and pr["docs_total"] == 3 and pr["docs_done"] == 3 and pr["bytes_total"] > 0 and pr["bytes_done"] > 0 and pr["running"] is False and pr["phase"] == "done", pr)
+ok("and lists what failed, and why", len(pr["failed"]) == 1 and pr["failed"][0]["what"] == "Doc 1" and "500" in pr["failed"][0]["error"], pr["failed"])
+ok("the person is told", "500" in st["connection"]["last_error"], st["connection"]["last_error"])
+dav.fail_put.clear()
+call("POST", "/api/storage/move", None, T)
+ok("when the storage works again, trying again moves it", wait(lambda: q("SELECT remote_state FROM documents WHERE id = ?", bad)[0][0] == "remote", 30))
+st = call("GET", "/api/storage", None, T)[1]
+ok("and the failure list is cleared", st["progress"]["failed"] == [] and st["connection"]["last_error"] == "", st["progress"])
+# bring back with one file missing: the rest still come back and the storage stays on
+dav.files.pop(f"/remote.php/koko/docs/{ids[2]}.kokodocs")
+call("POST", "/api/storage/restore", None, T)
+wait(lambda: not (call("GET", "/api/storage", None, T)[1]["job"] or {}).get("running", True), 40)
+st = call("GET", "/api/storage", None, T)[1]
+ok("bringing back carries on past a missing file", q("SELECT length(ydoc) FROM documents WHERE id = ?", ids[0])[0][0] and q("SELECT length(ydoc) FROM documents WHERE id = ?", bad)[0][0], st["job"])
+ok("the missing one is listed and the storage stays on so it can be retried", len(st["job"]["failed"]) == 1 and "missing" in st["job"]["failed"][0]["error"] and st["connection"]["enabled"] is True, st["job"])
+
+# ── switching it off, and getting out of a stuck storage ──
+print("===== switches and disconnecting")
+s_, st = call("PATCH", "/api/storage", {"enabled": False}, T)
+ok("the switch changes without re-sending the address", s_ == 200 and st["connection"]["enabled"] is False and st["connection"]["config"]["url"].endswith("/remote.php"), s_, st)
+s_, st = call("PATCH", "/api/storage", {"idle_minutes": 15, "keep_search": True}, T)
+ok("so do the idle time and the search setting", s_ == 200 and st["connection"]["idle_minutes"] == 15 and st["connection"]["keep_search"] is True and st["connection"]["enabled"] is False)
+s_, e = call("PUT", "/api/storage", {"kind": "webdav", "config": {"password": ""}, "enabled": True, "idle_minutes": 5, "keep_search": False}, T)
+ok("saving with blank fields keeps what was saved", s_ == 200 and st["connection"]["config"]["url"] and call("GET", "/api/storage", None, T)[1]["connection"]["config"]["username"] == "alice", s_, e)
+call("POST", "/api/storage/move", None, T); wait(lambda: q("SELECT remote_state FROM documents WHERE id = ?", ids[0])[0][0] == "remote")
+s_, e = call("DELETE", "/api/storage", None, T); ok("disconnecting normally is refused while files are only there", s_ == 409)
+dav.down = True
+s_, e = call("DELETE", "/api/storage?force=true", None, T)
+ok("but it can be forced when the storage has gone", s_ == 200 and call("GET", "/api/storage", None, T)[1]["connection"] is None, s_, e)
+s_, e = call("GET", f"/api/docs/{ids[0]}", None, T)
+ok("a document that was only there says the storage must be reconnected", s_ == 503 and "no longer connected" in json.dumps(e), s_, e)
+dav.down = False
+call("PUT", "/api/storage", {**CONFIGS["webdav"], "enabled": True, "idle_minutes": 5, "keep_search": False}, T)
+ok("and opens again once it is reconnected", call("GET", f"/api/docs/{ids[0]}", None, T)[0] == 200)
 print("ALL OK" if not fails else f"{fails} FAILED")

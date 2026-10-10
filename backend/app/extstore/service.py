@@ -31,6 +31,19 @@ _cache: "OrderedDict[str, bytes]" = OrderedDict()
 _cache_bytes = 0
 _cache_lock = threading.Lock()
 jobs: dict[str, dict] = {}           # user id -> what the "bring everything back" job is doing
+progress: dict[str, dict] = {}       # user id -> what moving files out is doing right now (or did last)
+_failed_at: dict[str, float] = {}    # what failed lately, so it is not tried again every half minute
+
+
+def retry(fn, tries: int = 3):
+    """Run a storage call again after a short wait when the failure may be a blip (a network drop, a busy server)."""
+    for i in range(tries):
+        try:
+            return fn()
+        except backends.StorageError as e:
+            if not e.transient or i == tries - 1:
+                raise
+            time.sleep(1.5 * (i + 1))
 
 
 def set_open_check(f) -> None:
@@ -73,11 +86,11 @@ def save_connection(db, user_id: str, kind: str, cfg: dict, *, enabled: bool, id
     if kind not in backends.KINDS:
         raise backends.StorageError("Choose where to store your files")
     old = row_for(db, user_id)
-    if old and old["kind"] == kind:   # blank secret fields mean "keep what is saved"
+    if old and old["kind"] == kind:   # a blank field means "keep what is saved"
         prev = config_of(old)
-        for k in SECRET_FIELDS[kind]:
+        for k, v in prev.items():
             if not cfg.get(k):
-                cfg[k] = prev.get(k, "")
+                cfg[k] = v
     message = backends.make(kind, cfg).test()
     now = time.time()
     enc = encrypt_secret(json.dumps(cfg))
@@ -125,46 +138,54 @@ def fetch_file(db, owner_id: str, kind: str, name: str) -> bytes | None:
     return data
 
 
-def _move_files(db, row, owner_id: str) -> int:
-    b, moved = backend_of(row), 0
+
+def _file_work(db, owner_id: str) -> list[dict]:
+    """Pictures and attachments still on this server that could be moved."""
+    out = []
     for u in db.execute("SELECT name, size FROM uploads WHERE owner_id = ? AND remote = 0", (owner_id,)).fetchall():
-        p = UPLOAD_DIR / u["name"]
-        if not p.exists():
-            continue
-        data = p.read_bytes()
-        b.put(file_key("uploads", u["name"]), data)
-        if b.size(file_key("uploads", u["name"])) != len(data):
-            raise backends.StorageError("The storage did not keep a picture intact")
-        db.execute("UPDATE uploads SET remote = 1 WHERE name = ?", (u["name"],)); db.commit()
-        p.unlink(missing_ok=True); moved += 1
-    for f in db.execute("SELECT f.id, f.stored FROM form_files f JOIN documents d ON d.id = f.form_id WHERE d.owner_id = ? AND f.remote = 0", (owner_id,)).fetchall():
-        p = FORM_FILES_DIR / f["stored"]
-        if not p.exists():
-            continue
-        data = p.read_bytes()
-        b.put(file_key("form", f["stored"]), data)
-        if b.size(file_key("form", f["stored"])) != len(data):
-            raise backends.StorageError("The storage did not keep an attachment intact")
-        db.execute("UPDATE form_files SET remote = 1 WHERE id = ?", (f["id"],)); db.commit()
-        p.unlink(missing_ok=True); moved += 1
-    return moved
+        if (UPLOAD_DIR / u["name"]).exists():
+            out.append({"kind": "uploads", "name": u["name"], "key": "u:" + u["name"], "size": u["size"], "label": "a picture"})
+    for f in db.execute("SELECT f.id, f.stored, f.name, f.size FROM form_files f JOIN documents d ON d.id = f.form_id WHERE d.owner_id = ? AND f.remote = 0", (owner_id,)).fetchall():
+        if (FORM_FILES_DIR / f["stored"]).exists():
+            out.append({"kind": "form", "name": f["stored"], "key": "f:" + f["stored"], "id": f["id"], "size": f["size"], "label": f"the attachment {f['name']}"})
+    return out
 
 
-def bring_files_back(db, row, owner_id: str) -> int:
-    b, n = backend_of(row), 0
-    for u in db.execute("SELECT name FROM uploads WHERE owner_id = ? AND remote = 1", (owner_id,)).fetchall():
-        data = b.get(file_key("uploads", u["name"]))
-        if data is None:
-            raise backends.StorageError(f"A picture ({u['name']}) is missing from your storage")
-        (UPLOAD_DIR / u["name"]).write_bytes(data)
-        db.execute("UPDATE uploads SET remote = 0 WHERE name = ?", (u["name"],)); db.commit(); n += 1
-    for f in db.execute("SELECT f.id, f.stored FROM form_files f JOIN documents d ON d.id = f.form_id WHERE d.owner_id = ? AND f.remote = 1", (owner_id,)).fetchall():
-        data = b.get(file_key("form", f["stored"]))
-        if data is None:
-            raise backends.StorageError("An attachment is missing from your storage")
-        (FORM_FILES_DIR / f["stored"]).write_bytes(data)
-        db.execute("UPDATE form_files SET remote = 0 WHERE id = ?", (f["id"],)); db.commit(); n += 1
-    return n
+def _move_one_file(db, b, w: dict) -> None:
+    path = (UPLOAD_DIR if w["kind"] == "uploads" else FORM_FILES_DIR) / w["name"]
+    data = path.read_bytes()
+    key = file_key(w["kind"], w["name"])
+    retry(lambda: b.put(key, data))
+    if retry(lambda: b.size(key)) != len(data):
+        raise backends.StorageError("The storage did not keep it intact, so it was left here")
+    if w["kind"] == "uploads":
+        db.execute("UPDATE uploads SET remote = 1 WHERE name = ?", (w["name"],))
+    else:
+        db.execute("UPDATE form_files SET remote = 1 WHERE stored = ?", (w["name"],))
+    db.commit()
+    path.unlink(missing_ok=True)
+
+
+
+def bring_files_back(db, row, owner_id: str, job: dict | None = None) -> list[dict]:
+    """Copy pictures and attachments back from the storage. One that can't be fetched is skipped and reported; the rest carry on."""
+    b, failed = backend_of(row), []
+    items = [("uploads", r["name"], "a picture") for r in db.execute("SELECT name FROM uploads WHERE owner_id = ? AND remote = 1", (owner_id,)).fetchall()]
+    items += [("form", r["stored"], "an attachment") for r in db.execute("SELECT f.stored FROM form_files f JOIN documents d ON d.id = f.form_id WHERE d.owner_id = ? AND f.remote = 1", (owner_id,)).fetchall()]
+    for kind, name, label in items:
+        try:
+            data = retry(lambda: b.get(file_key(kind, name)))
+            if data is None:
+                raise backends.StorageError(f"{label} is missing from your storage")
+            (UPLOAD_DIR if kind == "uploads" else FORM_FILES_DIR).joinpath(name).write_bytes(data)
+            db.execute("UPDATE uploads SET remote = 0 WHERE name = ?" if kind == "uploads" else "UPDATE form_files SET remote = 0 WHERE stored = ?", (name,)); db.commit()
+            if job is not None:
+                job["done"] += 1; job["bytes_done"] += len(data)
+        except Exception as e:   # noqa: BLE001
+            failed.append({"what": label, "error": str(e)})
+            if job is not None:
+                job["done"] += 1
+    return failed
 
 
 # ── documents ──
@@ -188,9 +209,9 @@ def offload_doc(db, doc_id: str, *, force: bool = False) -> str:
         key = doc_key(doc_id)
         if not (d["remote_state"] == "cached" and d["remote_fp"] == fp):
             blob = container.pack(db, doc_id)
-            b.put(key, blob)
+            retry(lambda: b.put(key, blob))
             sha = hashlib.sha256(blob).hexdigest()
-            back = b.get(key)
+            back = retry(lambda: b.get(key))
             if back is None or hashlib.sha256(back).hexdigest() != sha:
                 raise backends.StorageError("The storage did not keep the document intact, so nothing was removed from this server")
             if container.fingerprint(db, doc_id) != fp:   # edited while it was being saved: leave it, it will be moved next time
@@ -218,7 +239,7 @@ def hydrate(db, doc_id: str) -> None:
         if not row:
             raise HTTPException(503, "This document is kept in storage that is no longer connected. Reconnect it in Settings → Extended storage.")
         try:
-            data = backend_of(row).get(d["remote_key"] or doc_key(doc_id))
+            data = retry(lambda: backend_of(row).get(d["remote_key"] or doc_key(doc_id)))
         except backends.StorageError as e:
             db.execute("UPDATE documents SET remote_error = ? WHERE id = ?", (str(e), doc_id)); db.commit()
             raise HTTPException(503, f"This document is kept in your own storage, which could not be reached: {e}")
@@ -263,31 +284,76 @@ def forget_doc(db, owner_id: str, doc_id: str) -> None:
 
 
 # ── the background loop ──
+
+_sweeping: set[str] = set()
+
+
 def sweep_user(db, row, uid: str) -> dict:
-    out = {"moved": 0, "cleared": 0, "files": 0}
-    now = time.time(); idle = max(1, row["idle_minutes"]) * 60
-    if row["move_now"]:
-        idle_new = idle_cached = 0
-    else:
-        idle_new, idle_cached = GRACE_NEW, idle
-    try:   # pictures and attachments first, so a form's file list is saved already marked as moved
-        out["files"] = _move_files(db, row, uid)
-    except backends.StorageError as e:
-        db.execute("UPDATE storage_connections SET last_error = ? WHERE user_id = ?", (str(e), uid)); db.commit()
-        return out
-    docs = db.execute("SELECT id, updated_at, remote_state FROM documents WHERE owner_id = ? AND zk = 0 AND deleted_at IS NULL AND (remote_state IS NULL OR remote_state = 'cached')", (uid,)).fetchall()
-    for d in docs:
+    """Move what is ready to the person's storage, showing progress, and carry on past anything that fails (it is listed, and tried again later)."""
+    if uid in _sweeping:
+        return {}
+    _sweeping.add(uid)
+    try:
+        return _sweep(db, row, uid)
+    finally:
+        _sweeping.discard(uid)
+
+
+def _sweep(db, row, uid: str) -> dict:
+    now = time.time(); manual = bool(row["move_now"])
+    idle = max(1, row["idle_minutes"]) * 60
+    idle_new, idle_cached = (0, 0) if manual else (GRACE_NEW, idle)
+    skip = lambda key: not manual and now - _failed_at.get(f"{uid}:{key}", 0) < 120   # failed a moment ago: not again straight away
+    files = [w for w in _file_work(db, uid) if not skip(w["key"])]
+    docs = []
+    for d in db.execute("SELECT id, title, updated_at, remote_state, COALESCE(LENGTH(ydoc), 0) + (SELECT COALESCE(SUM(LENGTH(v.ydoc)), 0) FROM versions v WHERE v.doc_id = documents.id) AS bytes FROM documents "
+                        "WHERE owner_id = ? AND zk = 0 AND deleted_at IS NULL AND (remote_state IS NULL OR remote_state = 'cached')", (uid,)).fetchall():
         last = max(_touch.get(d["id"], 0), d["updated_at"] or 0)
-        if now - last < (idle_cached if d["remote_state"] == "cached" else idle_new):
-            continue
+        if now - last >= (idle_cached if d["remote_state"] == "cached" else idle_new) and not skip("d:" + d["id"]):
+            docs.append(d)
+    out = {"moved": 0, "cleared": 0, "files": 0}
+    if not files and not docs:
+        db.execute("UPDATE storage_connections SET move_now = 0 WHERE user_id = ?", (uid,)); db.commit()
+        return out
+    P = progress[uid] = {"running": True, "phase": "files", "docs_total": len(docs), "docs_done": 0, "files_total": len(files), "files_done": 0,
+                         "bytes_total": sum(w["size"] for w in files) + sum(d["bytes"] for d in docs), "bytes_done": 0, "current": "", "failed": [], "started_at": now, "finished_at": None}
+    b = backend_of(row)
+
+    def fail(key: str, what: str, e: Exception) -> None:
+        _failed_at[f"{uid}:{key}"] = time.time()
+        P["failed"].append({"what": what, "error": str(e) if isinstance(e, backends.StorageError) else f"Something went wrong ({type(e).__name__})"})
+        del P["failed"][:-50]
+
+    try:
+        for w in files:   # pictures and attachments first, so a form's file list is saved already marked as moved
+            P["current"] = w["label"]
+            try:
+                _move_one_file(db, b, w); out["files"] += 1; P["bytes_done"] += w["size"]
+            except Exception as e:   # noqa: BLE001
+                fail(w["key"], w["label"], e)
+            P["files_done"] += 1
+        P["phase"] = "documents"
+        for d in docs:
+            P["current"] = d["title"] or "Untitled"
+            try:
+                r = offload_doc(db, d["id"])
+                if r in ("moved", "cleared"):
+                    out[r] += 1
+                P["bytes_done"] += d["bytes"]
+            except Exception as e:   # noqa: BLE001
+                fail("d:" + d["id"], d["title"] or "a document", e)
+                try:
+                    db.execute("UPDATE documents SET remote_error = ? WHERE id = ?", (P["failed"][-1]["error"], d["id"])); db.commit()
+                except Exception:   # noqa: BLE001
+                    pass
+            P["docs_done"] += 1
+    finally:
+        P.update(running=False, phase="done", current="", finished_at=time.time(), moved_docs=out["moved"] + out["cleared"], moved_files=out["files"])
+        last_error = P["failed"][-1]["error"] if P["failed"] else ""
         try:
-            r = offload_doc(db, d["id"])
-        except backends.StorageError as e:
-            db.execute("UPDATE storage_connections SET last_error = ? WHERE user_id = ?", (str(e), uid)); db.commit()
-            return out
-        if r in ("moved", "cleared"):
-            out[r] += 1
-    db.execute("UPDATE storage_connections SET last_ok = ?, last_error = '', move_now = 0 WHERE user_id = ?", (now, uid)); db.commit()
+            db.execute("UPDATE storage_connections SET last_ok = ?, last_error = ?, move_now = 0 WHERE user_id = ?", (time.time() if (out["files"] or out["moved"] or out["cleared"] or not P["failed"]) else row["last_ok"], last_error, uid)); db.commit()
+        except Exception:   # noqa: BLE001
+            pass
     return out
 
 
@@ -299,7 +365,10 @@ def loop() -> None:
                 for row in db.execute("SELECT * FROM storage_connections WHERE enabled = 1").fetchall():
                     if row["user_id"] in jobs and jobs[row["user_id"]].get("running"):
                         continue
-                    sweep_user(db, row, row["user_id"])
+                    try:
+                        sweep_user(db, row, row["user_id"])
+                    except Exception:   # noqa: BLE001  (one person's trouble must not stop the others, or the loop)
+                        pass
         except Exception:
             pass
 
@@ -309,25 +378,33 @@ def start() -> None:
 
 
 # ── bring everything back, and the numbers ──
+
 def restore_all(uid: str) -> None:
-    job = jobs[uid] = {"running": True, "done": 0, "total": 0, "error": ""}
+    """Bring everything back and switch the storage off, carrying on past anything that can't be fetched (it is listed, and the storage stays on so it can be tried again)."""
+    job = jobs[uid] = {"running": True, "done": 0, "total": 0, "bytes_done": 0, "error": "", "failed": []}
     try:
         with connect() as db:
             row = row_for(db, uid)
             ids = [r["id"] for r in db.execute("SELECT id FROM documents WHERE owner_id = ? AND remote_state = 'remote'", (uid,))]
-            files = db.execute("SELECT COUNT(*) FROM uploads WHERE owner_id = ? AND remote = 1", (uid,)).fetchone()[0] + db.execute("SELECT COUNT(*) FROM form_files f JOIN documents d ON d.id = f.form_id WHERE d.owner_id = ? AND f.remote = 1", (uid,)).fetchone()[0]
-            job["total"] = len(ids) + (1 if files else 0)
+            nfiles = db.execute("SELECT COUNT(*) FROM uploads WHERE owner_id = ? AND remote = 1", (uid,)).fetchone()[0] + db.execute("SELECT COUNT(*) FROM form_files f JOIN documents d ON d.id = f.form_id WHERE d.owner_id = ? AND f.remote = 1", (uid,)).fetchone()[0]
+            job["total"] = len(ids) + nfiles
             for i in ids:
-                hydrate(db, i); job["done"] += 1
-            if files and row:
-                bring_files_back(db, row, uid); job["done"] += 1
-            db.execute("UPDATE documents SET remote_state = NULL, remote_fp = NULL WHERE owner_id = ? AND remote_state = 'cached'", (uid,))   # they are whole on this server again
-            db.execute("UPDATE storage_connections SET enabled = 0 WHERE user_id = ?", (uid,))
-            db.commit()
-    except HTTPException as e:
-        job["error"] = str(e.detail)
-    except backends.StorageError as e:
-        job["error"] = str(e)
+                try:
+                    hydrate(db, i)
+                except HTTPException as e:
+                    t = db.execute("SELECT title FROM documents WHERE id = ?", (i,)).fetchone()
+                    job["failed"].append({"what": (t["title"] if t else "a document") or "a document", "error": str(e.detail)})
+                except Exception as e:   # noqa: BLE001
+                    job["failed"].append({"what": "a document", "error": f"Something went wrong ({type(e).__name__})"})
+                job["done"] += 1
+            if row and nfiles:
+                job["failed"] += bring_files_back(db, row, uid, job)
+            if job["failed"]:
+                job["error"] = f"{len(job['failed'])} could not be brought back. The storage is still on; try again."
+            else:
+                db.execute("UPDATE documents SET remote_state = NULL, remote_fp = NULL WHERE owner_id = ? AND remote_state = 'cached'", (uid,))   # they are whole on this server again
+                db.execute("UPDATE storage_connections SET enabled = 0 WHERE user_id = ?", (uid,))
+                db.commit()
     except Exception as e:   # noqa: BLE001
         job["error"] = f"Something went wrong: {type(e).__name__}"
     finally:

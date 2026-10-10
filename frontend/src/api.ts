@@ -70,7 +70,9 @@ export interface StorageStats { docs_remote: number; docs_cached: number; docs_l
 export interface StorageState {
   available: ('s3' | 'webdav' | 'folder')[]
   connection: { kind: 's3' | 'webdav' | 'folder'; config: Record<string, string | boolean>; enabled: boolean; idle_minutes: number; keep_search: boolean; last_ok: number | null; last_error: string; moving_now: boolean } | null
-  stats: StorageStats; job: { running: boolean; done: number; total: number; error: string } | null; message?: string
+  stats: StorageStats; message?: string
+  job: { running: boolean; done: number; total: number; bytes_done: number; error: string; failed: { what: string; error: string }[] } | null
+  progress: { running: boolean; phase: 'files' | 'documents' | 'done'; docs_total: number; docs_done: number; files_total: number; files_done: number; bytes_total: number; bytes_done: number; current: string; failed: { what: string; error: string }[]; started_at: number; finished_at: number | null; moved_docs?: number; moved_files?: number } | null
 }
 export interface StorageIn { kind: 's3' | 'webdav' | 'folder'; config: Record<string, string>; enabled: boolean; idle_minutes: number; keep_search: boolean }
 export interface Notice { id: string; kind: 'mention' | 'comment' | 'share'; doc_id: string; doc_title: string; actor: string; text: string; link: string; created_at: number; read: boolean }
@@ -271,7 +273,8 @@ export const api = {
   testStorage: (b: StorageIn) => request<{ ok: boolean; message: string }>('/api/storage/test', { method: 'POST', ...json(b) }),
   moveStorage: () => request<{ ok: true }>('/api/storage/move', { method: 'POST' }),
   restoreStorage: () => request<{ ok: true }>('/api/storage/restore', { method: 'POST' }),
-  disconnectStorage: () => request<{ ok: true }>('/api/storage', { method: 'DELETE' }),
+  patchStorage: (b: { enabled?: boolean; idle_minutes?: number; keep_search?: boolean }) => request<StorageState>('/api/storage', { method: 'PATCH', ...json(b) }),
+  disconnectStorage: (force = false) => request<{ ok: true }>(`/api/storage${force ? '?force=true' : ''}`, { method: 'DELETE' }),
   /** a document as a .kokodocs file to keep */
   downloadKokodocs: async (id: string, title: string) => {
     const res = await rawFetch(`/api/docs/${id}/kokodocs`, {}, id)

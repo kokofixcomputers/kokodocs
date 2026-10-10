@@ -16,7 +16,11 @@ TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 
 class StorageError(Exception):
-    """Something a person can act on: wrong password, unreachable, no such bucket. The message is shown to them."""
+    """Something a person can act on: wrong password, unreachable, no such bucket. The message is shown to them. `transient` means it may well work if tried again shortly (a network blip, a busy server)."""
+
+    def __init__(self, message: str, transient: bool = False):
+        super().__init__(message)
+        self.transient = transient
 
 
 def allow_private() -> bool:
@@ -134,7 +138,7 @@ def _explain(r: httpx.Response, what: str) -> StorageError:
         return StorageError(f"The storage could not find the place to {what}: check the address (404)")
     if r.status_code == 507:
         return StorageError("The storage is full (507)")
-    return StorageError(f"The storage could not {what} ({r.status_code})")
+    return StorageError(f"The storage could not {what} ({r.status_code})", transient=r.status_code in (408, 425, 429) or r.status_code >= 500)
 
 
 class WebDavBackend(Backend):
@@ -161,7 +165,7 @@ class WebDavBackend(Backend):
             try:
                 r = c.request("MKCOL", cur)
             except httpx.HTTPError as e:
-                raise StorageError(f"Could not reach the storage ({type(e).__name__})")
+                raise StorageError(f"Could not reach the storage ({type(e).__name__})", transient=True)
             if r.status_code in (401, 403) and r.status_code != 405:
                 raise _explain(r, "create the folder")
 
@@ -175,7 +179,7 @@ class WebDavBackend(Backend):
                     self._mkcols(c, key)
                     r = c.put(self._url(key), content=data)
         except httpx.HTTPError as e:
-            raise StorageError(f"Could not reach the storage ({type(e).__name__})")
+            raise StorageError(f"Could not reach the storage ({type(e).__name__})", transient=True)
         if r.status_code not in (200, 201, 204):
             raise _explain(r, "save a file")
 
@@ -184,7 +188,7 @@ class WebDavBackend(Backend):
             with self._client() as c:
                 r = c.get(self._url(key))
         except httpx.HTTPError as e:
-            raise StorageError(f"Could not reach the storage ({type(e).__name__})")
+            raise StorageError(f"Could not reach the storage ({type(e).__name__})", transient=True)
         if r.status_code == 404:
             return None
         if r.status_code != 200:
@@ -196,7 +200,7 @@ class WebDavBackend(Backend):
             with self._client() as c:
                 r = c.delete(self._url(key))
         except httpx.HTTPError as e:
-            raise StorageError(f"Could not reach the storage ({type(e).__name__})")
+            raise StorageError(f"Could not reach the storage ({type(e).__name__})", transient=True)
         if r.status_code not in (200, 202, 204, 404):
             raise _explain(r, "delete a file")
 
@@ -207,7 +211,7 @@ class WebDavBackend(Backend):
                 if r.status_code in (405, 501):
                     r = c.get(self._url(key))
         except httpx.HTTPError as e:
-            raise StorageError(f"Could not reach the storage ({type(e).__name__})")
+            raise StorageError(f"Could not reach the storage ({type(e).__name__})", transient=True)
         if r.status_code == 404:
             return None
         if r.status_code not in (200, 204):
@@ -263,7 +267,7 @@ class S3Backend(Backend):
             with httpx.Client(timeout=TIMEOUT, follow_redirects=False, headers={"User-Agent": "KokoDocs-storage/1.0"}) as c:
                 return c.request(method, url, headers=h, content=body if method == "PUT" else None)
         except httpx.HTTPError as e:
-            raise StorageError(f"Could not reach the storage ({type(e).__name__})")
+            raise StorageError(f"Could not reach the storage ({type(e).__name__})", transient=True)
 
     def put(self, key, data):
         if len(data) > MAX_OBJECT:

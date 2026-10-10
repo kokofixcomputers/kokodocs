@@ -29,7 +29,7 @@ def _clean(kind: str, cfg: dict) -> dict:
 
 def _state(db, user) -> dict:
     row = service.row_for(db, user["id"])
-    out = {"available": [k for k in backends.KINDS if k != "folder" or backends.folder_root()], "connection": None, "stats": service.stats(db, user["id"]), "job": service.jobs.get(user["id"])}
+    out = {"available": [k for k in backends.KINDS if k != "folder" or backends.folder_root()], "connection": None, "stats": service.stats(db, user["id"]), "job": service.jobs.get(user["id"]), "progress": service.progress.get(user["id"])}
     if row:
         cfg = {}
         try:
@@ -64,11 +64,10 @@ def test_storage(body: ConnIn, user=Depends(must_user), db=Depends(get_db)):
         raise HTTPException(429, "Too many tries. Wait a minute.")
     cfg = _clean(body.kind, body.config)
     old = service.row_for(db, user["id"])
-    if old and old["kind"] == body.kind:   # a blank secret means the saved one
-        prev = service.config_of(old)
-        for k in service.SECRET_FIELDS[body.kind]:
+    if old and old["kind"] == body.kind:   # a blank field means the saved one
+        for k, v in service.config_of(old).items():
             if not cfg.get(k):
-                cfg[k] = prev.get(k, "")
+                cfg[k] = v
     try:
         return {"ok": True, "message": backends.make(body.kind, cfg).test()}
     except backends.StorageError as e:
@@ -84,6 +83,28 @@ def put_storage(body: ConnIn, user=Depends(must_user), db=Depends(get_db)):
     except backends.StorageError as e:
         _fail(e)
     return {**_state(db, user), "message": msg}
+
+
+class SettingsIn(BaseModel):
+    enabled: bool | None = None
+    idle_minutes: int | None = Field(None, ge=1, le=1440)
+    keep_search: bool | None = None
+
+
+@router.patch("/storage")
+def patch_storage(body: SettingsIn, user=Depends(must_user), db=Depends(get_db)):
+    """Change the on/off switch, the idle time or the search setting, without touching (or re-testing) the connection."""
+    row = service.row_for(db, user["id"])
+    if not row:
+        raise HTTPException(409, "No storage is connected")
+    sets, args = [], []
+    for col, v in (("enabled", body.enabled), ("idle_minutes", body.idle_minutes), ("keep_search", body.keep_search)):
+        if v is not None:
+            sets.append(f"{col} = ?"); args.append(int(v))
+    if sets:
+        db.execute(f"UPDATE storage_connections SET {', '.join(sets)}, updated_at = ? WHERE user_id = ?", (*args, time.time(), user["id"]))
+        db.commit()
+    return _state(db, user)
 
 
 @router.post("/storage/move")
@@ -119,12 +140,15 @@ def restore_everything(user=Depends(must_user), db=Depends(get_db)):
 
 
 @router.delete("/storage")
-def disconnect(user=Depends(must_user), db=Depends(get_db)):
+def disconnect(force: bool = False, user=Depends(must_user), db=Depends(get_db)):
+    """Forget the connection. Without `force` that is only allowed when nothing is left only in the storage; with it (for a storage that has gone away),
+    the files stay in the storage and the documents say they need it reconnected. Connecting the same storage again makes them open again."""
     st = service.stats(db, user["id"])
-    if st["docs_remote"] or st["files_remote"]:
+    if (st["docs_remote"] or st["files_remote"]) and not force:
         raise HTTPException(409, f"{st['docs_remote']} files and {st['files_remote']} pictures and attachments are only in your storage. Bring them back first.")
     db.execute("UPDATE documents SET remote_state = NULL, remote_fp = NULL WHERE owner_id = ? AND remote_state = 'cached'", (user["id"],))
     db.execute("DELETE FROM storage_connections WHERE user_id = ?", (user["id"],))
+    service.progress.pop(user["id"], None); service.jobs.pop(user["id"], None)
     return {"ok": True}
 
 
