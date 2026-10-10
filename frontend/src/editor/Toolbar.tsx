@@ -6,7 +6,7 @@ import type { Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, ChevronDown, Code, Highlighter, ImagePlus, Italic,
   FileCog, Search, Info, Link2, List, ListChecks, KeyboardOff, IndentDecrease, IndentIncrease, ListOrdered, Minus, PanelTop, Paintbrush, Plus, Printer, Quote, Redo2, RemoveFormatting, Strikethrough,
-  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow } from 'lucide-react'
+  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow, StickyNote } from 'lucide-react'
 import { DEFAULT_FONT } from '../fonts'
 import { ShapeButton } from './ShapePicker'
 import { useKeyboardOpen } from '../ui/KeyboardFit'
@@ -54,7 +54,7 @@ function TablePicker({ onPick }: { onPick: (r: number, c: number) => void }) {
 /** Pressing the bar must not take focus from the page: on a phone that would close the keyboard. Text boxes inside menus still work. */
 const keepFocus = (e: React.SyntheticEvent) => { if (!(e.target as HTMLElement).closest('input, textarea, select')) e.preventDefault() }
 
-export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, voice, extras, docId }: { extras?: React.ReactNode; docId?: string; editor: Editor; onImage: (f: File) => void; onHeaderFooter?: () => void; onPageSetup?: () => void; onFind?: () => void; voice?: Voice }) {
+export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, onSticky, voice, extras, docId }: { onSticky?: () => void; extras?: React.ReactNode; docId?: string; editor: Editor; onImage: (f: File) => void; onHeaderFooter?: () => void; onPageSetup?: () => void; onFind?: () => void; voice?: Voice }) {
   const file = useRef<HTMLInputElement>(null)
   const [ocr, setOcr] = useState(false)
   const kbOpen = useKeyboardOpen()
@@ -181,6 +181,7 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
           {docId && <TBtn icon={<ScanText size={17} />} label="Scan a page: add the text from a photo" onClick={() => setOcr(true)} />}
           {ocr && docId && <OcrDialog editor={editor} docId={docId} onClose={() => setOcr(false)} />}
           <ShapeButton editor={editor} />
+          {onSticky && <TBtn icon={<StickyNote size={17} />} label="Sticky note: a floating note that stays in view" onClick={onSticky} />}
           <EmojiButton editor={editor} />
           <TBtn icon={<Info size={17} />} label="Callout" active={editor.isActive('callout')} onClick={() => (editor.isActive('callout') ? run().lift('callout').run() : run().setCallout('info').run())} />
           <TBtn icon={<Minus size={17} />} label="Divider" onClick={() => run().setHorizontalRule().run()} />

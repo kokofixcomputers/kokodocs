@@ -1,7 +1,8 @@
+import { useEffect, useState } from 'react'
 import { BubbleMenu, type Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignLeft, AlignRight, ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, ArrowDownFromLine, ArrowRightFromLine, Combine, Palette,
-  MessageSquarePlus, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough as StrikeIcon, Code as CodeIcon, Link as LinkIcon, Highlighter as HighlighterIcon, Shapes, Type, Minus, Plus, Rows3, Columns3, Split, Trash2, TableProperties, Image as ImageIcon,
+  MessageSquarePlus, LayoutGrid, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough as StrikeIcon, Code as CodeIcon, Link as LinkIcon, Highlighter as HighlighterIcon, Shapes, Type, Minus, Plus, Rows3, Columns3, Split, Trash2, TableProperties, Image as ImageIcon,
 } from 'lucide-react'
 import { CellSelection, TableMap, mergeCells, selectionCell } from '@tiptap/pm/tables'
 import { toast } from '../ui/Toast'
@@ -11,6 +12,7 @@ import { Popover } from '../ui/Popover'
 import { ColorPicker } from './ColorPicker'
 import { askText } from '../ui/Dialogs'
 import { SHAPE_KINDS, cleanShape, type ShapeKind } from './shapes'
+import { TABLE_STYLES } from './TableExtensions'
 
 const Btn = ({ icon, label, tip, onClick, danger, active }: { icon: React.ReactNode; label: string; tip?: string; onClick: () => void; danger?: boolean; active?: boolean }) => (
   <button type="button" aria-pressed={active} className={`bb-btn ${danger ? 'danger' : ''} ${active ? 'on' : ''}`} data-tip={tip ? `${label}|${tip}` : label} aria-label={label}
@@ -37,6 +39,24 @@ function tableRect(editor: Editor): DOMRect {
   return (el ?? editor.view.dom).getBoundingClientRect()
 }
 
+/** The table design list; it follows the table's own settings as they change. */
+function TableStyleBody({ editor }: { editor: Editor }) {
+  const [, tick] = useState(0)
+  useEffect(() => { const f = () => tick((n) => n + 1); editor.on('transaction', f); return () => { editor.off('transaction', f) } }, [editor])
+  const a = editor.getAttributes('table') as { tableStyle?: string; banded?: boolean; frozen?: boolean }
+  const set = (p: Record<string, unknown>) => editor.chain().focus().updateAttributes('table', p).run()
+  return (
+    <div className="tbl-styles">
+      <b>Design</b>
+      {TABLE_STYLES.map((s) => (
+        <button key={s.id} type="button" className={`tbl-style ${(a.tableStyle ?? 'default') === s.id ? 'on' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => set({ tableStyle: s.id })}>
+          <i className={`tbl-thumb tbl-${s.id}`} /><span><b>{s.label}</b><em>{s.hint}</em></span></button>))}
+      <label className="tbl-switch"><input type="checkbox" checked={!!a.banded} onChange={(e) => set({ banded: e.target.checked })} />Alternating row shading</label>
+      <label className="tbl-switch"><input type="checkbox" checked={!!a.frozen} onChange={(e) => set({ frozen: e.target.checked })} />Freeze the first row <em>(stays in view while a long table scrolls)</em></label>
+    </div>
+  )
+}
+
 export function TableMenu({ editor }: { editor: Editor }) {
   const c = () => editor.chain().focus()
   return (
@@ -57,6 +77,9 @@ export function TableMenu({ editor }: { editor: Editor }) {
         <Btn icon={<Combine size={16} />} label="Merge cells" tip="join the selected cells into one (drag to select several)" onClick={() => c().mergeCells().run()} />
         <Btn icon={<Split size={16} />} label="Split cell" tip="undo a merge and split it back into cells" onClick={() => c().splitCell().run()} />
         <Btn icon={<TableProperties size={16} />} label="Toggle header row" tip="turn the first row into a bold header, or back" onClick={() => c().toggleHeaderRow().run()} />
+        <Popover className="bb-pop tbl-pop" trigger={({ toggle }) => <Btn icon={<LayoutGrid size={16} />} label="Table style" tip="pick a design, alternating row shading, a frozen header row" onClick={toggle} />}>
+          {() => <TableStyleBody editor={editor} />}
+        </Popover>
         <Popover trigger={({ toggle }) => <Btn icon={<Palette size={16} />} label="Cell color" tip="fill the cell background" onClick={toggle} />}>
           {(close) => <ColorPicker noneLabel="No fill" onPick={(col) => { close(); c().setCellAttribute('backgroundColor', col).run() }} />}
         </Popover>

@@ -49,7 +49,9 @@ import { ancestors, children, descendants, nextPos, place, reading, uid, type En
 import { ProofMenu, ProofreadMarks, ProofreadPanel, useProofread } from '../editor/Proofread'
 import { NonPrinting } from '../editor/NonPrinting'
 import { Snippets } from '../editor/Snippets'
+import { TableFill } from '../editor/TableFill'
 import { UndoPill, useUndoIndicator } from '../editor/UndoIndicator'
+import { StickyLayer, addSticky } from '../editor/StickyNotes'
 import { NotionImport } from './NotionImport'
 import './wiki.css'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -320,7 +322,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           </div>
         </header>
 
-        {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} extras={<WikiToolbarExtras editor={ed} />} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
+        {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} extras={<WikiToolbarExtras editor={ed} />} onSticky={cur ? () => addSticky(ydoc, 'stickies:' + cur) : undefined} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
 
         <div className="wiki-body">
           {navOpen && !preview && <button className="wk-scrim" aria-label="Close contents" onClick={() => setNavOpen(false)} />}
@@ -353,6 +355,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
                 {!readOnly && <button className="btn btn-pill btn-primary" onClick={() => add('page', null)}><FilePlus2 size={17} />New page</button>}</div>
             ) : null}
           </div>
+          {!preview && cur && tree[cur] && <StickyLayer key={cur} doc={ydoc} mapKey={'stickies:' + cur} readOnly={readOnly} />}
           <ZoomPill zoom={uz} anchor={canvasRef} fitLabel="Fit the whole page" onFit={() => {
             const c = canvasRef.current, w = c?.querySelector('.wiki-wrap'); if (!c || !w) return
             const r = w.getBoundingClientRect(), nw = r.width / uz.z, nh = r.height / uz.z   // (sizes on the screen are zoomed, so divide the zoom out)
@@ -418,7 +421,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
     EmojiSuggest,
-    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets,
+    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets, TableFill,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions, shouldRerenderOnTransaction: false }, [])

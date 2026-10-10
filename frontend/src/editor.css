@@ -512,3 +512,41 @@ html.embed .ed-body { padding: 0; }
 .bb-btn.on { background: rgba(255, 255, 255, .24); } :root[data-theme='dark'] .bb-btn.on { background: rgba(0, 0, 0, .16); }
 .bb-color { font-weight: 700; font-size: 15px; line-height: 1; border-bottom: 3px solid currentColor; padding: 0 1px 1px; }
 .bb-pop { z-index: 70000; }
+
+/* table designs (TableExtensions.ts): classes on the table's wrapper */
+.koko-prose .tbl-grid table { border-radius: 0; border-color: var(--ink); } .koko-prose .tbl-grid td, .koko-prose .tbl-grid th { border-color: color-mix(in srgb, var(--ink) 35%, transparent); }
+.koko-prose .tbl-minimal table { border: 0; border-radius: 0; background: transparent; } .koko-prose .tbl-minimal td, .koko-prose .tbl-minimal th { border-right: 0; } .koko-prose .tbl-minimal th { background: transparent; border-bottom: 2px solid var(--ink); }
+.koko-prose .tbl-accent th, .koko-prose .tbl-accent tr:first-child > td { background: var(--accent); color: var(--accent-ink); } .koko-prose .tbl-accent th *, .koko-prose .tbl-accent tr:first-child > td * { color: inherit; }
+.koko-prose .tbl-dark th, .koko-prose .tbl-dark tr:first-child > td { background: #1f2937; color: #f3f4f6; border-color: #374151; } .koko-prose .tbl-dark th *, .koko-prose .tbl-dark tr:first-child > td * { color: inherit; }
+.koko-prose .tbl-soft table { border: 0; background: transparent; border-spacing: 4px; } .koko-prose .tbl-soft td, .koko-prose .tbl-soft th { border: 0; border-radius: 10px; background: color-mix(in srgb, var(--accent) 5%, var(--sheet)); } .koko-prose .tbl-soft th { background: color-mix(in srgb, var(--accent) 16%, var(--sheet)); }
+/* alternating rows (the first row is left for the header) */
+.koko-prose .tbl-banded tr:nth-child(even) > td { background: color-mix(in srgb, var(--accent) 7%, var(--sheet)); } .koko-prose .tbl-banded.tbl-soft tr:nth-child(even) > td { background: color-mix(in srgb, var(--accent) 12%, var(--sheet)); }
+/* a frozen first row: it stays at the top of the page while a long table scrolls (so the table can't scroll sideways) */
+.koko-prose .tbl-frozen.tableWrapper { overflow: visible; } .koko-prose .tbl-frozen tr:first-child > * { position: sticky; top: 0; z-index: 4; box-shadow: 0 1px 0 var(--line); } .koko-prose .tbl-frozen tr:first-child > td { background-color: var(--sheet); }
+@media print { .koko-prose .tbl-frozen tr:first-child > * { position: static; } }
+
+.tbl-styles { display: grid; gap: 4px; width: 280px; padding: 6px; } .tbl-styles > b { font-size: 12.5px; color: var(--muted); padding: 2px 6px; }
+.tbl-style { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; color: inherit; text-align: left; padding: 6px; border-radius: 12px; cursor: pointer; } .tbl-style:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); } .tbl-style.on { background: var(--accent-soft); }
+.tbl-style span { display: grid; line-height: 1.25; } .tbl-style em, .tbl-switch em { font-style: normal; font-size: 12px; color: var(--muted); } .tbl-style b { font-size: 13.5px; }
+.tbl-thumb { flex: none; width: 46px; height: 30px; border-radius: 6px; border: 1.5px solid var(--line); background: linear-gradient(var(--accent-soft) 0 33%, transparent 33% 100%), repeating-linear-gradient(90deg, transparent 0 14px, var(--line) 14px 15px); }
+.tbl-thumb.tbl-grid { border-radius: 0; border-color: var(--ink); } .tbl-thumb.tbl-minimal { border: 0; background: linear-gradient(transparent 0 30%, var(--ink) 30% 36%, transparent 36% 100%); } .tbl-thumb.tbl-accent { background: linear-gradient(var(--accent) 0 33%, transparent 33% 100%), repeating-linear-gradient(90deg, transparent 0 14px, var(--line) 14px 15px); }
+.tbl-thumb.tbl-dark { background: linear-gradient(#1f2937 0 33%, transparent 33% 100%), repeating-linear-gradient(90deg, transparent 0 14px, var(--line) 14px 15px); } .tbl-thumb.tbl-soft { border: 0; background: color-mix(in srgb, var(--accent) 12%, var(--sheet)); }
+.tbl-switch { display: flex; align-items: flex-start; gap: 8px; padding: 6px; font-size: 13.5px; cursor: pointer; } .tbl-switch input { margin-top: 3px; }
+
+/* the table fill handle (TableFill.ts) */
+.tbl-fill { position: fixed; z-index: 55000; width: 11px; height: 11px; background: var(--accent); border: 2px solid var(--surface); border-radius: 3px; cursor: crosshair; box-shadow: 0 0 0 1px var(--accent); }
+.koko-prose .tbl-fill-preview { outline: 2px dashed var(--accent); outline-offset: -2px; background-color: color-mix(in srgb, var(--accent) 14%, transparent); }
+@media print { .tbl-fill { display: none !important; } }
+
+/* sticky notes */
+.sticky-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+.sticky { position: absolute; pointer-events: auto; background: var(--sticky, #fff3a3); color: #2a2616; border-radius: 6px 6px 14px 6px; box-shadow: 0 1px 2px rgba(0,0,0,.14), 0 8px 22px rgba(0,0,0,.16); display: flex; flex-direction: column; overflow: hidden; transition: height .18s var(--ease); }
+.sticky.moving { box-shadow: 0 14px 34px rgba(0,0,0,.26); transition: none; }
+.sticky-head { height: 34px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 9px; gap: 6px; touch-action: none; background: rgba(0,0,0,.06); }
+.sticky-dots { display: flex; gap: 5px; } .sticky-dot { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,.28); padding: 0; cursor: pointer; } .sticky-dot.on { border-color: #2a2616; box-shadow: 0 0 0 1.5px rgba(255,255,255,.7) inset; }
+.sticky-peek { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sticky-acts { display: flex; gap: 2px; margin-left: auto; } .sticky-btn { width: 26px; height: 26px; border: 0; border-radius: 8px; background: transparent; color: #2a2616; display: grid; place-items: center; cursor: pointer; } .sticky-btn:hover { background: rgba(0,0,0,.1); }
+.sticky-text { flex: 1; min-height: 0; width: 100%; border: 0; outline: 0; resize: none; background: transparent; color: inherit; font: 400 14.5px/1.45 'Lexend', sans-serif; padding: 9px 11px 14px; }
+.sticky-text::placeholder { color: rgba(42,38,22,.5); }
+.sticky-grip { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none; background: linear-gradient(135deg, transparent 55%, rgba(0,0,0,.28) 55%, rgba(0,0,0,.28) 62%, transparent 62%, transparent 74%, rgba(0,0,0,.28) 74%, rgba(0,0,0,.28) 81%, transparent 81%); }
+@media print { .sticky-layer { display: none; } }

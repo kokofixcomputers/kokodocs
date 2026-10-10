@@ -26,7 +26,9 @@ import { FindBar } from './FindBar'
 import { FindReplace } from './FindReplace'
 import { NonPrinting } from './NonPrinting'
 import { Snippets } from './Snippets'
+import { TableFill } from './TableFill'
 import { UndoPill, useUndoIndicator } from './UndoIndicator'
+import { StickyLayer, addSticky } from './StickyNotes'
 import { CalloutMenu, FormatMenu, ImageMenu, ShapeMenu, TableMenu } from './BubbleMenus'
 import { CommentMark } from './CommentMark'
 import { CommentsPanel, useComments, type Draft } from './Comments'
@@ -174,6 +176,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       FindReplace,
       NonPrinting,
       Snippets,
+      TableFill,
       SlashCommand,
       EmojiSuggest,
       CommentMark,
@@ -387,7 +390,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         </div>
       </header>
 
-      <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} editor={editor} onImage={(f) => upload(f).then((src) => editor.chain().focus().setImage({ src, width: 360 } as any).run()).catch((e) => toast(e.message))} onHeaderFooter={() => setHf(true)} onPageSetup={() => setSetup(true)} onFind={() => setFindOpen((o) => ({ replace: o?.replace ?? false, n: (o?.n ?? 0) + 1 }))} /></div>
+      <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} editor={editor} onImage={(f) => upload(f).then((src) => editor.chain().focus().setImage({ src, width: 360 } as any).run()).catch((e) => toast(e.message))} onHeaderFooter={() => setHf(true)} onPageSetup={() => setSetup(true)} onFind={() => setFindOpen((o) => ({ replace: o?.replace ?? false, n: (o?.n ?? 0) + 1 }))} onSticky={readOnly ? undefined : () => addSticky(ydoc, 'stickies')} /></div>
 
       <div className="ed-body">
         {find && editor && !preview && <FindBar key={find.n} editor={editor} withReplace={find.replace} onClose={() => setFindOpen(null)} />}
@@ -401,6 +404,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           </div>
           <div className="canvas-foot" />
         </div>
+        {!preview && <StickyLayer doc={ydoc} mapKey="stickies" readOnly={readOnly} />}
         <ZoomPill zoom={uz} anchor={canvas} fitLabel="Fit the whole document" onFit={() => {
           const c = canvas.current, s = c?.querySelector('.sheet'); if (!c || !s) return
           const e = (narrow ? 1 : zoom) * uz.z, natural = s.getBoundingClientRect().height / e   // (sizes on the screen are zoomed, so divide the zoom out)

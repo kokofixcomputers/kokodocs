@@ -492,6 +492,12 @@ Tests: `backend/tests/test_sfu.py` (Cloudflare and Metered, against mocks) and `
 - **Save indicator.** Every editor's top bar shows "Saving…" with a spinner while an edit is on its way, then "Saved just now", "Saved 2 min ago" and so on. It follows what the connection has actually written out.
 - **Snippets (text expansion).** *Settings → Snippets*: type a trigger like `;sig` and it becomes the saved text, as soon as the trigger is typed, or after a space when another trigger starts the same way (`;a` and `;addr`). Not inside a word and not in code blocks. Placeholders: `{date}`, `{time}`, `{datetime}`, `{name}`, `{email}`. Snippets are kept on the server per person (`/api/me/prefs`, tests in `backend/tests/test_prefs.py`), so they follow you between devices and still work offline.
 
+## Tables and sticky notes
+
+- **Fill handle.** Select a cell (or several) in a table and drag the small square at its corner down, up, left or right. Numbers continue (1, 2 → 3, 4, 5), as do dates (`2026-01-30`), weekdays, months and text ending in a number (`Item 1` → `Item 2`). A single cell, or anything else, is copied with its formatting.
+- **Table style.** The table toolbar has a *Table style* button with six designs (default, grid, minimal, accent, dark, soft), *Alternating row shading* and *Freeze the first row*, which stays at the top while a long table scrolls. The choices are saved in the document.
+- **Sticky notes.** The *Sticky note* toolbar button adds a note that floats over the page and stays in view while it scrolls. Drag it by its header, resize it from the corner, change its colour or collapse it to a single line. Notes are shared with everyone on the document (viewers can read them but not change them), are saved with it, and are left out of printing. In a wiki, each page has its own notes.
+
 ## Non-printing characters
 
 The ¶ button in the toolbar of a document or wiki (or ⌘⇧8 / Ctrl+Shift+8, Word's own shortcut) shows the characters you can't normally see: ¶ at the end of every paragraph, a dot on every space, → on tabs, ° on non-breaking spaces and ↵ on line breaks. They are only drawn over the text: the document is never changed, they don't print, and they can't be selected or copied. The choice is remembered. A very long document shows them for its first part only, so typing stays quick (typing measured at about 1 ms a key with 19,000 spaces marked). Tests: see `frontend/src/editor/NonPrinting.ts`.

@@ -11,11 +11,10 @@ import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import { AnchorHeading, DocLink, HeadingLinks } from './headingLinks'
 import TaskList from '@tiptap/extension-task-list'
-import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import { FontFamily, FontSize } from './FontExtensions'
 import { ResizableImage } from './ResizableImage'
-import { KokoTableCell, KokoTableHeader } from './TableExtensions'
+import { KokoTable, KokoTableCell, KokoTableHeader } from './TableExtensions'
 import { KokoTaskItem } from './TaskItem'
 
 /** Everything that defines the document schema. The live editor and version previews share this list. */
@@ -27,6 +26,6 @@ export const baseExtensions = () => [
   Subscript, Superscript,
   DocLink.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' } }),
   TaskList, KokoTaskItem.configure({ nested: true }),
-  Table.configure({ resizable: true, lastColumnResizable: false }), TableRow, KokoTableHeader, KokoTableCell,
+  KokoTable.configure({ resizable: true, lastColumnResizable: false }), TableRow, KokoTableHeader, KokoTableCell,
   ResizableImage.configure({ inline: true, allowBase64: false }), DocShape,
 ]
