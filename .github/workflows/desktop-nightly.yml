@@ -1,0 +1,95 @@
+# Builds the desktop app for Mac, Windows and Linux every night and publishes it under the "nightly" tag
+# (a pre-release that is replaced each time). Also runs on demand (Actions → Desktop nightly → Run workflow).
+name: Desktop nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-nightly
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Anything new?
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.c.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: c
+        run: |
+          # a manual run always builds; a nightly run only when the desktop app or the tag's commit has moved on
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          last=$(git rev-parse -q --verify refs/tags/nightly || true)
+          if [ -z "$last" ] || [ -n "$(git diff --name-only "$last" HEAD -- desktop .github/workflows/desktop-nightly.yml)" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; else echo "build=false" >> "$GITHUB_OUTPUT"; fi
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS,   os: macos-latest }
+          - { name: Windows, os: windows-latest }
+          - { name: Linux,   os: ubuntu-latest }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - name: Give the build a nightly version
+        shell: bash
+        run: npm version "0.0.0-nightly.$(date -u +%Y%m%d)" --no-git-tag-version --allow-same-version
+      - name: Build
+        run: npx electron-builder --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'   # unsigned builds
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          if-no-files-found: error
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+
+  publish:
+    name: Publish the "nightly" release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          pattern: desktop-*
+          merge-multiple: true
+      - name: Replace the nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la files
+          gh release delete nightly --cleanup-tag --yes || true
+          gh release create nightly files/* \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "Nightly $(date -u +%Y-%m-%d)" \
+            --notes "Automatic build of the desktop app from \`${GITHUB_SHA::7}\`. Not signed: macOS asks you to right-click → Open the first time, and Windows may show a SmartScreen warning. Open the app once while online so it can keep an offline copy."
