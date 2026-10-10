@@ -9,7 +9,7 @@ export interface Filters { kinds: DocKind[]; owner: 'any' | 'me' | 'shared'; day
 export const NO_FILTERS: Filters = { kinds: [], owner: 'any', days: 0 }
 export const filterCount = (f: Filters) => (f.kinds.length ? 1 : 0) + (f.owner !== 'any' ? 1 : 0) + (f.days ? 1 : 0)
 
-export const KIND_NAMES: Record<DocKind, string> = { doc: 'Documents', sheet: 'Spreadsheets', slides: 'Presentations', form: 'Forms', wiki: 'Wikis', board: 'Boards' }
+export const KIND_NAMES: Record<DocKind, string> = { doc: 'Documents', sheet: 'Spreadsheets', slides: 'Presentations', form: 'Forms', wiki: 'Wikis', board: 'Boards', whiteboard: 'Whiteboards' }
 const KINDS = Object.keys(KIND_NAMES) as DocKind[]
 const DAYS = [{ d: 0, t: 'Any time' }, { d: 1, t: 'Today' }, { d: 7, t: 'Last 7 days' }, { d: 30, t: 'Last 30 days' }, { d: 365, t: 'Last year' }]
 const OWNERS = [{ o: 'any', t: 'Anyone' }, { o: 'me', t: 'Me' }, { o: 'shared', t: 'Shared with me' }] as const

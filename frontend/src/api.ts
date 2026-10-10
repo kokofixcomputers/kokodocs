@@ -26,7 +26,7 @@ export interface AdminStats { users: number; documents: number; spreadsheets: nu
 /** May the assistant read this person's other files: not at all, only after asking each time, or freely. */
 export type AiFilesMode = 'off' | 'ask' | 'allow'
 export interface AiFileEntry { id: string; title: string; kind: DocKind; owner: string; updated_at: number; snippet?: string }
-export type DocKind = 'doc' | 'sheet' | 'slides' | 'form' | 'wiki' | 'board'
+export type DocKind = 'doc' | 'sheet' | 'slides' | 'form' | 'wiki' | 'board' | 'whiteboard'
 export type Role = 'owner' | 'manager' | 'editor' | 'viewer'
 export type LinkAccess = 'restricted' | 'anyone' | 'password'
 
@@ -196,7 +196,7 @@ export const api = {
   createDoc: async (title?: string, folder_id?: string | null, kind: DocKind = 'doc', opts: { plain?: boolean } = {}): Promise<DocSummary> => {
     if (zkUnlocked() && kind !== 'form' && zkNewEncrypted() && !opts.plain) {
       const id = Array.from(crypto.getRandomValues(new Uint8Array(8)), (x) => x.toString(16).padStart(2, '0')).join(''), key = newDocKey()
-      const name = title?.trim() || { doc: 'Untitled document', sheet: 'Untitled spreadsheet', slides: 'Untitled presentation', wiki: 'Untitled wiki', board: 'Untitled board' }[kind]
+      const name = title?.trim() || { doc: 'Untitled document', sheet: 'Untitled spreadsheet', slides: 'Untitled presentation', wiki: 'Untitled wiki', board: 'Untitled board', whiteboard: 'Untitled whiteboard' }[kind]
       const r = await request<DocSummary>('/api/zk/docs', { method: 'POST', ...json({ id, kind, folder_id: folder_id ?? null, title_enc: await encryptTitle(key, id, name), sealed: await sealDocKeyForMe(key) }) })
       setDocKey(id, key)
       return decorate(r)

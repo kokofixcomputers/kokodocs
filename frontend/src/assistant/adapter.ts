@@ -19,8 +19,8 @@ export interface Tool {
 
 /** The assistant is the same for documents and spreadsheets; an adapter supplies the tools and context for each. */
 export interface Adapter {
-  kind: 'doc' | 'sheet' | 'slides' | 'wiki' | 'form' | 'board'
-  noun: 'document' | 'spreadsheet' | 'presentation' | 'wiki' | 'form' | 'board'
+  kind: 'doc' | 'sheet' | 'slides' | 'wiki' | 'form' | 'board' | 'whiteboard'
+  noun: 'document' | 'spreadsheet' | 'presentation' | 'wiki' | 'form' | 'board' | 'whiteboard'
   title: () => string
   canEdit: () => boolean
   /** Extra system-prompt guidance specific to this kind of file. */

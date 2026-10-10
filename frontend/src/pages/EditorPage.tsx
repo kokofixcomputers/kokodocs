@@ -12,6 +12,7 @@ const FormEditor = lazy(() => import('../forms/FormEditor'))
 const FormPage = lazy(() => import('../forms/FormPage'))
 const WikiEditor = lazy(() => import('../wiki/WikiEditor'))
 const BoardEditor = lazy(() => import('../board/BoardEditor'))
+const WhiteboardEditor = lazy(() => import('../whiteboard/WhiteboardEditor'))
 import { Logo } from '../ui/Logo'
 import { AuthEmbedded } from './AuthPage'
 import { setShortcutArea } from '../ui/Shortcuts'
@@ -74,7 +75,7 @@ export function EditorPage() {
     return () => document.documentElement.classList.remove('embed')
   }, [])
   const readyKind = state.kind === 'ready' ? state.info.kind : null
-  useEffect(() => { setShortcutArea(readyKind === 'wiki' ? 'doc' : readyKind === 'board' ? 'general' : readyKind ?? 'general'); return () => setShortcutArea('general') }, [readyKind])
+  useEffect(() => { setShortcutArea(readyKind === 'wiki' ? 'doc' : readyKind === 'board' || readyKind === 'whiteboard' ? 'general' : readyKind ?? 'general'); return () => setShortcutArea('general') }, [readyKind])
 
   if (state.kind === 'loading') return <div className="splash"><span className="spinner" /></div>
   if (state.kind === 'ready' && state.info.zk && state.info.zk_locked) {   // an encrypted document I have no key for
@@ -85,6 +86,7 @@ export function EditorPage() {
   if (state.kind === 'ready') {
     const k = `${state.info.id}:${user?.id ?? 'anon'}:${state.info.role}`
     if (state.info.kind === 'form') return <Suspense fallback={<div className="splash"><span className="spinner" /></div>}>{state.info.role === 'viewer' ? <FormPage key={k} info={state.info} /> : <FormEditor key={k} info={state.info} />}</Suspense>
+    if (state.info.kind === 'whiteboard') return <Suspense fallback={<div className="splash"><span className="spinner" /></div>}><WhiteboardEditor key={k} info={state.info} /></Suspense>
     if (state.info.kind === 'board') return <Suspense fallback={<div className="splash"><span className="spinner" /></div>}><BoardEditor key={k} info={state.info} /></Suspense>
     if (state.info.kind === 'wiki') return <Suspense fallback={<div className="splash"><span className="spinner" /></div>}><WikiEditor key={k} info={state.info} /></Suspense>
     if (state.info.kind === 'slides') return <Suspense fallback={<div className="splash"><span className="spinner" /></div>}><SlidesEditor key={k} info={state.info} /></Suspense>

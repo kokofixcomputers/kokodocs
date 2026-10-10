@@ -18,7 +18,7 @@ def fts_query(q: str) -> str | None:
     return " ".join(f'"{t}"*' for t in toks) if toks else None
 
 
-KINDS = {"doc", "sheet", "slides", "form", "wiki", "board"}
+KINDS = {"doc", "sheet", "slides", "form", "wiki", "board", "whiteboard"}
 
 
 @router.get("/search")

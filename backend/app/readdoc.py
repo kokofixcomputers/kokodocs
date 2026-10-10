@@ -196,6 +196,32 @@ def _board(d: Doc) -> str:
     return "\n".join(out).strip()
 
 
+def _whiteboard(d: Doc) -> str:
+    """What is on a whiteboard, back to front: each shape with its place and size, the text in it, and what an arrow joins."""
+    els = {str(k): v for k, v in d.get("els", type=Map).items() if isinstance(v, dict)}
+    order = sorted(els.values(), key=lambda e: (e.get("z", 0), str(e.get("id", ""))))
+    names = {str(e.get("id")): (str(e.get("text") or e.get("name") or e.get("type"))[:40]) for e in order}
+    out = []
+    for e in order:
+        if e.get("hidden"):
+            continue
+        t, x, y = e.get("type"), round(e.get("x", 0)), round(e.get("y", 0))
+        if t in ("arrow", "line"):
+            a, b = (e.get("from") or {}).get("id"), (e.get("to") or {}).get("id")
+            join = f" from “{names.get(str(a), '?')}” to “{names.get(str(b), '?')}”" if a or b else ""
+            out.append(f"- {t}{join}" + (f": {e['text']}" if e.get("text") else ""))
+        elif t == "draw":
+            out.append(f"- freehand drawing at ({x}, {y})")
+        elif t == "image":
+            out.append(f"- image at ({x}, {y}), {round(e.get('w', 0))}×{round(e.get('h', 0))}")
+        elif t == "embed":
+            out.append(f"- website object at ({x}, {y}), {round(e.get('w', 0))}×{round(e.get('h', 0))}")
+        else:
+            label = str(e.get("text") or "").strip().replace("\n", " / ")
+            out.append(f"- {t}{' “' + str(e.get('name')) + '”' if t == 'frame' and e.get('name') else ''} at ({x}, {y}), {round(e.get('w', 0))}×{round(e.get('h', 0))}" + (f": {label}" if label else ""))
+    return "\n".join(out)
+
+
 def _wiki(d: Doc) -> str:
     tree = {str(k): dict(v) for k, v in d.get("tree", type=Map).items() if hasattr(v, "keys")}
     def kids(parent):
@@ -220,7 +246,7 @@ def render(blob: bytes | None, kind: str) -> tuple[str, bool]:
     d = Doc()
     d.apply_update(bytes(blob))
     try:
-        text = {"sheet": _sheet, "slides": _slides, "form": _form, "board": _board, "wiki": _wiki}.get(kind, lambda x: fragment_md(x.get("default", type=XmlFragment)))(d)
+        text = {"sheet": _sheet, "slides": _slides, "form": _form, "board": _board, "whiteboard": _whiteboard, "wiki": _wiki}.get(kind, lambda x: fragment_md(x.get("default", type=XmlFragment)))(d)
     except Exception:
         text = ""
     if len(text) > MAX_CHARS:

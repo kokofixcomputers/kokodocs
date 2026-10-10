@@ -1,7 +1,7 @@
 import { api, type AiFileEntry } from '../api'
 import { type Tool, clip, tool } from './adapter'
 
-const NOUN: Record<string, string> = { doc: 'document', sheet: 'spreadsheet', slides: 'presentation', form: 'form', wiki: 'wiki', board: 'board' }
+const NOUN: Record<string, string> = { doc: 'document', sheet: 'spreadsheet', slides: 'presentation', form: 'form', wiki: 'wiki', board: 'board', whiteboard: 'whiteboard' }
 const names = new Map<string, string>()   // file id -> name, learnt from searches, so the activity feed can say what is being read
 const line = (f: AiFileEntry) => `- id ${f.id}: “${f.title}” (${NOUN[f.kind] ?? f.kind}, ${f.owner === 'me' ? 'yours' : `from ${f.owner}`}, changed ${new Date(f.updated_at * 1000).toLocaleDateString()})${f.snippet ? `\n    …${clip(f.snippet, 160)}…` : ''}`
 

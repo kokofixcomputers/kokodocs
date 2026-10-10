@@ -59,6 +59,10 @@ def extract_text(blob: bytes | None, kind: str) -> str:
                 if isinstance(card, dict):
                     parts += [str(card.get(k)) for k in ("title", "desc") if card.get(k)]
                     parts += [str(v) for v in (card.get("v") or {}).values() if isinstance(v, str)]
+        elif kind == "whiteboard":
+            for e in d.get("els", type=Map).values():
+                if isinstance(e, dict):
+                    parts += [str(e.get(k)) for k in ("text", "name") if e.get(k)]
         elif kind == "wiki":
             for pid, ent in d.get("tree", type=Map).items():
                 if isinstance(ent, dict) and ent.get("title"):

@@ -49,6 +49,14 @@ def summarize(blob: bytes) -> tuple[int, str]:
     except Exception:
         pass
     try:
+        els = d.get("els", type=Map)
+        if len(els):
+            shapes = [e for e in els.values() if isinstance(e, dict)]
+            texts = [str(e.get("text")).strip().replace("\n", " ") for e in sorted(shapes, key=lambda e: e.get("z", 0)) if e.get("text")]
+            return len(shapes), " · ".join(t for t in texts[:4] if t)[:140]
+    except Exception:
+        pass
+    try:
         order = d.get("order", type=Array)
         if len(order):
             slides = d.get("slides", type=Map)

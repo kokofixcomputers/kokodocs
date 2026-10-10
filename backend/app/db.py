@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS documents (
   link_password_hash TEXT,
   folder_id TEXT,
   deleted_at REAL,
-  kind TEXT NOT NULL DEFAULT 'doc',   -- doc | sheet | slides | form | wiki | board
+  kind TEXT NOT NULL DEFAULT 'doc',   -- doc | sheet | slides | form | wiki | board | whiteboard
   created_at REAL NOT NULL,
   updated_at REAL NOT NULL
 );

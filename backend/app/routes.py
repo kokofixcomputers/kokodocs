@@ -190,7 +190,7 @@ class CreateDoc(BaseModel):
     id: str | None = Field(None, pattern=r"^[0-9a-f]{16}$")   # chosen by the desktop app when it makes a document offline; creating it again later is harmless
     title: str | None = Field(None, max_length=200)
     folder_id: str | None = None
-    kind: Literal["doc", "sheet", "slides", "form", "wiki", "board"] = "doc"
+    kind: Literal["doc", "sheet", "slides", "form", "wiki", "board", "whiteboard"] = "doc"
 
 
 @router.post("/docs")
@@ -208,7 +208,7 @@ def create_doc(body: CreateDoc, user=Depends(must_user), db=Depends(get_db)):
         folder = None
     db.execute(
         "INSERT INTO documents (id, owner_id, title, folder_id, kind, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-        (did, user["id"], (body.title or "").strip() or ({"sheet": "Untitled spreadsheet", "slides": "Untitled presentation", "form": "Untitled form", "wiki": "Untitled wiki", "board": "Untitled board"}.get(body.kind, "Untitled document")), folder, body.kind, now, now),
+        (did, user["id"], (body.title or "").strip() or ({"sheet": "Untitled spreadsheet", "slides": "Untitled presentation", "form": "Untitled form", "wiki": "Untitled wiki", "board": "Untitled board", "whiteboard": "Untitled whiteboard"}.get(body.kind, "Untitled document")), folder, body.kind, now, now),
     )
     return doc_summary(db.execute("SELECT * FROM documents WHERE id = ?", (did,)).fetchone(), "owner", user["name"])
 

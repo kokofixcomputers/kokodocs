@@ -4,7 +4,7 @@ import {
   Ban, ChevronDown, ChevronRight, FileText, Folder as FolderIcon, FolderInput, FolderPlus, Globe, Home, KeyRound, Lock, LogOut, Moon,
   ArrowDownWideNarrow, ArrowUpNarrowWide, ClipboardList, Copy, ExternalLink, FolderOpen, ListFilter, MoreHorizontal, Tag as TagIcon, Pencil, Plus, RotateCcw, Presentation, Search, Star, Upload, LayoutTemplate, Share2, ShieldCheck, Sun, Table2, Trash2, Users,
   Settings, BookOpen,
-  Kanban, SlidersHorizontal,
+  Kanban, PenTool, SlidersHorizontal,
 } from 'lucide-react'
 import { api, type DocInfo, type DocKind, type DocSummary, type Folder, type SharedFolder, type SharedFolderView } from '../api'
 import { useAuth } from '../auth'
@@ -325,6 +325,7 @@ export function Dashboard() {
     { label: 'New form', icon: <ClipboardList size={16} />, onClick: () => void create('form') },
     { label: 'New wiki', icon: <BookOpen size={16} />, onClick: () => void create('wiki') },
     { label: 'New board', icon: <Kanban size={16} />, onClick: () => void create('board') },
+    { label: 'New whiteboard', icon: <PenTool size={16} />, onClick: () => void create('whiteboard') },
     { sep: true },
     { label: 'New folder', icon: <FolderPlus size={16} />, onClick: () => void newFolder() },
   ])
@@ -490,6 +491,7 @@ export function Dashboard() {
                       <button onClick={() => { close(); create('form') }}><ClipboardList size={17} />New form</button>
                       <button onClick={() => { close(); create('wiki') }}><BookOpen size={17} />New wiki</button>
                       <button onClick={() => { close(); create('board') }}><Kanban size={17} />New board</button>
+                      <button onClick={() => { close(); create('whiteboard') }}><PenTool size={17} />New whiteboard</button>
                       <div className="menu-sep" />
                       <button onClick={() => { close(); setGallery(true) }}><LayoutTemplate size={17} />Browse templates…</button>
                       <button onClick={() => { close(); importInput.current?.click() }}><Upload size={17} />Import a file…</button>

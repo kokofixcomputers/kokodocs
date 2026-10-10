@@ -32,7 +32,7 @@ EMOJIS = ["👍", "👏", "❤️", "😂", "😮", "🎉", "🙏", "🔥"]
 MAX_POLLS = 20
 SHARE_GRACE = float(os.environ.get("KOKO_SHARE_GRACE", "8"))   # seconds the person sharing a document may be gone before the share ends
 PERM_KEYS = ("mic", "camera", "screen", "chat", "react", "collab", "present", "edit", "seek")
-SHARE_KINDS = ("doc", "sheet", "slides")
+SHARE_KINDS = ("doc", "sheet", "slides", "whiteboard")
 CONSENT_GRACE = float(os.environ.get("KOKO_CONSENT_GRACE", "60"))     # seconds someone may take to answer when everyone must agree to a recording
 RECORDER_GRACE = float(os.environ.get("KOKO_RECORDER_GRACE", "20"))   # seconds the recording browser may be gone before the recording ends
 
@@ -745,7 +745,7 @@ def _lookup_doc(doc_id: str, uid: str):
         if d["zk"]:
             return None, "Encrypted documents can't be shared in a meeting."
         if d["kind"] not in SHARE_KINDS:
-            return None, "Only documents, spreadsheets and presentations can be shared."
+            return None, "Only documents, spreadsheets, presentations and whiteboards can be shared."
         return {"title": d["title"] or "Untitled", "kind": d["kind"]}, ""
 
 
