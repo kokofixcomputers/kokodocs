@@ -8,7 +8,7 @@ export interface UpdateInfo { commit: string; built?: string; size?: number }
 export interface BundleInfo { commit: string; built: number; source: 'downloaded' | 'packed'; bytes: number; downloadedBytes: number }
 export interface DesktopApi { platform: string; version: string;
   update?: { check: () => Promise<UpdateInfo | null>; install: () => Promise<void>; onAvailable: (cb: (u: UpdateInfo) => void) => void; onProgress: (cb: (p: number) => void) => void; onError: (cb: (m: string) => void) => void }
-  bundle?: () => Promise<BundleInfo | null>; removeBundle?: () => Promise<void>; storage?: () => Promise<{ appfiles: number; cache: number }>; clear?: (what: 'appfiles' | 'cache') => Promise<void>; onSettings?: (cb: () => void) => void; fullscreen: (cb: (on: boolean) => void) => void; appFiles: (cb: (s: { done: number; total: number; finished?: boolean }) => void) => void }
+  bundle?: () => Promise<BundleInfo | null>; removeBundle?: () => Promise<void>; storage?: () => Promise<{ appfiles: number; cache: number }>; clear?: (what: 'appfiles' | 'cache') => Promise<void>; onSettings?: (cb: () => void) => void; openSso?: (url: string) => Promise<void>; onSso?: (cb: (r: { token?: string; mfa?: string; next?: string; error?: string; linked?: string; closed?: boolean }) => void) => void; fullscreen: (cb: (on: boolean) => void) => void; appFiles: (cb: (s: { done: number; total: number; finished?: boolean }) => void) => void }
 declare global { interface Window { kokoDesktop?: DesktopApi } }
 
 export const isDesktop = () => typeof window !== 'undefined' && !!window.kokoDesktop

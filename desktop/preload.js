@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('kokoDesktop', {
   },
   bundle: () => ipcRenderer.invoke('bundle:info'),
   removeBundle: () => ipcRenderer.invoke('bundle:remove'),
+  openSso: (url) => ipcRenderer.invoke('sso:open', url),
+  onSso: (cb) => ipcRenderer.on('desktop:sso', (_e, r) => cb(r)),   // the result of signing in through a provider, read from the pop-up's last address
   storage: () => ipcRenderer.invoke('desktop:storage'),   // how much room the app's saved files take
   clear: (what) => ipcRenderer.invoke('desktop:clear', what),
   onSettings: (cb) => ipcRenderer.on('desktop:settings', () => cb()),

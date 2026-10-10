@@ -4,7 +4,18 @@
 const KEY = 'koko.ssoPopup', CH = 'koko-sso'
 export type SsoResult = { token?: string; mfa?: string; next?: string; error?: string; linked?: string }
 
+let pending: ((r: SsoResult) => void) | null = null
+let closedCb: (() => void) | undefined
+let wired = false
+
 export function openSso(url: string, onResult: (r: SsoResult) => void, onClosed?: () => void) {
+  const d = window.kokoDesktop
+  if (d?.onSso && d.openSso) {   // the desktop app opens the sign-in window itself (in its own browser session) and reports how it ended
+    if (!wired) { wired = true; d.onSso((r) => { const f = pending, c = closedCb; pending = null; closedCb = undefined; if (r.closed) c?.(); else f?.(r) }) }
+    pending = onResult; closedCb = onClosed
+    void d.openSso(url)
+    return
+  }
   const ch = new BroadcastChannel(CH)
   try { localStorage.setItem(KEY, String(Date.now())) } catch { /* ignore */ }
   const w = window.open(url, 'koko-sso', 'popup,width=520,height=720')

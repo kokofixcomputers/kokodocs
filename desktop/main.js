@@ -5,6 +5,7 @@ const fs = require('fs')
 const path = require('path')
 
 const isMac = process.platform === 'darwin'
+const SSO = 'persist:sso'
 const BAR = 40
 const cfgFile = () => path.join(app.getPath('userData'), 'config.json')
 const readCfg = () => { try { return JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) } catch { return {} } }
@@ -119,6 +120,7 @@ function createWindow() {
     if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
+  // (single sign-on has its own window: see ipcMain 'sso:open')
   win.webContents.on('will-navigate', (e, url) => {
     if (url.startsWith('file:')) return
     if (new URL(url).origin !== server) { e.preventDefault(); if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url) }
@@ -129,6 +131,38 @@ function createWindow() {
     void win.loadFile(path.join(__dirname, 'pages', 'offline.html'), { query: { server, why: desc } })
   })
   load()
+}
+
+// Single sign-on happens in a window with its own browser session, which this app's file serving never touches: the provider's pages (GitHub's, Google's) load exactly as in a
+// browser, with their own cookies. When it lands back on this site, the result is read from that address here and handed to the main window, and the window closes.
+ipcMain.handle('sso:open', (_e, url) => {
+  let u
+  try { u = new URL(String(url)) } catch { return }
+  if (u.origin !== server || !u.pathname.startsWith('/api/auth/sso/')) return   // only this site's own sign-in addresses
+  const child = new BrowserWindow({
+    width: 520, height: 720, parent: win ?? undefined, autoHideMenuBar: true, title: 'Sign in', minimizable: false,
+    webPreferences: { partition: SSO, contextIsolation: true, sandbox: true, nodeIntegration: false },
+  })
+  watchSso(child)
+  void child.loadURL(u.href)
+})
+
+function watchSso(child) {
+  let done = false
+  const finish = (r) => { if (done) return; done = true; win?.webContents.send('desktop:sso', r); setTimeout(() => { try { child.close() } catch { /* already closed */ } }, 50) }
+  child.on('closed', () => { if (!done) { done = true; win?.webContents.send('desktop:sso', { closed: true }) } })   // closed by hand: nothing was decided
+  const look = (url) => {
+    try {
+      const u = new URL(url)
+      if (u.origin !== server) return
+      const h = new URLSearchParams(u.hash.slice(1))
+      if (u.pathname === '/auth/callback') finish({ token: h.get('token') || undefined, mfa: h.get('mfa') || undefined, next: h.get('next') || undefined })
+      else if (u.pathname === '/login' && u.searchParams.get('error')) finish({ error: u.searchParams.get('error') })
+      else if (u.pathname === '/' && u.searchParams.get('sso')) { const v = u.searchParams.get('sso'); finish(v.startsWith('linked') ? { linked: v } : { error: v }) }
+    } catch { /* not an address */ }
+  }
+  const c = child.webContents
+  c.on('will-redirect', (_e, url) => look(url)); c.on('did-navigate', (_e, url) => look(url)); c.on('did-navigate-in-page', (_e, url) => look(url))
 }
 
 function load() {
