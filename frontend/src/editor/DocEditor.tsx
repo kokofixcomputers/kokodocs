@@ -29,6 +29,8 @@ import { Snippets } from './Snippets'
 import { TableFill } from './TableFill'
 import { UndoPill, useUndoIndicator } from './UndoIndicator'
 import { StickyLayer, addSticky } from './StickyNotes'
+import { FollowPill, PresenceStack, useFollow } from './Follow'
+import { MultiCursor } from './MultiCursor'
 import { CalloutMenu, FormatMenu, ImageMenu, ShapeMenu, TableMenu } from './BubbleMenus'
 import { CommentMark } from './CommentMark'
 import { CommentsPanel, useComments, type Draft } from './Comments'
@@ -176,7 +178,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       FindReplace,
       NonPrinting,
       Snippets,
-      TableFill,
+      TableFill, MultiCursor,
       SlashCommand,
       EmojiSuggest,
       CommentMark,
@@ -333,6 +335,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const saveMeta = (m: PageMeta) => ydoc.transact(() => { (Object.keys(m) as (keyof PageMeta)[]).forEach((k) => ymeta.set(k, m[k])) })
 
   const undone = useUndoIndicator(editor)
+  const follow = useFollow({ provider, editor, scroller: canvas })
   const pagesCount = editor ? (pagesKey.getState(editor.state)?.breaks.length ?? 0) + 1 : 1
 
   if (import.meta.env.DEV && editor) (window as any).__koko = editor
@@ -351,10 +354,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           <EncryptionBadge info={info} />
         </div>
         <div className="ed-right">
-          <div className="presence">
-            {people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} size={32} ring />)}
-            {people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}
-          </div>
+          <PresenceStack people={people} followId={follow.target?.id ?? null} onToggle={follow.toggle} />
           <DocExportMenu editor={editor} title={title} meta={meta} />
           {!readOnly && (
             <button className={`icon-btn ${panel === 'history' ? 'active' : ''}`} title="Version history" aria-label="Version history"
@@ -437,6 +437,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       <SlashMenu />
       <EmojiSuggestMenu />
       <UndoPill said={undone} />
+      <FollowPill target={follow.target} onStop={follow.stop} />
       <TableMenu editor={editor} />
       <CalloutMenu editor={editor} />
       <FormatMenu editor={editor} onComment={user ? startComment : undefined} />

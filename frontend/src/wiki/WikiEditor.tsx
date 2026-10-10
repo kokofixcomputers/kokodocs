@@ -52,6 +52,8 @@ import { Snippets } from '../editor/Snippets'
 import { TableFill } from '../editor/TableFill'
 import { UndoPill, useUndoIndicator } from '../editor/UndoIndicator'
 import { StickyLayer, addSticky } from '../editor/StickyNotes'
+import { FollowPill, PresenceStack, useFollow } from '../editor/Follow'
+import { MultiCursor } from '../editor/MultiCursor'
 import { NotionImport } from './NotionImport'
 import './wiki.css'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -141,6 +143,8 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const cur = pageId && tree[pageId]?.t === 'page' ? pageId : order[0] ?? null
   const curRef = useRef(cur); curRef.current = cur
   const go = useCallback((id: string) => { history.replaceState(null, '', `#${encodeURIComponent(id)}`); setPageId(id); if (window.innerWidth <= 900) setNavOpen(false) }, [])
+  const follow = useFollow({ provider, editor: ed, scroller: canvasRef, page: cur, goPage: go })
+  useEffect(() => { provider.awareness.setLocalStateField('page', cur) }, [provider, cur])   // so people following you come to this page too
 
   const vars = useMemo<Vars>(() => ({ ...sharedVars, ...myVars }), [sharedVars, myVars])
 
@@ -296,10 +300,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           <EncryptionBadge info={info} />
           </div>
           <div className="ed-right">
-            <div className="presence">
-              {people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} size={32} ring />)}
-              {people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}
-            </div>
+            <PresenceStack people={people} followId={follow.target?.id ?? null} onToggle={follow.toggle} />
             {!readOnly && <button className={`icon-btn ${panel === 'history' ? 'active' : ''}`} title="Version history" aria-label="Version history" onClick={() => { setPreview(null); setPanel((p) => (p === 'history' ? 'none' : 'history')) }}><History size={19} /></button>}
             <ReadAloud plain={!!info.zk} />
             {user && !preview && <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'assistant' ? 'none' : 'assistant'))}><Sparkles size={17} /><span className="lbl">Assistant</span></button>}
@@ -324,6 +325,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
 
         {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} extras={<WikiToolbarExtras editor={ed} />} onSticky={cur ? () => addSticky(ydoc, 'stickies:' + cur) : undefined} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
 
+        <FollowPill target={follow.target} onStop={follow.stop} />
         <div className="wiki-body">
           {navOpen && !preview && <button className="wk-scrim" aria-label="Close contents" onClick={() => setNavOpen(false)} />}
           <aside className={`wk-nav ${navOpen && !preview ? 'open' : ''}`} aria-label="Contents">
@@ -421,7 +423,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
     EmojiSuggest,
-    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets, TableFill,
+    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets, TableFill, MultiCursor,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions, shouldRerenderOnTransaction: false }, [])

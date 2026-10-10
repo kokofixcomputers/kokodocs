@@ -504,6 +504,11 @@ Search (Ctrl/Cmd+K, and the search box on the home page) can be narrowed by **ty
 
 The server's `GET /api/search` takes `kind` (comma-separated), `owner` (`me` or `shared`) and `days`, alongside `q`.
 
+## Follow mode and multiple cursors
+
+- **Follow someone.** Click a collaborator's picture at the top of a document or wiki and your view stays with their cursor: it scrolls as they type or move around, and in a wiki it goes to the page they are on. A pill at the top shows who you are following. Scrolling, clicking or typing yourself stops it, as does the *Stop* button or the same picture again.
+- **Multiple cursors, as in VS Code.** *Alt+click* adds a cursor. *Cmd/Ctrl+D* selects the word under the cursor and then the next match each time it is pressed; *Cmd/Ctrl+Shift+L* selects every match; *Cmd/Ctrl+Alt+↑/↓* adds a cursor on the line above or below. Typing, Backspace/Delete, Enter, the arrow keys, Home/End, paste (one line for each cursor when the line counts match) and Bold/Italic/Underline then act on every cursor at once. *Esc* or a plain click goes back to one. The extra cursors stay in place when someone else edits.
+
 ## Tables and sticky notes
 
 - **Fill handle.** Select a cell (or several) in a table and drag the small square at its corner down, up, left or right. Numbers continue (1, 2 → 3, 4, 5), as do dates (`2026-01-30`), weekdays, months and text ending in a number (`Item 1` → `Item 2`). A single cell, or anything else, is copied with its formatting.

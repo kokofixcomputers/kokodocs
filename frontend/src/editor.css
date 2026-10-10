@@ -579,3 +579,16 @@ html.embed .ed-body { padding: 0; }
 @media print { .le-bar { display: none; } .le-frame { display: none; } }
 .koko-prose .le a { text-decoration: none; } .koko-prose .le .le-line > a { text-decoration: underline; color: var(--link); } .koko-prose .le-card-main { color: var(--ink); } .koko-prose .le-card-main .le-site, .koko-prose .le-card-main .le-desc { color: var(--muted); } .koko-prose .le-card-main .le-url { color: var(--faint); }
 .le-card-main { width: 100%; }
+
+/* follow mode */
+.presence .pres-btn { border: 0; background: none; padding: 0; margin: 0 0 0 -6px; border-radius: 50%; position: relative; cursor: pointer; } .presence .pres-btn:first-child { margin-left: 0; }
+.presence .pres-btn:hover { z-index: 2; transform: translateY(-1px); } .presence .pres-btn.following { z-index: 3; box-shadow: 0 0 0 3px var(--pc), 0 0 0 5px var(--surface); }
+.pres-eye { position: absolute; right: -3px; bottom: -3px; width: 16px; height: 16px; border-radius: 50%; background: var(--pc); color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--surface); }
+.follow-pill { position: fixed; top: 78px; left: 50%; transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 999px; background: var(--surface); border: 2px solid var(--pc); box-shadow: 0 8px 26px rgba(0,0,0,.18); font-size: 14px; color: var(--ink); }
+.follow-pill svg { color: var(--pc); } .follow-pill button { display: inline-flex; align-items: center; gap: 4px; border: 0; background: var(--accent-soft); color: var(--ink); border-radius: 999px; padding: 5px 11px 5px 8px; font: 500 13px 'Lexend', sans-serif; cursor: pointer; } .follow-pill button:hover { background: var(--accent-soft-2, var(--accent-soft)); }
+
+/* several cursors */
+.mc-caret { display: inline-block; width: 0; height: 1.15em; border-left: 2px solid var(--ink); margin: 0 -1px; vertical-align: text-bottom; pointer-events: none; animation: mc-blink 1.05s steps(1) infinite; }
+.mc-sel { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+@keyframes mc-blink { 50% { border-color: transparent; } }
+.mc-pill { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); z-index: 60; align-items: center; padding: 6px 14px; border-radius: 999px; background: var(--ink); color: var(--surface); font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.25); pointer-events: none; }
