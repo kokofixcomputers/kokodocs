@@ -54,6 +54,8 @@ import { UndoPill, useUndoIndicator } from '../editor/UndoIndicator'
 import { StickyLayer, addSticky } from '../editor/StickyNotes'
 import { FollowPill, PresenceStack, useFollow } from '../editor/Follow'
 import { MultiCursor } from '../editor/MultiCursor'
+import { Autocomplete } from '../editor/Autocomplete'
+import { CommandBar } from '../editor/CommandBar'
 import { NotionImport } from './NotionImport'
 import './wiki.css'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -423,7 +425,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
     EmojiSuggest,
-    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets, TableFill, MultiCursor,
+    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets, TableFill, MultiCursor, Autocomplete.configure({ allowServer: () => !info.zk }),
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions, shouldRerenderOnTransaction: false }, [])
@@ -464,6 +466,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
   return (
     <div className="wiki-wrap">
       <UndoPill said={undone} />
+      <CommandBar editor={editor} zk={!!info.zk} />
       <article className="wiki-page">
         {crumbs.length > 0 && <nav className="wiki-crumbs" aria-label="Breadcrumb">{crumbs.map((c, i) => <span key={i}>{c || 'Untitled'}<ChevronRight size={13} /></span>)}</nav>}
         <div className="wiki-head">

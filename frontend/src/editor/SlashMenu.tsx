@@ -4,11 +4,12 @@ import { viewBottom, viewRight } from '../ui/viewport'
 import { Extension, type Editor, type Range } from '@tiptap/core'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
 import { SHAPE_KINDS } from './shapes'
-import { CalendarDays, Shapes, CheckSquare, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Info, List, ListOrdered, Minus, Pilcrow, Quote, Table2, TriangleAlert, Lightbulb, OctagonX, type LucideIcon } from 'lucide-react'
+import { Sparkles, CalendarDays, Shapes, CheckSquare, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Info, List, ListOrdered, Minus, Pilcrow, Quote, Table2, TriangleAlert, Lightbulb, OctagonX, type LucideIcon } from 'lucide-react'
 
 export interface SlashItem { title: string; hint: string; keys: string; icon: LucideIcon; run: (editor: Editor, range: Range) => void }
 const del = (e: Editor, r: Range) => e.chain().focus().deleteRange(r)
 const ITEMS: SlashItem[] = [
+  { title: 'Do something…', hint: 'Say what you want: make this bold, summarize this paragraph', keys: 'ai command do something ask assistant rewrite summarize', icon: Sparkles, run: (e, r) => { del(e, r).run(); window.setTimeout(() => window.dispatchEvent(new Event('koko:command')), 30) } },
   { title: 'Text', hint: 'Plain paragraph', keys: 'paragraph text normal', icon: Pilcrow, run: (e, r) => del(e, r).setParagraph().run() },
   { title: 'Heading 1', hint: 'Big section title', keys: 'h1 title heading', icon: Heading1, run: (e, r) => del(e, r).setHeading({ level: 1 }).run() },
   { title: 'Heading 2', hint: 'Medium section title', keys: 'h2 subtitle heading', icon: Heading2, run: (e, r) => del(e, r).setHeading({ level: 2 }).run() },

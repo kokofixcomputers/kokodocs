@@ -592,3 +592,17 @@ html.embed .ed-body { padding: 0; }
 .mc-sel { background: color-mix(in srgb, var(--accent) 28%, transparent); }
 @keyframes mc-blink { 50% { border-color: transparent; } }
 .mc-pill { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); z-index: 60; align-items: center; padding: 6px 14px; border-radius: 999px; background: var(--ink); color: var(--surface); font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.25); pointer-events: none; }
+
+/* inline suggestions */
+.ac-ghost { color: var(--faint); pointer-events: none; user-select: none; white-space: pre-wrap; }
+.ac-ghost::after { content: 'Tab'; margin-left: 6px; font: 600 10px 'Lexend', sans-serif; letter-spacing: .02em; padding: 1px 5px; border: 1px solid var(--line); border-radius: 5px; vertical-align: 1px; color: var(--muted); }
+@media print { .ac-ghost { display: none; } }
+
+/* command box */
+.cmdbar { position: fixed; z-index: 80; width: min(560px, calc(100vw - 24px)); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.25); overflow: hidden; }
+.cmd-row { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; color: var(--accent); } .cmd-row input { flex: 1; border: 0; outline: 0; background: transparent; font: 500 15.5px 'Lexend', sans-serif; color: var(--ink); min-width: 0; } .cmd-row input::placeholder { color: var(--faint); }
+.cmd-go, .cmd-x { width: 30px; height: 30px; border: 0; border-radius: 9px; display: grid; place-items: center; cursor: pointer; background: transparent; color: var(--muted); } .cmd-go:not(:disabled) { background: var(--accent); color: var(--accent-ink); } .cmd-go:disabled { opacity: .4; cursor: default; } .cmd-x:hover { background: var(--accent-soft); color: var(--ink); }
+.cmd-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 14px 14px; } .cmd-chips button { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 5px 12px; font: 500 13px 'Lexend', sans-serif; cursor: pointer; } .cmd-chips button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.cmd-note { margin: 0; padding: 4px 18px 16px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+.cmd-result { border-top: 1px solid var(--line); } .cmd-text { max-height: 260px; overflow: auto; padding: 14px 18px; font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd-acts { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 12px; }

@@ -1,4 +1,7 @@
 import { nonPrintKey } from './NonPrinting'
+import { usePrefs } from '../prefs'
+import { fixFormatting, reportText } from './ai/fixFormatting'
+import { toast } from '../ui/Toast'
 import { EmojiButton } from './EmojiPicker'
 import { OcrDialog } from './OcrDialog'
 import { useEffect, useRef, useState } from 'react'
@@ -6,7 +9,7 @@ import type { Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, ChevronDown, Code, Highlighter, ImagePlus, Italic,
   FileCog, Search, Info, Link2, List, ListChecks, KeyboardOff, IndentDecrease, IndentIncrease, ListOrdered, Minus, PanelTop, Paintbrush, Plus, Printer, Quote, Redo2, RemoveFormatting, Strikethrough,
-  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow, StickyNote } from 'lucide-react'
+  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow, StickyNote, Sparkles, WandSparkles } from 'lucide-react'
 import { DEFAULT_FONT } from '../fonts'
 import { ShapeButton } from './ShapePicker'
 import { useKeyboardOpen } from '../ui/KeyboardFit'
@@ -56,6 +59,7 @@ const keepFocus = (e: React.SyntheticEvent) => { if (!(e.target as HTMLElement).
 
 export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, onSticky, voice, extras, docId }: { onSticky?: () => void; extras?: React.ReactNode; docId?: string; editor: Editor; onImage: (f: File) => void; onHeaderFooter?: () => void; onPageSetup?: () => void; onFind?: () => void; voice?: Voice }) {
   const file = useRef<HTMLInputElement>(null)
+  const { writing } = usePrefs()
   const [ocr, setOcr] = useState(false)
   const kbOpen = useKeyboardOpen()
   const painter = useFormatPainter(editor)
@@ -181,6 +185,8 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
           {docId && <TBtn icon={<ScanText size={17} />} label="Scan a page: add the text from a photo" onClick={() => setOcr(true)} />}
           {ocr && docId && <OcrDialog editor={editor} docId={docId} onClose={() => setOcr(false)} />}
           <ShapeButton editor={editor} />
+          {writing.commandBar && <TBtn icon={<Sparkles size={17} />} label="Do something: say what you want (Ctrl/Cmd+J)" onClick={() => window.dispatchEvent(new Event('koko:command'))} />}
+          {writing.fixFormatting && <TBtn icon={<WandSparkles size={17} />} label="Fix formatting: spacing, headings and lists" onClick={() => { const r = fixFormatting(editor); toast(reportText(r)) }} />}
           {onSticky && <TBtn icon={<StickyNote size={17} />} label="Sticky note: a floating note that stays in view" onClick={onSticky} />}
           <EmojiButton editor={editor} />
           <TBtn icon={<Info size={17} />} label="Callout" active={editor.isActive('callout')} onClick={() => (editor.isActive('callout') ? run().lift('callout').run() : run().setCallout('info').run())} />

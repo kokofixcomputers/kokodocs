@@ -31,6 +31,8 @@ import { UndoPill, useUndoIndicator } from './UndoIndicator'
 import { StickyLayer, addSticky } from './StickyNotes'
 import { FollowPill, PresenceStack, useFollow } from './Follow'
 import { MultiCursor } from './MultiCursor'
+import { Autocomplete } from './Autocomplete'
+import { CommandBar } from './CommandBar'
 import { CalloutMenu, FormatMenu, ImageMenu, ShapeMenu, TableMenu } from './BubbleMenus'
 import { CommentMark } from './CommentMark'
 import { CommentsPanel, useComments, type Draft } from './Comments'
@@ -178,7 +180,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       FindReplace,
       NonPrinting,
       Snippets,
-      TableFill, MultiCursor,
+      TableFill, MultiCursor, Autocomplete.configure({ allowServer: () => !info.zk }),
       SlashCommand,
       EmojiSuggest,
       CommentMark,
@@ -437,6 +439,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       <SlashMenu />
       <EmojiSuggestMenu />
       <UndoPill said={undone} />
+      <CommandBar editor={editor} zk={!!info.zk} />
       <FollowPill target={follow.target} onStop={follow.stop} />
       <TableMenu editor={editor} />
       <CalloutMenu editor={editor} />
