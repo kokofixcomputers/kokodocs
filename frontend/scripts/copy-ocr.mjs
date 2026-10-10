@@ -13,8 +13,11 @@ const files = [
   ...['en_PP-OCRv4_rec_infer.onnx', 'en_dict.txt', 'latin_PP-OCRv3_rec_infer.onnx', 'latin_dict.txt'].map((f) => [`ocr-models/${f}`, `${out}/paddle/${f}`]),
   ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs', `${out}/ort/ort-wasm-simd-threaded.mjs`],
   ['node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm', `${out}/ort/ort-wasm-simd-threaded.wasm`],
+  // the read-aloud voice's own runtime (the version it was built with, and the build that has WebGPU as well as the processor)
+  ['node_modules/@huggingface/transformers/dist/ort-wasm-simd-threaded.jsep.mjs', `${out}/tts/ort-wasm-simd-threaded.jsep.mjs`],
+  ['node_modules/@huggingface/transformers/dist/ort-wasm-simd-threaded.jsep.wasm', `${out}/tts/ort-wasm-simd-threaded.jsep.wasm`],
 ]
 if (files.every(([, to]) => existsSync(to))) process.exit(0)
-mkdirSync(`${out}/lang`, { recursive: true }); mkdirSync(`${out}/paddle`, { recursive: true }); mkdirSync(`${out}/ort`, { recursive: true })
+mkdirSync(`${out}/lang`, { recursive: true }); mkdirSync(`${out}/paddle`, { recursive: true }); mkdirSync(`${out}/ort`, { recursive: true }); mkdirSync(`${out}/tts`, { recursive: true })
 for (const [from, to] of files) if (existsSync(from)) cpSync(from, to)
 console.log('ocr files copied')

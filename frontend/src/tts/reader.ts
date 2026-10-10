@@ -141,10 +141,11 @@ class Reader {
         this.note = 'Getting the voice ready…'; this.emit()
         await loadNeural((p) => { if (me === this.token) { this.note = `Downloading the voice… ${Math.round(p * 100)}%`; this.emit() } })
       }
-      const url = await this.clip(i)
+      const mine = this.clip(i)   // (this one first: the voice makes them in the order asked)
+      for (let k = 1; k <= AHEAD; k++) if (i + k < this.end) void this.clip(i + k).catch(() => {})   // the next sentences are already being made while this one is made and spoken
+      const url = await mine
       if (this.note) { this.note = ''; this.emit() }
       if (me !== this.token) return
-      for (let k = 1; k <= AHEAD; k++) if (i + k < this.end) void this.clip(i + k).catch(() => {})
       const a = this.audio = new Audio(url)
       a.playbackRate = this.rate
       a.onended = () => { if (me === this.token) void this.play(i + 1) }

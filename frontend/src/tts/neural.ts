@@ -28,20 +28,31 @@ function start(): Worker {
   if (worker) return worker
   const w = new Worker(new URL('./neural.worker.ts', import.meta.url), { type: 'module' })
   w.onmessage = (e: MessageEvent) => {
-    const m = e.data as { type: string; id?: number; p?: number; buf?: ArrayBuffer; message?: string }
+    const m = e.data as { type: string; id?: number; p?: number; buf?: ArrayBuffer; message?: string; ms?: number }
     if (m.type === 'progress') { onProgress?.(m.p ?? 0); return }
     const w = m.id !== undefined ? waiting.get(m.id) : undefined
     if (!w) return
     waiting.delete(m.id!)
     if (m.type === 'error') w.fail(new Error(m.message))
-    else w.ok(m.type === 'audio' ? new Blob([m.buf!], { type: 'audio/wav' }) : undefined)
+    else {
+      if (m.type === 'audio' && m.buf) {   // (for tuning: how long a sentence took to make, against how long it lasts)
+        const v = new DataView(m.buf), secs = (m.buf.byteLength - 44) / (v.getUint32(24, true) * (v.getUint16(34, true) / 8))
+        ;((window as unknown as { __neural?: object[] }).__neural ??= []).push({ ms: m.ms, secs: Math.round(secs * 100) / 100 })
+      }
+      w.ok(m.type === 'audio' ? new Blob([m.buf!], { type: 'audio/wav' }) : undefined)
+    }
   }
   w.onerror = (e) => { const err = new Error(e.message || 'The voice could not start'); waiting.forEach((x) => x.fail(err)); waiting.clear(); w.terminate(); worker = null }
   worker = w
   return w
 }
+/** how the model runs: the processor (wasm) is the default; `localStorage['koko.tts.device'] = 'webgpu'` is the graphics-card route, for trying it */
+function config() {
+  const gpu = read('koko.tts.device') === 'webgpu'
+  return gpu ? { device: 'webgpu', dtype: read('koko.tts.dtype') === 'fp16' ? 'fp16' : 'fp32' } : { device: 'wasm', dtype: 'q8' }
+}
 function call<T>(msg: object): Promise<T> {
-  return new Promise<T>((ok, fail) => { const id = nextId++; waiting.set(id, { ok: ok as (v: unknown) => void, fail }); start().postMessage({ ...msg, id }) })
+  return new Promise<T>((ok, fail) => { const id = nextId++; waiting.set(id, { ok: ok as (v: unknown) => void, fail }); start().postMessage({ ...msg, id, cfg: config() }) })
 }
 
 /** download (the first time) and start the model; `progress` is 0 to 1 for the download */

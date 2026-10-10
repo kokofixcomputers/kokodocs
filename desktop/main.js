@@ -22,7 +22,7 @@ let win = null
 const crypto = require('crypto')
 const cacheDir = () => path.join(app.getPath('userData'), 'appfiles')
 const slot = (p) => path.join(cacheDir(), crypto.createHash('sha1').update(p).digest('hex'))
-const cacheable = (p) => /^\/(assets|twemoji|shots)\//.test(p) || p === '/favicon.svg' || p.startsWith('/api/images/')
+const cacheable = (p) => /^\/(assets|twemoji|shots|ocr)\//.test(p) || p === '/favicon.svg' || p.startsWith('/api/images/')
 const store = (p, type, buf) => { try { fs.mkdirSync(cacheDir(), { recursive: true }); fs.writeFileSync(slot(p) + '.bin', buf); fs.writeFileSync(slot(p) + '.type', type || 'application/octet-stream') } catch { /* disk full or read-only: just no copy */ } }
 const saved = (p) => { try { return { body: fs.readFileSync(slot(p) + '.bin'), type: fs.readFileSync(slot(p) + '.type', 'utf8') } } catch { return null } }
 const have = (p) => fs.existsSync(slot(p) + '.bin')
