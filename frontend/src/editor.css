@@ -606,3 +606,11 @@ html.embed .ed-body { padding: 0; }
 .cmd-note { margin: 0; padding: 4px 18px 16px; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
 .cmd-result { border-top: 1px solid var(--line); } .cmd-text { max-height: 260px; overflow: auto; padding: 14px 18px; font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cmd-acts { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 12px; }
+
+/* editing a link: a card with the address on top and the headings you can link to below it (the one-line dark pill is only for hovering) */
+.link-pill.editing { height: auto; min-height: 0; flex-wrap: nowrap; align-items: stretch; padding: 8px 10px 10px 14px; border-radius: 18px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 14px 38px rgba(0, 0, 0, .22); user-select: auto; }
+.link-pill.editing .lp-form { flex-wrap: wrap; width: min(380px, calc(100vw - 48px)); row-gap: 0; }
+.link-pill.editing .lp-form input { flex: 1; min-width: 0; width: auto; color: var(--ink); }
+.link-pill.editing .lp-form svg { color: var(--muted); }
+.link-pill.editing .lp-btn { color: var(--muted); } .link-pill.editing .lp-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.link-pill.editing .lp-heads { flex: 0 0 100%; width: 100%; margin-top: 8px; max-height: 220px; overflow-y: auto; }
