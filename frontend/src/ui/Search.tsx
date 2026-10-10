@@ -5,18 +5,19 @@ import { Search as SearchIcon } from 'lucide-react'
 import { api, type SearchHit } from '../api'
 import { useAuth } from '../auth'
 import { KindIcon } from './KindIcon'
+import { FilterBar, NO_FILTERS, filterCount, type Filters } from './SearchFilters'
 
 /** Debounced content search; returns null until there is something to show. */
-export function useContentSearch(q: string, enabled = true): { hits: SearchHit[] | null; busy: boolean } {
+export function useContentSearch(q: string, enabled = true, filters: Filters = NO_FILTERS): { hits: SearchHit[] | null; busy: boolean } {
   const [hits, setHits] = useState<SearchHit[] | null>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     const t = q.trim()
-    if (!enabled || t.length < 2) { setHits(null); setBusy(false); return }
+    if (!enabled || (t.length < 2 && !filterCount(filters))) { setHits(null); setBusy(false); return }
     const ac = new AbortController(); setBusy(true)
-    const id = window.setTimeout(() => { api.search(t, ac.signal).then((r) => { setHits(r); setBusy(false) }).catch((e) => { if (e.name !== 'AbortError') { setHits([]); setBusy(false) } }) }, 220)
+    const id = window.setTimeout(() => { api.search(t.length < 2 ? '' : t, ac.signal, filters).then((r) => { setHits(r); setBusy(false) }).catch((e) => { if (e.name !== 'AbortError') { setHits([]); setBusy(false) } }) }, 220)
     return () => { window.clearTimeout(id); ac.abort() }
-  }, [q, enabled])
+  }, [q, enabled, JSON.stringify(filters)])   // eslint-disable-line react-hooks/exhaustive-deps
   return { hits, busy }
 }
 
@@ -43,7 +44,8 @@ export function SearchPalette() {
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(0)
   const input = useRef<HTMLInputElement>(null)
-  const { hits, busy } = useContentSearch(q, open)
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS)
+  const { hits, busy } = useContentSearch(q, open, filters)
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k' && user) { e.preventDefault(); e.stopPropagation(); setOpen((o) => !o) } }
@@ -51,8 +53,9 @@ export function SearchPalette() {
     window.addEventListener('keydown', k, true); window.addEventListener('koko:search', o)
     return () => { window.removeEventListener('keydown', k, true); window.removeEventListener('koko:search', o) }
   }, [user])
-  useEffect(() => { if (open) { setQ(''); setSel(0); setTimeout(() => input.current?.focus(), 30) } }, [open])
+  useEffect(() => { if (open) { setQ(''); setFilters(NO_FILTERS); setSel(0); setTimeout(() => input.current?.focus(), 30) } }, [open])
   useEffect(() => setSel(0), [hits])
+  const narrowed = filterCount(filters) > 0
   if (!open || !user) return null
   const go = (h: SearchHit) => { setOpen(false); nav(`/d/${h.id}`) }
   return createPortal(
@@ -68,9 +71,10 @@ export function SearchPalette() {
             }} />
           {busy && <span className="spinner sm" style={{ borderColor: 'var(--accent-soft-2)', borderTopColor: 'var(--accent)' }} />}
         </label>
+        <FilterBar value={filters} onChange={setFilters} compact />
         <div className="palette-list">
-          {!hits && <p className="palette-hint">Type at least two letters. Use the arrow keys and Enter to open a file.</p>}
-          {hits && hits.length === 0 && !busy && <p className="palette-hint">Nothing found for “{q.trim()}”.</p>}
+          {!hits && <p className="palette-hint">Type at least two letters, or pick a filter to browse. Use the arrow keys and Enter to open a file.</p>}
+          {hits && hits.length === 0 && !busy && <p className="palette-hint">{q.trim() ? <>Nothing found for “{q.trim()}”{narrowed ? ' with these filters' : ''}.</> : 'No files match these filters.'}</p>}
           {hits?.map((h, i) => <HitRow key={h.id} hit={h} active={i === sel} onOpen={() => go(h)} onHover={() => setSel(i)} />)}
         </div>
       </div>

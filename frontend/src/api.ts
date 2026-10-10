@@ -1,5 +1,6 @@
 import { toast } from './ui/Toast'
 import { isOnline, setOnline } from './offline/net'
+import { NO_FILTERS, filterQuery, passes, type Filters } from './ui/SearchFilters'
 import { addLocalDoc, cached, keepLists, keepPlain, offlineOn, outbox, renameLocal, searchLocal, setAccountZk } from './offline/store'
 import { importZkImage, uploadZkImage } from './zk/images'
 import { openConversation, openConversationTitle, sealConversation } from './zk/conversations'
@@ -308,16 +309,16 @@ export const api = {
   unstar: (id: string) => request(`/api/docs/${id}/star`, { method: 'DELETE' }, id),
   recent: () => cached('recent', async () => { const r = await request<DocSummary[]>('/api/recent?limit=8'); await decorateAll(r); return r }, keepPlain),
   /** The server searches what it can read. Titles of encrypted documents are only readable here, so those are matched in the browser. */
-  search: async (q: string, signal?: AbortSignal) => {
+  search: async (q: string, signal?: AbortSignal, f: Filters = NO_FILTERS) => {
     let hits: SearchHit[]
-    try { hits = await request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}`, { signal }) } catch (e) {
+    try { hits = await request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}${filterQuery(f)}`, { signal }) } catch (e) {
       if (!offlineOn() || (e as ApiError).status !== 0) throw e
-      return (await searchLocal(q)).map((d) => ({ id: d.id, title: d.title, kind: d.kind, owner: d.owner ?? '', updated_at: d.updated_at, title_match: true, snippet: '' }))   // offline: titles on this device
+      return (await searchLocal(q)).filter((d) => passes(f, d, f.owner === 'shared' ? false : true)).map((d) => ({ id: d.id, title: d.title, kind: d.kind, owner: d.owner ?? '', updated_at: d.updated_at, title_match: true, snippet: '' }))   // offline: titles on this device
     }
     if (!zkUnlocked()) return hits
     const needle = q.trim().toLowerCase(), seen = new Set(hits.map((h) => h.id))
     const { mine, shared } = await api.listDocs()
-    const own = [...mine, ...shared].filter((d) => d.zk && !d.zk_locked && !seen.has(d.id) && d.title.toLowerCase().includes(needle))
+    const own = [...mine.map((d) => ({ d, m: true })), ...shared.map((d) => ({ d, m: false }))].filter(({ d, m }) => d.zk && !d.zk_locked && !seen.has(d.id) && d.title.toLowerCase().includes(needle) && passes(f, d, m)).map(({ d }) => d)
     return [...hits, ...own.map((d) => ({ id: d.id, title: d.title, kind: d.kind, owner: d.owner ?? '', updated_at: d.updated_at, title_match: true, snippet: '' }))]
   },
   notifications: () => request<{ unread: number; items: Notice[] }>('/api/notifications'),

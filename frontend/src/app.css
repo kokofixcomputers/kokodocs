@@ -599,3 +599,15 @@ a.brand { color: var(--ink); text-decoration: none; }
 .modal > .form-error { padding: 0 24px 16px; margin: 0; }
 @media (max-width: 720px) { .modal > .st-stack { padding: 6px 16px 18px; gap: 14px; } }
 .st-section h2.st-sub { font-size: 17px; margin: 26px 0 14px; }
+
+/* search filters */
+.sf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; } .sf-bar.compact { margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.sf-chip { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: 500 13.5px 'Lexend', sans-serif; cursor: pointer; position: relative; }
+.sf-chip:hover { color: var(--ink); border-color: var(--line-strong, var(--line)); } .sf-chip.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.sf-date select { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; font-size: 16px; }
+.sf-owner { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); } .sf-owner button { padding: 5px 12px; font-size: 13.5px; }
+.sf-clear { border: 0; background: transparent; color: var(--muted); font: 500 13px 'Lexend', sans-serif; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; padding: 6px 8px; border-radius: 999px; } .sf-clear:hover { color: var(--ink); background: var(--accent-soft); }
+.sf-pop { min-width: 210px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow-2, 0 12px 32px rgba(0,0,0,.18)); display: flex; flex-direction: column; }
+.sf-opt { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 8px 10px; border-radius: 10px; font: 500 14px 'Lexend', sans-serif; color: var(--ink); cursor: pointer; text-align: left; } .sf-opt:hover { background: var(--accent-soft); } .sf-opt.on { color: var(--accent); }
+.sf-opt i { display: grid; place-items: center; } .sf-check { margin-left: auto; }
+.sf-toggle { position: relative; margin-left: auto; } .sf-toggle.on { color: var(--accent); background: var(--accent-soft); } .sf-toggle b { position: absolute; top: -3px; right: -3px; min-width: 15px; height: 15px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 10px; display: grid; place-items: center; padding: 0 3px; }

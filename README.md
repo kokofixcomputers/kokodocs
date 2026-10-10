@@ -498,6 +498,12 @@ Paste a web address on an empty line of a document or wiki and it expands by its
 
 Cards are made by the server (`GET /api/link-preview?url=`), which reads the page's title, description and picture. Only signed-in people can use it, only the public internet is reachable (every redirect is checked), size and time are capped, and answers are kept for an hour. The card's text is saved in the document, so people reading it don't each fetch the page. Embedded players load from the provider's own site in a sandboxed frame.
 
+## Search filters
+
+Search (Ctrl/Cmd+K, and the search box on the home page) can be narrowed by **type** (documents, spreadsheets, presentations, forms, wikis, boards; pick one or several), **owner** (anyone, me, shared with me) and **date** (changed today, in the last 7 or 30 days, or in the last year). With filters and no words, it lists the matching files, newest first. On the home page the sliders button next to the search box opens the same filters, and they apply to the list of files too.
+
+The server's `GET /api/search` takes `kind` (comma-separated), `owner` (`me` or `shared`) and `days`, alongside `q`.
+
 ## Tables and sticky notes
 
 - **Fill handle.** Select a cell (or several) in a table and drag the small square at its corner down, up, left or right. Numbers continue (1, 2 → 3, 4, 5), as do dates (`2026-01-30`), weekdays, months and text ending in a number (`Item 1` → `Item 2`). A single cell, or anything else, is copied with its formatting.

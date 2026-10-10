@@ -4,7 +4,7 @@ import {
   Ban, ChevronDown, ChevronRight, FileText, Folder as FolderIcon, FolderInput, FolderPlus, Globe, Home, KeyRound, Lock, LogOut, Moon,
   ArrowDownWideNarrow, ArrowUpNarrowWide, ClipboardList, Copy, ExternalLink, FolderOpen, ListFilter, MoreHorizontal, Tag as TagIcon, Pencil, Plus, RotateCcw, Presentation, Search, Star, Upload, LayoutTemplate, Share2, ShieldCheck, Sun, Table2, Trash2, Users,
   Settings, BookOpen,
-  Kanban,
+  Kanban, SlidersHorizontal,
 } from 'lucide-react'
 import { api, type DocInfo, type DocKind, type DocSummary, type Folder, type SharedFolder, type SharedFolderView } from '../api'
 import { useAuth } from '../auth'
@@ -16,6 +16,7 @@ import { setPending, setPrompt } from '../import/pending'
 import { FEATURED, TEMPLATES, type Template, type TemplateKind } from '../templates/catalog'
 import { TemplateCard, TemplateGallery } from '../templates/Gallery'
 import { HitRow, useContentSearch } from '../ui/Search'
+import { FilterBar, NO_FILTERS, filterCount, passes, type Filters } from '../ui/SearchFilters'
 import { NotificationsBell } from '../ui/NotificationsBell'
 import { StorageMeter } from '../ui/StorageMeter'
 import { openSettings } from '../ui/settingsStore'
@@ -135,17 +136,22 @@ export function Dashboard() {
     return out
   }
 
-  const searching = q.trim() !== '' && tab !== 'bin'
-  const { hits: contentHits } = useContentSearch(q, searching)
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filtering = filterCount(filters) > 0
+  const textSearch = q.trim() !== '' && tab !== 'bin'
+  const searching = (textSearch || filtering) && tab !== 'bin'
+  const { hits: contentHits } = useContentSearch(q, textSearch, filters)
+  const mineIds = useMemo(() => new Set((docs?.mine ?? []).map((d) => d.id)), [docs])
   const needle = q.toLowerCase()
   const visibleFolders = tab === 'mine' && !searching ? folders.filter((f) => f.parent_id === folderId) : []
   const visibleDocs = useMemo(() => {
     const src = tab === 'mine' ? (docs?.mine ?? []).filter((d) => searching || d.folder_id === folderId)
       : tab === 'starred' ? [...(docs?.mine ?? []), ...(docs?.shared ?? [])].filter((d) => d.starred)
       : sf ? (sharedView?.docs ?? []) : (docs?.shared ?? [])
-    return src.filter((d) => d.title.toLowerCase().includes(needle))
-  }, [docs, tab, folderId, searching, needle, sf, sharedView])
-  const sharedFolders = tab === 'shared'
+    return src.filter((d) => d.title.toLowerCase().includes(needle) && passes(filters, d, tab === 'mine' || (tab === 'starred' && mineIds.has(d.id))))
+  }, [docs, tab, folderId, searching, needle, sf, sharedView, filters, mineIds])
+  const sharedFolders = tab === 'shared' && !filtering
     ? (sf ? (sharedView?.folders ?? []).map((f) => ({ ...f, role: sharedView!.role, owner: sharedView!.owner })) : (sharedRoots ?? []))
       .filter((f) => f.name.toLowerCase().includes(needle))
     : []
@@ -434,6 +440,7 @@ export function Dashboard() {
         <div className="brand"><Logo size={30} /><span>KokoDocs</span></div>
         <label className="field search"><Search size={17} />
           <input placeholder="Search titles and text inside files" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button type="button" className={`icon-btn sm sf-toggle ${filtering || filterOpen ? 'on' : ''}`} aria-label="Search filters" aria-expanded={filterOpen} title="Filter by type, owner and date" onClick={() => setFilterOpen((o) => !o)}><SlidersHorizontal size={16} />{filtering && <b>{filterCount(filters)}</b>}</button>
         </label>
         <div className="top-actions">
           <MeetMenu />
@@ -454,6 +461,7 @@ export function Dashboard() {
       </header>
 
       <main className="dash-main" onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }} onDrop={(e) => { const f = e.dataTransfer.files?.[0]; if (f) { e.preventDefault(); void importFile(f) } }}>
+        {(filterOpen || filtering) && tab !== 'bin' && <FilterBar value={filters} onChange={setFilters} />}
         <input ref={importInput} type="file" accept={ACCEPT} hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = '' }} />
         {importing && <div className="import-banner"><span className="spinner sm" style={{ borderColor: 'var(--accent-soft-2)', borderTopColor: 'var(--accent)' }} />Importing {importing}</div>}
         <div className="dash-storage"><StorageMeter refreshKey={docs} onClick={() => openSettings('storage')} /></div>
@@ -602,7 +610,7 @@ export function Dashboard() {
             )}
           </div>
         )}
-        {searching && contentHits && contentHits.some((h) => h.snippet) && (
+        {textSearch && contentHits && contentHits.some((h) => h.snippet) && (
           <section className="content-hits" aria-label="Matches inside files">
             <h4>Found inside files</h4>
             {contentHits.filter((h) => h.snippet).map((h) => <HitRow key={h.id} hit={h} onOpen={() => nav(`/d/${h.id}`)} />)}
