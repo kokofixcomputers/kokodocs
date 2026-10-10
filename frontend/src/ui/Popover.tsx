@@ -44,6 +44,7 @@ export function Popover({ trigger, children, align = 'start', className = '', on
     if (!open) { setPos(null); return }
     const down = (e: MouseEvent) => {
       const t = e.target as Node
+      if ((t as Element).closest?.('.popover')) return   // a click inside another popup opened from this one (a dropdown in a menu) is not a click away
       if (!panel.current?.contains(t) && !anchor.current?.contains(t)) set(false)
     }
     const key = (e: KeyboardEvent) => e.key === 'Escape' && set(false)
