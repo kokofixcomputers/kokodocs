@@ -3,7 +3,6 @@
 const MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX'
 type Model = { generate(text: string, o: { voice: string }): Promise<{ toBlob(): Blob }> }
 let model: Promise<Model> | null = null
-let cfg: { device: 'wasm' | 'webgpu'; dtype: 'q8' | 'fp32' | 'fp16' } = { device: 'wasm', dtype: 'q8' }
 
 function load(): Promise<Model> {
   model ??= (async () => {
@@ -13,8 +12,8 @@ function load(): Promise<Model> {
       try { const { env: t } = await import('@huggingface/transformers'); t.backends.onnx.wasm!.numThreads = Math.max(2, Math.min(4, (navigator.hardwareConcurrency || 4) >> 1)) } catch { /* one thread */ }
     }   // (the runtime build that matches this model, with WebGPU as well as the processor)
     const files = new Map<string, { loaded: number; total: number }>()
-    const build = (c: typeof cfg) => KokoroTTS.from_pretrained(MODEL, {
-      dtype: c.dtype, device: c.device,
+    return (await KokoroTTS.from_pretrained(MODEL, {
+      dtype: 'q8', device: 'wasm',
       progress_callback: (e: { status?: string; file?: string; loaded?: number; total?: number }) => {
         if (e.status === 'progress' && e.file && e.total) {
           files.set(e.file, { loaded: e.loaded ?? 0, total: e.total })
@@ -22,21 +21,14 @@ function load(): Promise<Model> {
           self.postMessage({ type: 'progress', p: t ? l / t : 0 })
         }
       },
-    })
-    try { return (await build(cfg)) as unknown as Model } catch (err) {
-      if (cfg.device !== 'webgpu') throw err
-      cfg = { device: 'wasm', dtype: 'q8' }   // the graphics card isn't usable here: the processor instead
-      files.clear()
-      return (await build(cfg)) as unknown as Model
-    }
+    })) as unknown as Model
   })().catch((e) => { model = null; throw e })
   return model
 }
 
 let queue: Promise<unknown> = Promise.resolve()
 self.onmessage = (e: MessageEvent) => {
-  const m = e.data as { type: 'load'; id: number; cfg?: typeof cfg } | { type: 'speak'; id: number; text: string; voice: string; cfg?: typeof cfg }
-  if (m.cfg && !model) cfg = m.cfg
+  const m = e.data as { type: 'load'; id: number } | { type: 'speak'; id: number; text: string; voice: string }
   queue = queue.then(async () => {
     try {
       if (m.type === 'load') { await load(); self.postMessage({ type: 'done', id: m.id }) }

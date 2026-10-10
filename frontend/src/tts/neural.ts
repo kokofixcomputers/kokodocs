@@ -46,13 +46,8 @@ function start(): Worker {
   worker = w
   return w
 }
-/** how the model runs: the processor (wasm) is the default; `localStorage['koko.tts.device'] = 'webgpu'` is the graphics-card route, for trying it */
-function config() {
-  const gpu = read('koko.tts.device') === 'webgpu'
-  return gpu ? { device: 'webgpu', dtype: read('koko.tts.dtype') === 'fp16' ? 'fp16' : 'fp32' } : { device: 'wasm', dtype: 'q8' }
-}
 function call<T>(msg: object): Promise<T> {
-  return new Promise<T>((ok, fail) => { const id = nextId++; waiting.set(id, { ok: ok as (v: unknown) => void, fail }); start().postMessage({ ...msg, id, cfg: config() }) })
+  return new Promise<T>((ok, fail) => { const id = nextId++; waiting.set(id, { ok: ok as (v: unknown) => void, fail }); start().postMessage({ ...msg, id }) })
 }
 
 /** download (the first time) and start the model; `progress` is 0 to 1 for the download */
