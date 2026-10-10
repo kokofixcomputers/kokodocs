@@ -1,0 +1,4 @@
+.desk-update { position: fixed; z-index: 80000; left: 16px; bottom: 16px; display: flex; align-items: center; gap: 12px; max-width: min(460px, calc(100vw - 32px)); padding: 12px 14px; border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 36px rgba(0, 0, 0, .25), 0 0 0 1px var(--line); animation: pill-in .28s var(--ease); }
+.desk-update > svg:first-child { flex: none; color: var(--accent); }
+.du-text { display: grid; gap: 2px; min-width: 0; line-height: 1.3; flex: 1; } .du-text b { font-size: 14px; } .du-text em { font-style: normal; font-size: 12.5px; color: var(--muted); }
+@keyframes pill-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }

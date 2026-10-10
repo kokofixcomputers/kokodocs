@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { deviceRows, usage, type DeviceRow, type Summary } from '../offline/device'
+import type { BundleInfo } from '../ui/DesktopBar'
 import { offlinePref, setOfflinePref } from '../offline/store'
 import { askConfirm } from '../ui/Dialogs'
 import { fmtBytes } from '../ui/StorageMeter'
@@ -12,6 +13,13 @@ export function OnDevice() {
   const [sum, setSum] = useState<Summary | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [keep, setKeep] = useState(offlinePref())
+  const [ver, setVer] = useState<BundleInfo | null>(null)
+  const [checking, setChecking] = useState(false)
+  useEffect(() => { void window.kokoDesktop?.bundle?.().then(setVer).catch(() => {}) }, [])
+  const check = async () => {
+    setChecking(true)
+    try { const u = await window.kokoDesktop!.update!.check(); if (!u) toast('You have the latest version.') } catch (e) { toast(`Couldn't check: ${(e as Error).message}`) } finally { setChecking(false) }
+  }
   const load = useCallback(async () => { const [r, u] = await Promise.all([deviceRows(), usage()]); setRows(r); setSum(u) }, [])
   useEffect(() => { void load() }, [load])
 
@@ -27,6 +35,9 @@ export function OnDevice() {
       <div className="st-card">
         <div className="st-row"><div><b>{rows ? fmtBytes(total) : '…'} on this device</b>
           <span>{sum && sum.quota ? `This site is using ${fmtBytes(sum.used)} of the ${fmtBytes(sum.quota)} the browser allows. ` : ''}Everything here can be downloaded again; nothing is deleted from the server.</span></div></div>
+        {window.kokoDesktop?.update && (
+          <div className="st-row"><div><b>App version {ver ? ver.commit.slice(0, 7) : '(from the server)'}</b><span>{!ver ? 'This app has no interface of its own, so it shows the server\'s.' : ver.source === 'downloaded' ? 'Updated from GitHub since the app was built.' : 'The version that came with the app.'} It checks for newer ones by itself; a newer one is offered here and in a message.</span></div>
+            <button className="btn btn-pill btn-ghost btn-sm" disabled={checking} onClick={() => void check()}>{checking ? <Loader2 size={15} className="spin" /> : 'Check for updates'}</button></div>)}
         <div className="st-row"><div><b>Keep an offline copy of my documents</b><span>Saves your documents here so they open and can be edited with no connection. Turning it off stops saving them; use Free up to remove what is saved.</span></div>
           <button role="switch" aria-checked={keep} aria-label="Keep an offline copy of my documents" className={`toggle ${keep ? 'on' : ''}`} onClick={() => { setOfflinePref(!keep); setKeep(!keep) }} /></div>
       </div>

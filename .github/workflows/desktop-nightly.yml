@@ -30,9 +30,32 @@ jobs:
           last=$(git rev-parse -q --verify refs/tags/nightly || true)
           if [ -z "$last" ] || [ -n "$(git diff --name-only "$last" HEAD -- desktop .github/workflows/desktop-nightly.yml)" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; else echo "build=false" >> "$GITHUB_OUTPUT"; fi
 
+  frontend:
+    name: Build the interface that goes inside the app
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          printf '{"commit":"%s","built":"%s"}\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > dist/bundle.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: interface
+          path: frontend/dist
+          if-no-files-found: error
+
   build:
     name: Build (${{ matrix.name }})
-    needs: check
+    needs: [check, frontend]
     if: needs.check.outputs.build == 'true'
     strategy:
       fail-fast: false
@@ -52,6 +75,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: interface
+          path: desktop/bundle   # (packed into the app: it opens with this interface, and updates it from the frontend-nightly release)
       - run: npm ci
       - name: Give the build a nightly version
         shell: bash

@@ -25,6 +25,7 @@ import { SyncNotices } from './ui/SyncNotices'
 import { ssoPopupLanding } from './ui/ssoPopup'
 import { Crash } from './ui/Crash'
 import { TtsPill } from './tts/ReadAloud'
+import { DesktopUpdate } from './ui/DesktopUpdate'
 import { NetPill } from './ui/NetStatus'
 import { DesktopBar, installDesktop, isDesktop } from './ui/DesktopBar'
 import { KeyboardFit } from './ui/KeyboardFit'
@@ -92,6 +93,7 @@ if (!ssoPopupLanding()) ReactDOM.createRoot(document.getElementById('root')!).re
         <NetPill />
         <TtsPill />
         <DesktopBar />
+        <DesktopUpdate />
         <KeyboardFit />
         <SettingsHost />
         <DialogHost />
@@ -107,6 +109,6 @@ const notice = document.createElement('div'); document.body.appendChild(notice)
 ReactDOM.createRoot(notice).render(<UpdateNotice />)
 
 // the app itself is kept on the device so it opens with no connection (documents are kept separately, see offline/)
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && import.meta.env.PROD && !isDesktop()) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}) })
 }

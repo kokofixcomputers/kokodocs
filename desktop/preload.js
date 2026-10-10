@@ -4,6 +4,15 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('kokoDesktop', {
   platform: process.platform,
   version: ipcRenderer.sendSync('desktop:version'),
+  update: {   // the interface can be updated on its own, without a new app
+    check: () => ipcRenderer.invoke('update:check'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onAvailable: (cb) => ipcRenderer.on('desktop:update', (_e, u) => cb(u)),
+    onProgress: (cb) => ipcRenderer.on('desktop:update-progress', (_e, p) => cb(p)),
+    onError: (cb) => ipcRenderer.on('desktop:update-error', (_e, m) => cb(m)),
+  },
+  bundle: () => ipcRenderer.invoke('bundle:info'),
+  removeBundle: () => ipcRenderer.invoke('bundle:remove'),
   storage: () => ipcRenderer.invoke('desktop:storage'),   // how much room the app's saved files take
   clear: (what) => ipcRenderer.invoke('desktop:clear', what),
   onSettings: (cb) => ipcRenderer.on('desktop:settings', () => cb()),

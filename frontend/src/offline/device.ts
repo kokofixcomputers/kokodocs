@@ -72,6 +72,11 @@ export async function deviceRows(): Promise<DeviceRow[]> {
     })
   }
 
+  // the desktop app's interface: which version it is showing, and the newer one it downloaded (if any)
+  if (window.kokoDesktop?.bundle) {
+    const b = await window.kokoDesktop.bundle().catch(() => null)
+    if (b?.downloadedBytes) rows.push({ id: 'desk-interface', title: 'Downloaded interface update', detail: `Version ${b.commit.slice(0, 7)}, downloaded after the app was built. Freeing it goes back to the interface that came with the app (it can be downloaded again).`, bytes: b.downloadedBytes, free: async () => { await window.kokoDesktop!.removeBundle!() } })
+  }
   // the desktop app's own files
   const d = window.kokoDesktop
   if (d?.storage) {

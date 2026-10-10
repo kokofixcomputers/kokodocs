@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "predist": "node -e \"require('fs').mkdirSync('bundle',{recursive:true})\""
   },
   "devDependencies": {
     "electron": "^33.4.11",
@@ -87,11 +88,20 @@
     },
     "portable": {
       "artifactName": "KokoDocs-Portable-${arch}.${ext}"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "bundle",
+        "to": "bundle"
+      }
+    ]
   },
   "author": {
     "name": "KokoDocs",
     "email": "kokodocs@users.noreply.github.com"
   },
-  "homepage": "https://github.com/kokofixcomputers/kokodocs"
+  "homepage": "https://github.com/kokofixcomputers/kokodocs",
+  "dependencies": {
+    "tar": "^7.5.22"
+  }
 }

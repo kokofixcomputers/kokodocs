@@ -1,0 +1,56 @@
+# On every push to main that touches the frontend: build ONLY the frontend and publish it as the "frontend-nightly" pre-release
+# (a tarball of the built site plus a small manifest with the commit and a checksum). The desktop app checks that manifest and, when its
+# commit differs from the one it is showing, offers to download the new interface: no new desktop app needed for a frontend change.
+name: Frontend nightly
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-nightly.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frontend-nightly
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Build and publish the frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Package
+        run: |
+          # the bundle says which commit it is (the desktop app compares this with the latest one)
+          printf '{"commit":"%s","built":"%s"}\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > frontend/dist/bundle.json
+          tar czf frontend-dist.tar.gz -C frontend/dist .
+          sha=$(sha256sum frontend-dist.tar.gz | cut -d' ' -f1)
+          size=$(stat -c %s frontend-dist.tar.gz)
+          printf '{"commit":"%s","built":"%s","file":"frontend-dist.tar.gz","sha256":"%s","size":%s}\n' \
+            "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$sha" "$size" > manifest.json
+          cat manifest.json
+      - name: Replace the frontend-nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete frontend-nightly --cleanup-tag --yes || true
+          gh release create frontend-nightly frontend-dist.tar.gz manifest.json \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "Frontend ${GITHUB_SHA::7}" \
+            --notes "The built site, for the desktop app's interface updates (commit \`${GITHUB_SHA::7}\`). Not for installing by hand."

@@ -4,7 +4,11 @@ import { NetChip } from './NetStatus'
 
 /** The desktop app's own title bar (the window has no system one): back and forward, search, and whether the offline copy is up to date.
  *  The system's window buttons sit at the left on a Mac and at the right on Windows and Linux, so there is room left for them. */
-export interface DesktopApi { platform: string; version: string; storage?: () => Promise<{ appfiles: number; cache: number }>; clear?: (what: 'appfiles' | 'cache') => Promise<void>; onSettings?: (cb: () => void) => void; fullscreen: (cb: (on: boolean) => void) => void; appFiles: (cb: (s: { done: number; total: number; finished?: boolean }) => void) => void }
+export interface UpdateInfo { commit: string; built?: string; size?: number }
+export interface BundleInfo { commit: string; built: number; source: 'downloaded' | 'packed'; bytes: number; downloadedBytes: number }
+export interface DesktopApi { platform: string; version: string;
+  update?: { check: () => Promise<UpdateInfo | null>; install: () => Promise<void>; onAvailable: (cb: (u: UpdateInfo) => void) => void; onProgress: (cb: (p: number) => void) => void; onError: (cb: (m: string) => void) => void }
+  bundle?: () => Promise<BundleInfo | null>; removeBundle?: () => Promise<void>; storage?: () => Promise<{ appfiles: number; cache: number }>; clear?: (what: 'appfiles' | 'cache') => Promise<void>; onSettings?: (cb: () => void) => void; fullscreen: (cb: (on: boolean) => void) => void; appFiles: (cb: (s: { done: number; total: number; finished?: boolean }) => void) => void }
 declare global { interface Window { kokoDesktop?: DesktopApi } }
 
 export const isDesktop = () => typeof window !== 'undefined' && !!window.kokoDesktop
@@ -14,6 +18,8 @@ export function installDesktop() {
   const c = document.documentElement.classList
   c.add('desktop'); c.add(d.platform === 'darwin' ? 'desktop-mac' : 'desktop-overlay')
   d.fullscreen((on) => c.toggle('desktop-full', on))
+  // the desktop app keeps its own copy of the interface (and updates it itself), so the site's service worker is not wanted: it would serve old files
+  void navigator.serviceWorker?.getRegistrations().then((r) => r.forEach((x) => void x.unregister())).catch(() => {})
   d.onSettings?.(() => window.dispatchEvent(new Event('koko:settings')))
   d.appFiles((s) => window.dispatchEvent(new CustomEvent('koko:appfiles', { detail: s })))
 }

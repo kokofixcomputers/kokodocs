@@ -20,6 +20,7 @@ let win = null
 // The website also keeps itself in a service worker, but this doesn't depend on that: every app file that loads is saved here, and when the
 // server can't be reached the saved copy is served instead, so the window always opens. (Documents are kept by the page itself, in IndexedDB.)
 const crypto = require('crypto')
+const bundle = require('./bundle')
 const cacheDir = () => path.join(app.getPath('userData'), 'appfiles')
 const slot = (p) => path.join(cacheDir(), crypto.createHash('sha1').update(p).digest('hex'))
 const cacheable = (p) => /^\/(assets|twemoji|shots|ocr)\//.test(p) || p === '/favicon.svg' || p.startsWith('/api/images/')
@@ -44,6 +45,10 @@ function offlineFiles() {
     if (u.origin !== server || req.method !== 'GET' || u.pathname.startsWith('/api/') && !u.pathname.startsWith('/api/images/') || u.pathname.startsWith('/ws/')) return pass()
     const p = u.pathname
     const isNav = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')
+    const own = bundle.fileFor(p, isNav)   // the interface on this computer (packed with the app, or downloaded later): no waiting for the server, and it works offline
+    if (own) {
+      try { return isolate(new Response(await fs.promises.readFile(own), { status: 200, headers: { 'content-type': bundle.typeOf(own), 'cache-control': 'no-cache' } })) } catch { /* fall through to the server's */ }
+    }
     try {
       const res = await pass()
       if (res.ok && res.status === 200 && (cacheable(p) || isNav)) {
@@ -108,7 +113,7 @@ function createWindow() {
   win.on('closed', () => { win = null })
   win.on('enter-full-screen', () => win?.webContents.send('desktop:fullscreen', true))
   win.on('leave-full-screen', () => win?.webContents.send('desktop:fullscreen', false))
-  win.webContents.on('did-finish-load', () => { win?.webContents.send('desktop:fullscreen', win.isFullScreen()); if (win?.webContents.getURL().startsWith(server)) setTimeout(prefetch, 4000) })
+  win.webContents.on('did-finish-load', () => { win?.webContents.send('desktop:fullscreen', win.isFullScreen()); if (win?.webContents.getURL().startsWith(server)) { if (!bundle.active()) setTimeout(prefetch, 4000); setTimeout(() => void checkUpdates(false), 6000) } })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (new URL(url).origin === server) return { action: 'allow', overrideBrowserWindowOptions: { width: 520, height: 720, parent: win ?? undefined, autoHideMenuBar: true, titleBarStyle: 'default', minimizable: false, webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false } } }   // the app's own pop-ups (single sign-on)
     if (/^(https?|mailto):/i.test(url)) void shell.openExternal(url)
@@ -163,6 +168,23 @@ ipcMain.handle('desktop:clear', async (_e, what) => {
   else if (what === 'cache') await session.defaultSession.clearCache()
 })
 
+// ── interface updates (see bundle.js) ──
+let offered = ''
+async function checkUpdates(manual) {
+  try {
+    const u = await bundle.check()
+    if (u && (manual || u.commit !== offered)) { offered = u.commit; win?.webContents.send('desktop:update', u) }
+    return u
+  } catch (e) { if (manual) throw e; return null }   // (offline, or GitHub unreachable: try again later)
+}
+ipcMain.handle('update:check', () => checkUpdates(true))
+ipcMain.handle('update:install', async () => {
+  try { await bundle.install((p) => win?.webContents.send('desktop:update-progress', p)); win?.webContents.reloadIgnoringCache() }
+  catch (e) { win?.webContents.send('desktop:update-error', e.message); throw e }
+})
+ipcMain.handle('bundle:info', () => bundle.describe())
+ipcMain.handle('bundle:remove', () => { bundle.removeDownloaded(); win?.webContents.reloadIgnoringCache() })
+
 function buildMenu() {
   const settings = { label: isMac ? 'Settings…' : 'Settings', accelerator: 'CmdOrCtrl+,', click: () => win?.webContents.send('desktop:settings') }
   const nav = (fn) => () => win && fn(win.webContents)
@@ -200,6 +222,7 @@ else {
   app.whenReady().then(async () => {
     if (!app.isPackaged && process.env.KOKO_TEST_NOSW) await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] })   // (testing: prove the saved files work without the service worker)
     offlineFiles(); secure(); buildMenu(); createWindow()
+    setInterval(() => void checkUpdates(false), 6 * 3600 * 1000)
     nativeTheme.on('updated', () => { if (!isMac && win) win.setTitleBarOverlay(themeBar()) })
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow() })
   })
