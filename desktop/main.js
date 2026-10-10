@@ -152,11 +152,27 @@ function secure() {
   }, { useSystemPicker: true })
 }
 
+const dirSize = (dir) => {
+  let n = 0
+  try { for (const f of fs.readdirSync(dir, { withFileTypes: true })) { const p = path.join(dir, f.name); n += f.isDirectory() ? dirSize(p) : fs.statSync(p).size } } catch { /* not there */ }
+  return n
+}
+ipcMain.handle('desktop:storage', async () => ({ appfiles: dirSize(cacheDir()), cache: await session.defaultSession.getCacheSize().catch(() => 0) }))
+ipcMain.handle('desktop:clear', async (_e, what) => {
+  if (what === 'appfiles') fs.rmSync(cacheDir(), { recursive: true, force: true })
+  else if (what === 'cache') await session.defaultSession.clearCache()
+})
+
 function buildMenu() {
+  const settings = { label: isMac ? 'Settings…' : 'Settings', accelerator: 'CmdOrCtrl+,', click: () => win?.webContents.send('desktop:settings') }
   const nav = (fn) => () => win && fn(win.webContents)
   const t = [
-    ...(isMac ? [{ role: 'appMenu' }] : []),
+    ...(isMac ? [{ label: app.name, submenu: [
+      { role: 'about' }, { type: 'separator' }, settings, { type: 'separator' },
+      { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' },
+    ] }] : []),
     { label: 'File', submenu: [
+      ...(isMac ? [] : [settings, { type: 'separator' }]),
       { label: 'Search…', click: () => win?.webContents.executeJavaScript("window.dispatchEvent(new Event('koko:search'))") },   // (Cmd/Ctrl+K itself is handled by the page)
       { type: 'separator' }, isMac ? { role: 'close' } : { role: 'quit' },
     ] },

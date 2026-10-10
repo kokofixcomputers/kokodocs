@@ -4,6 +4,9 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('kokoDesktop', {
   platform: process.platform,
   version: ipcRenderer.sendSync('desktop:version'),
+  storage: () => ipcRenderer.invoke('desktop:storage'),   // how much room the app's saved files take
+  clear: (what) => ipcRenderer.invoke('desktop:clear', what),
+  onSettings: (cb) => ipcRenderer.on('desktop:settings', () => cb()),
   appFiles: (cb) => ipcRenderer.on('desktop:app', (_e, s) => cb(s)),   // progress of saving the app's own files
   fullscreen: (cb) => ipcRenderer.on('desktop:fullscreen', (_e, on) => cb(!!on)),
 })

@@ -1,4 +1,4 @@
-export type SettingsSection = 'account' | 'security' | 'notifications' | 'appearance' | 'assistant' | 'voice' | 'storage'
+export type SettingsSection = 'account' | 'security' | 'notifications' | 'appearance' | 'assistant' | 'voice' | 'storage' | 'device'
 type Listener = (s: SettingsSection | null) => void
 const listeners = new Set<Listener>()
 export const subscribeSettings = (l: Listener) => { listeners.add(l); return () => { listeners.delete(l) } }

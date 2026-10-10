@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronLeft, Circle, FileQuestion, Copy, Lock, LogOut, Monitor, Mic, Moon, Palette, ShieldCheck, Sparkles, Sun, Trash2, User as UserIcon, Bell, HardDrive, X, Keyboard } from 'lucide-react'
+import { Check, ChevronLeft, Circle, FileQuestion, Copy, Lock, LogOut, Monitor, Mic, Moon, Palette, ShieldCheck, Sparkles, Sun, Trash2, User as UserIcon, Bell, HardDrive, X, Keyboard, Laptop } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, getToken, type AiSettings, type Storage, type StorageItems } from '../api'
 import { KindIcon } from '../ui/KindIcon'
@@ -15,6 +15,7 @@ import { DEFAULT_SHORTCUT, loadLive, loadShortcut, shortcutLabel, type Shortcut 
 import { closeSettings, subscribeSettings, type SettingsSection } from '../ui/settingsStore'
 import { DeleteForm, LinkedAccounts, NotifyRow, PasswordForm, StorageRow } from './SecurityDialog'
 import { ZkCard } from '../zk/ZkSettings'
+import { OnDevice } from './OnDevice'
 
 const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string }[] = [
   { id: 'account', label: 'My account', icon: <UserIcon size={17} />, group: 'User settings' },
@@ -24,6 +25,7 @@ const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string 
   { id: 'appearance', label: 'Appearance', icon: <Palette size={17} />, group: 'App settings' },
   { id: 'assistant', label: 'AI assistant', icon: <Sparkles size={17} />, group: 'App settings' },
   { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'App settings' },
+  { id: 'device', label: 'On this device', icon: <Laptop size={17} />, group: 'App settings' },
 ]
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -202,6 +204,7 @@ const BODY: Record<SettingsSection, () => ReactNode> = {
   appearance: () => <Appearance />,
   assistant: () => <Assistant />,
   voice: () => <Voice />,
+  device: () => <OnDevice />,
 }
 const PARTS = [
   { key: 'text', label: 'Text and data', hint: 'What you typed, cells, slides and settings' },
@@ -294,8 +297,9 @@ export function SettingsHost() {
   useEffect(() => subscribeSettings((s) => { setSec(s); setMobileList(true) }), [])
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.key === ',' && user) { e.preventDefault(); setSec((s) => (s ? null : 'account')); setMobileList(true) } }
-    window.addEventListener('keydown', k)
-    return () => window.removeEventListener('keydown', k)
+    const menu = () => { if (user) { setSec((s) => (s ? null : 'account')); setMobileList(true) } }   // (the desktop app's Settings… menu item)
+    window.addEventListener('keydown', k); window.addEventListener('koko:settings', menu)
+    return () => { window.removeEventListener('keydown', k); window.removeEventListener('koko:settings', menu) }
   }, [user])
   useEffect(() => {
     if (!sec) return
