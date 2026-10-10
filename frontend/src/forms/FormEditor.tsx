@@ -1,3 +1,4 @@
+import { SavePill } from '../ui/SavePill'
 import { useZoom, Zoomed } from '../ui/zoom'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
@@ -136,9 +137,6 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
   const onCount = useCallback((n: number) => setCount(n), [])
   const link = `${location.origin}/d/${info.id}`
   const copyLink = () => navigator.clipboard.writeText(link).then(() => toast('Form link copied'), () => toast(link))
-
-  const ConnIcon = status === 'connected' ? Cloud : CloudOff
-  const connLabel = status === 'connected' ? 'Saved' : status === 'denied' ? 'No access' : status === 'offline' ? 'Offline' : 'Reconnecting'
   const TABS = [
     { id: 'questions', label: 'Questions', icon: ClipboardList }, { id: 'preview', label: 'Preview', icon: Eye },
     { id: 'responses', label: count === null ? 'Responses' : `Responses (${count})`, icon: Inbox }, { id: 'settings', label: 'Settings', icon: Settings2 },
@@ -150,7 +148,7 @@ function Inner({ info, model, provider }: { info: DocInfo; model: FormModel; pro
         <div className="ed-left">
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
           <input className="title-input" value={title} onChange={(e) => onTitle(e.target.value)} placeholder="Untitled form" aria-label="Form title" maxLength={200} />
-          <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+          <SavePill provider={provider} status={status} readOnly={false} />
           <EncryptionBadge info={info} />
           {!form.accepting && <span className="fm-closed-chip">Closed</span>}
         </div>

@@ -1,3 +1,4 @@
+import { SavePill } from '../ui/SavePill'
 import { yXmlFragmentToProsemirrorJSON } from 'y-prosemirror'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { openSettings } from '../ui/settingsStore'
@@ -24,7 +25,9 @@ import { EmojiSuggest, EmojiSuggestMenu } from './EmojiSuggest'
 import { FindBar } from './FindBar'
 import { FindReplace } from './FindReplace'
 import { NonPrinting } from './NonPrinting'
-import { CalloutMenu, CommentMenu, ImageMenu, ShapeMenu, TableMenu } from './BubbleMenus'
+import { Snippets } from './Snippets'
+import { UndoPill, useUndoIndicator } from './UndoIndicator'
+import { CalloutMenu, FormatMenu, ImageMenu, ShapeMenu, TableMenu } from './BubbleMenus'
 import { CommentMark } from './CommentMark'
 import { CommentsPanel, useComments, type Draft } from './Comments'
 import { PageSetupDialog } from './PageSetupDialog'
@@ -170,6 +173,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       AiFlash,
       FindReplace,
       NonPrinting,
+      Snippets,
       SlashCommand,
       EmojiSuggest,
       CommentMark,
@@ -325,10 +329,8 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
 
   const saveMeta = (m: PageMeta) => ydoc.transact(() => { (Object.keys(m) as (keyof PageMeta)[]).forEach((k) => ymeta.set(k, m[k])) })
 
+  const undone = useUndoIndicator(editor)
   const pagesCount = editor ? (pagesKey.getState(editor.state)?.breaks.length ?? 0) + 1 : 1
-
-  const connLabel = status === 'connected' ? (readOnly ? 'View only' : 'Saved') : status === 'denied' ? 'No access' : status === 'offline' ? 'Offline' : 'Reconnecting'
-  const ConnIcon = status === 'connected' ? Cloud : CloudOff
 
   if (import.meta.env.DEV && editor) (window as any).__koko = editor
 
@@ -342,7 +344,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
           <input className="title-input" value={title} readOnly={readOnly} onChange={(e) => onTitle(e.target.value)}
             placeholder="Untitled document" aria-label="Document title" maxLength={200} />
-          <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+          <SavePill provider={provider} status={status} readOnly={readOnly} />
           <EncryptionBadge info={info} />
         </div>
         <div className="ed-right">
@@ -430,9 +432,10 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       {editor && !preview && <LinkHover editor={editor} />}
       <SlashMenu />
       <EmojiSuggestMenu />
+      <UndoPill said={undone} />
       <TableMenu editor={editor} />
       <CalloutMenu editor={editor} />
-      {user && <CommentMenu editor={editor} onComment={startComment} />}
+      <FormatMenu editor={editor} onComment={user ? startComment : undefined} />
       <ImageMenu editor={editor} /><ShapeMenu editor={editor} />
       {share && <ShareDialog info={info} onClose={() => setShare(false)} />}
       {setup && <PageSetupDialog meta={meta} onSave={saveMeta} onClose={() => setSetup(false)} />}

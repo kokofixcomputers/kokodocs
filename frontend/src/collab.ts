@@ -54,6 +54,10 @@ export class KokoProvider {
   synced = false
   /** edits made while not connected, waiting to be sent */
   pending = 0
+  /** an edit has been handed to the connection but isn't through yet (for "Saving…"), and when the last one was through */
+  saving = false
+  lastSaved = 0
+  private syncTimer: number | undefined
   private ws: WebSocket | null = null
   private retry = 0
   private timer: number | undefined
@@ -242,6 +246,7 @@ export class KokoProvider {
     const blob = await encryptUpdate(key, this.docId, update)
     if (this.ws !== ws || ws.readyState !== WebSocket.OPEN) { this.pending++; this.announce(); return }
     this.send(MSG_UPDATE, blob)
+    this.markSaving()
     Y.applyUpdate(this.server!, update)   // the server has it now
     this.sinceCheckpoint++
     this.zkMaybeCheckpoint()
@@ -318,6 +323,20 @@ export class KokoProvider {
     else if (!this.ws && navigator.onLine !== false) { this.retry = 0; this.connect() }
   }
 
+  /** "Saving…" from the moment an edit is handed to the connection until the connection has written it out (a moment after, so typing doesn't flicker it) */
+  private markSaving() {
+    if (this.readOnly || this.ws?.readyState !== WebSocket.OPEN) return
+    if (!this.saving) { this.saving = true; this.emit() }
+    window.clearTimeout(this.syncTimer)
+    const check = () => {
+      const ws = this.ws
+      if (!ws || ws.readyState !== WebSocket.OPEN) { this.saving = false; this.emit(); return }
+      if (ws.bufferedAmount > 0) { this.syncTimer = window.setTimeout(check, 120); return }
+      this.saving = false; this.lastSaved = Date.now(); this.emit()
+    }
+    this.syncTimer = window.setTimeout(check, 350)
+  }
+
   private send(type: number, payload: Uint8Array) {
     if (this.ws?.readyState !== WebSocket.OPEN) return
     const out = new Uint8Array(payload.length + 1)
@@ -336,6 +355,7 @@ export class KokoProvider {
     }
     if (this.ws?.readyState !== WebSocket.OPEN && origin !== LOCAL) { this.pending++; this.announce() }   // kept in the doc; sent in full when we reconnect
     this.send(MSG_UPDATE, update)
+    this.markSaving()
   }
 
   private onAwarenessUpdate = (
@@ -353,6 +373,7 @@ export class KokoProvider {
   private onUnload = () => removeAwarenessStates(this.awareness, [this.doc.clientID], 'unload')
 
   destroy() {
+    window.clearTimeout(this.syncTimer)
     this.saveNow()
     this.closed = true
     window.clearTimeout(this.timer)

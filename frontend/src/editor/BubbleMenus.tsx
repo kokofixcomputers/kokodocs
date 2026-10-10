@@ -1,7 +1,7 @@
 import { BubbleMenu, type Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignLeft, AlignRight, ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, ArrowDownFromLine, ArrowRightFromLine, Combine, Palette,
-  MessageSquarePlus, Shapes, Type, Minus, Plus, Rows3, Columns3, Split, Trash2, TableProperties, Image as ImageIcon,
+  MessageSquarePlus, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough as StrikeIcon, Code as CodeIcon, Link as LinkIcon, Highlighter as HighlighterIcon, Shapes, Type, Minus, Plus, Rows3, Columns3, Split, Trash2, TableProperties, Image as ImageIcon,
 } from 'lucide-react'
 import { CellSelection, TableMap, mergeCells, selectionCell } from '@tiptap/pm/tables'
 import { toast } from '../ui/Toast'
@@ -12,8 +12,8 @@ import { ColorPicker } from './ColorPicker'
 import { askText } from '../ui/Dialogs'
 import { SHAPE_KINDS, cleanShape, type ShapeKind } from './shapes'
 
-const Btn = ({ icon, label, tip, onClick, danger }: { icon: React.ReactNode; label: string; tip?: string; onClick: () => void; danger?: boolean }) => (
-  <button type="button" className={`bb-btn ${danger ? 'danger' : ''}`} data-tip={tip ? `${label}|${tip}` : label} aria-label={label}
+const Btn = ({ icon, label, tip, onClick, danger, active }: { icon: React.ReactNode; label: string; tip?: string; onClick: () => void; danger?: boolean; active?: boolean }) => (
+  <button type="button" aria-pressed={active} className={`bb-btn ${danger ? 'danger' : ''} ${active ? 'on' : ''}`} data-tip={tip ? `${label}|${tip}` : label} aria-label={label}
     onMouseDown={(e) => e.preventDefault()} onClick={onClick}>{icon}</button>
 )
 
@@ -130,6 +130,43 @@ export function ShapeMenu({ editor }: { editor: Editor }) {
         <Btn icon={<AlignRight size={16} />} label="Align right" tip="put the shape at the right" onClick={() => c().setTextAlign('right').run()} />
         <span className="bb-sep" />
         <Btn icon={<Trash2 size={16} />} label="Remove shape" tip="delete this shape" danger onClick={() => c().deleteSelection().run()} />
+      </div>
+    </BubbleMenu>
+  )
+}
+
+/** The little bar over selected text (like Medium's): bold, italic, underline, strikethrough, code, link, colour and highlight, and the comment button in documents. */
+export function FormatMenu({ editor, onComment }: { editor: Editor; onComment?: () => void }) {
+  const c = () => editor.chain().focus()
+  const on = (n: string, a?: object) => editor.isActive(n, a)
+  const link = async () => {
+    const cur = editor.getAttributes('link').href as string | undefined
+    const v = await askText({ title: 'Link', label: 'Web address', placeholder: 'https://…', value: cur ?? '' })
+    if (v === null || v === undefined) return
+    const url = v.trim()
+    if (!url) { c().extendMarkRange('link').unsetLink().run(); return }
+    c().extendMarkRange('link').setLink({ href: /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}` }).run()
+  }
+  const color = editor.getAttributes('textStyle').color as string | undefined, hl = editor.getAttributes('highlight').color as string | undefined
+  return (
+    <BubbleMenu editor={editor} pluginKey="formatMenu"
+      shouldShow={({ editor: e, state }) => e.isEditable && !state.selection.empty && !('node' in state.selection) && !e.isActive('image') && !e.isActive('table') && !e.isActive('codeBlock') && !e.isActive('docShape')}
+      tippyOptions={{ placement: 'top', offset: [0, 8], maxWidth: 'none', duration: 120 }}>
+      <div className="bubble" onMouseDown={keepSelection}>
+        <Btn icon={<BoldIcon size={16} />} label="Bold" tip="Ctrl+B" onClick={() => c().toggleBold().run()} active={on('bold')} />
+        <Btn icon={<ItalicIcon size={16} />} label="Italic" tip="Ctrl+I" onClick={() => c().toggleItalic().run()} active={on('italic')} />
+        <Btn icon={<UnderlineIcon size={16} />} label="Underline" tip="Ctrl+U" onClick={() => c().toggleUnderline().run()} active={on('underline')} />
+        <Btn icon={<StrikeIcon size={16} />} label="Strikethrough" onClick={() => c().toggleStrike().run()} active={on('strike')} />
+        <Btn icon={<CodeIcon size={16} />} label="Code" onClick={() => c().toggleCode().run()} active={on('code')} />
+        <span className="bb-sep" />
+        <Btn icon={<LinkIcon size={16} />} label={on('link') ? 'Edit link' : 'Link'} onClick={() => void link()} active={on('link')} />
+        <Popover className="bb-pop" trigger={({ toggle }) => <Btn icon={<span className="bb-color" style={{ borderBottomColor: color ?? 'currentColor' }}>A</span>} label="Text colour" onClick={toggle} />}>
+          {(close) => <ColorPicker value={color} noneLabel="Default" onPick={(v) => { if (v) c().setColor(v).run(); else c().unsetColor().run(); close() }} />}
+        </Popover>
+        <Popover className="bb-pop" trigger={({ toggle }) => <Btn icon={<HighlighterIcon size={16} />} label="Highlight" onClick={toggle} active={on('highlight')} />}>
+          {(close) => <ColorPicker value={hl} noneLabel="None" onPick={(v) => { if (v) c().setHighlight({ color: v }).run(); else c().unsetHighlight().run(); close() }} />}
+        </Popover>
+        {onComment && <><span className="bb-sep" /><button type="button" className="bb-text bb-with-icon" onMouseDown={(e) => e.preventDefault()} onClick={onComment}><MessageSquarePlus size={15} />Comment</button></>}
       </div>
     </BubbleMenu>
   )

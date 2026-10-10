@@ -388,6 +388,8 @@ export const api = {
   adminMeet: () => request<MeetAdmin>('/api/admin/meet'),
   adminMeetSave: (b: MeetAdminIn) => request<MeetAdmin>('/api/admin/meet', { method: 'PUT', ...json(b) }),
   adminMeetTest: () => request<{ ok: boolean; message: string; turn?: boolean }>('/api/admin/meet/test', { method: 'POST' }),
+  prefs: () => request<Record<string, any>>('/api/me/prefs'),
+  savePref: (key: 'snippets' | 'writing', value: unknown) => request<{ ok: true }>(`/api/me/prefs/${key}`, { method: 'PUT', ...json({ value }) }),
   ttsConfig: () => request<{ engine: 'browser' | 'cloudflare'; langs: string[] }>('/api/tts/config'),
   /** the server's voice reading one sentence (only when the administrator has switched it on) */
   ttsSpeak: async (text: string, lang: string): Promise<Blob> => {

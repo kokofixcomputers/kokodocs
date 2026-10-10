@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronLeft, Circle, FileQuestion, Copy, Lock, LogOut, Monitor, Mic, Moon, Palette, ShieldCheck, Sparkles, Sun, Trash2, User as UserIcon, Bell, HardDrive, X, Keyboard, Laptop } from 'lucide-react'
+import { Check, ChevronLeft, Circle, FileQuestion, Copy, Lock, LogOut, Monitor, Mic, Moon, Palette, ShieldCheck, Sparkles, Sun, Trash2, User as UserIcon, Bell, HardDrive, X, Keyboard, Laptop, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, getToken, type AiSettings, type Storage, type StorageItems } from '../api'
 import { KindIcon } from '../ui/KindIcon'
@@ -16,6 +16,7 @@ import { closeSettings, subscribeSettings, type SettingsSection } from '../ui/se
 import { DeleteForm, LinkedAccounts, NotifyRow, PasswordForm, StorageRow } from './SecurityDialog'
 import { ZkCard } from '../zk/ZkSettings'
 import { OnDevice } from './OnDevice'
+import { SnippetsSettings } from './SnippetsSettings'
 
 const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string }[] = [
   { id: 'account', label: 'My account', icon: <UserIcon size={17} />, group: 'User settings' },
@@ -25,6 +26,7 @@ const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string 
   { id: 'appearance', label: 'Appearance', icon: <Palette size={17} />, group: 'App settings' },
   { id: 'assistant', label: 'AI assistant', icon: <Sparkles size={17} />, group: 'App settings' },
   { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'App settings' },
+  { id: 'snippets', label: 'Snippets', icon: <Zap size={17} />, group: 'App settings' },
   { id: 'device', label: 'On this device', icon: <Laptop size={17} />, group: 'App settings' },
 ]
 
@@ -205,6 +207,7 @@ const BODY: Record<SettingsSection, () => ReactNode> = {
   assistant: () => <Assistant />,
   voice: () => <Voice />,
   device: () => <OnDevice />,
+  snippets: () => <SnippetsSettings />,
 }
 const PARTS = [
   { key: 'text', label: 'Text and data', hint: 'What you typed, cells, slides and settings' },

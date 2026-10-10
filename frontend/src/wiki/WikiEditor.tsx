@@ -1,3 +1,4 @@
+import { SavePill } from '../ui/SavePill'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { Select } from '../ui/Select'
@@ -26,7 +27,7 @@ import { ImageUpload } from '../editor/ResizableImage'
 import { PasteChecklists } from '../editor/PasteChecklists'
 import { SlashCommand, SlashMenu } from '../editor/SlashMenu'
 import { EmojiSuggest, EmojiSuggestMenu } from '../editor/EmojiSuggest'
-import { CalloutMenu, ImageMenu, ShapeMenu, TableMenu } from '../editor/BubbleMenus'
+import { CalloutMenu, FormatMenu, ImageMenu, ShapeMenu, TableMenu } from '../editor/BubbleMenus'
 import { LinkHover } from '../editor/LinkHover'
 import { useBatchedRerender } from '../editor/useBatchedRerender'
 import { DocContextMenu } from '../editor/TextContextMenu'
@@ -47,6 +48,8 @@ import { METHODS, type KV, type Vars } from './request'
 import { ancestors, children, descendants, nextPos, place, reading, uid, type Entry, type Tree } from './tree'
 import { ProofMenu, ProofreadMarks, ProofreadPanel, useProofread } from '../editor/Proofread'
 import { NonPrinting } from '../editor/NonPrinting'
+import { Snippets } from '../editor/Snippets'
+import { UndoPill, useUndoIndicator } from '../editor/UndoIndicator'
 import { NotionImport } from './NotionImport'
 import './wiki.css'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -273,8 +276,6 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
     move: (id: string, parent: string | null, before: string | null) => move(id, parent, before),
     remove: (ids: string[]) => ydoc.transact(() => { for (const g of ids) { ytree.delete(g); const f = ydoc.getXmlFragment('p:' + g); if (f.length) f.delete(0, f.length) } }),
   }
-  const connLabel = status === 'connected' ? (readOnly ? 'View only' : 'Saved') : status === 'denied' ? 'No access' : status === 'offline' ? 'Offline' : 'Reconnecting'
-  const ConnIcon = status === 'connected' ? Cloud : CloudOff
   useEffect(() => {
     if (!renaming || !tree[renaming] || tree[renaming].t !== 'folder') return
     const id = renaming
@@ -289,7 +290,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             <button className={`icon-btn ${navOpen ? 'active' : ''}`} onClick={() => setNavOpen((o) => !o)} aria-label="Toggle contents" title="Contents"><PanelLeft size={19} /></button>
             {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
             <input className="title-input" value={title} readOnly={readOnly} onChange={(e) => onTitle(e.target.value)} placeholder="Untitled wiki" aria-label="Wiki title" maxLength={200} />
-            <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+            <SavePill provider={provider} status={status} readOnly={readOnly} />
           <EncryptionBadge info={info} />
           </div>
           <div className="ed-right">
@@ -417,11 +418,12 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
     EmojiSuggest,
-    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting,
+    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions, shouldRerenderOnTransaction: false }, [])
   useBatchedRerender(editor)
+  const undone = useUndoIndicator(editor)
   useEffect(() => { onEditor(editor); return () => onEditor(null) }, [editor, onEditor])
   const titleRef = useRef<HTMLInputElement>(null)
   useEffect(() => { if (autoFocusTitle && titleRef.current) { titleRef.current.focus(); titleRef.current.select(); onFocused() } }, [autoFocusTitle, onFocused])
@@ -456,6 +458,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
   const sibling = (pid?: string) => pid && tree[pid] ? <button className="wk-pn" onClick={() => go(pid)}>{pid === prev ? <ChevronLeft size={18} /> : null}<span><em>{pid === prev ? 'Previous' : 'Next'}</em><b>{tree[pid].title || 'Untitled'}</b></span>{pid === next ? <ChevronRight size={18} /> : null}</button> : <span />
   return (
     <div className="wiki-wrap">
+      <UndoPill said={undone} />
       <article className="wiki-page">
         {crumbs.length > 0 && <nav className="wiki-crumbs" aria-label="Breadcrumb">{crumbs.map((c, i) => <span key={i}>{c || 'Untitled'}<ChevronRight size={13} /></span>)}</nav>}
         <div className="wiki-head">
@@ -470,7 +473,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
       <aside className="wiki-toc"><div className="wiki-toc-in"><Outline editor={editor} heading="On this page" /></div></aside>
       {!readOnly && <DocContextMenu editor={editor} issues={proof.issues} recheck={proof.recheck} ignore={proof.ignore} onComment={undefined} onFind={() => {}} />}
       <LinkHover editor={editor} />
-      <TableMenu editor={editor} /><CalloutMenu editor={editor} /><ImageMenu editor={editor} /><ShapeMenu editor={editor} />
+      <FormatMenu editor={editor} /><TableMenu editor={editor} /><CalloutMenu editor={editor} /><ImageMenu editor={editor} /><ShapeMenu editor={editor} />
     </div>
   )
 }

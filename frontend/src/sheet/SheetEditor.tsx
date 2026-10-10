@@ -1,3 +1,4 @@
+import { SavePill } from '../ui/SavePill'
 import { useWheelZoom, useZoom, ZoomPill } from '../ui/zoom'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
@@ -286,8 +287,6 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const nf = (x: number) => Number(x.toPrecision(10)).toLocaleString(undefined, { maximumFractionDigits: 6 })
 
   const people = remotes
-  const connLabel = status === 'connected' ? (readOnly ? 'View only' : 'Saved') : status === 'denied' ? 'No access' : status === 'offline' ? 'Offline' : 'Reconnecting'
-  const ConnIcon = status === 'connected' ? Cloud : CloudOff
   useEffect(() => {
     const changed = () => { toast('Your access to this spreadsheet changed'); setTimeout(() => location.reload(), 900) }
     window.addEventListener('koko:access-changed', changed)
@@ -301,7 +300,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
         <div className="ed-left">
           {user ? <Link to="/" className="logo-link" title="All documents"><Logo size={32} /></Link> : <span className="logo-link"><Logo size={32} /></span>}
           <input className="title-input" value={title} readOnly={readOnly} onChange={(e) => onTitle(e.target.value)} placeholder="Untitled spreadsheet" aria-label="Spreadsheet title" maxLength={200} />
-          <span className={`status-pill ${status}`}><ConnIcon size={14} /><span className="lbl">{connLabel}</span></span>
+          <SavePill provider={provider} status={status} readOnly={readOnly} />
           <EncryptionBadge info={info} />
         </div>
         <div className="ed-right">

@@ -22,6 +22,7 @@ from .sso import router as sso_router
 from .zk import router as zk_router
 from .ocr import router as ocr_router
 from .tts import router as tts_router
+from .prefs import router as prefs_router
 from .meet import router as meet_router
 from .meetroom import ws_router as meet_ws_router
 from .recordings import router as recordings_router
@@ -97,6 +98,7 @@ app.include_router(sso_router)
 app.include_router(zk_router)
 app.include_router(ocr_router)
 app.include_router(tts_router)
+app.include_router(prefs_router)
 app.include_router(meet_router)
 app.include_router(meet_ws_router)
 app.include_router(recordings_router)

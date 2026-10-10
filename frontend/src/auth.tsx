@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, getToken, setToken, type User } from './api'
 import { startSync } from './offline/sync'
+import { clearPrefs, loadPrefs } from './prefs'
+import { setSnippetUser } from './editor/Snippets'
 import { forgetEverything } from './offline/store'
 import { hideBusy, showBusy, whileBusy } from './zk/busy'
 import { finishLogin, loginSecret, restoreSession, unlockWithPassword } from './zk/flows'
@@ -80,7 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const r = await api.signup({ email, name, password })
     setToken(r.token); setUser(r.user)
   }, [])
-  const logout = useCallback(() => { setToken(null); setUser(null); pendingKek = null; void zkErase(); void forgetEverything(); try { localStorage.removeItem('koko.zk') } catch { /* ignore */ } }, [])
+  const logout = useCallback(() => { setToken(null); setUser(null); pendingKek = null; void zkErase(); void forgetEverything(); clearPrefs(); try { localStorage.removeItem('koko.zk') } catch { /* ignore */ } }, [])
+  useEffect(() => { if (user) { void loadPrefs(); setSnippetUser({ name: user.name, email: user.email }) } }, [user?.id, user?.name])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => (user && !user.zk ? startSync() : undefined), [user?.id, user?.zk])   // eslint-disable-line react-hooks/exhaustive-deps
   const unlock = useCallback(async (password: string) => {
     if (!user) return

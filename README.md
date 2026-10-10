@@ -485,6 +485,13 @@ Same admin page, same one-upload-for-everyone idea.
 
 Tests: `backend/tests/test_sfu.py` (Cloudflare and Metered, against mocks) and `backend/tests/test_livekit.py`.
 
+## Writing in documents and wikis
+
+- **Quick formatting bar.** Select text and a small bar appears over it: bold, italic, underline, strikethrough, code, link, text colour, highlight (and Comment in documents).
+- **Undo and redo counter.** Pressing undo several times in a row shows "Undid 3 changes" (and "Redid…") for a moment.
+- **Save indicator.** Every editor's top bar shows "Saving…" with a spinner while an edit is on its way, then "Saved just now", "Saved 2 min ago" and so on. It follows what the connection has actually written out.
+- **Snippets (text expansion).** *Settings → Snippets*: type a trigger like `;sig` and it becomes the saved text, as soon as the trigger is typed, or after a space when another trigger starts the same way (`;a` and `;addr`). Not inside a word and not in code blocks. Placeholders: `{date}`, `{time}`, `{datetime}`, `{name}`, `{email}`. Snippets are kept on the server per person (`/api/me/prefs`, tests in `backend/tests/test_prefs.py`), so they follow you between devices and still work offline.
+
 ## Non-printing characters
 
 The ¶ button in the toolbar of a document or wiki (or ⌘⇧8 / Ctrl+Shift+8, Word's own shortcut) shows the characters you can't normally see: ¶ at the end of every paragraph, a dot on every space, → on tabs, ° on non-breaking spaces and ↵ on line breaks. They are only drawn over the text: the document is never changed, they don't print, and they can't be selected or copied. The choice is remembered. A very long document shows them for its first part only, so typing stays quick (typing measured at about 1 ms a key with 19,000 spaces marked). Tests: see `frontend/src/editor/NonPrinting.ts`.
