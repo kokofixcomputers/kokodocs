@@ -540,6 +540,29 @@ Bucket fill works on shapes and closed strokes rather than on any enclosed area 
 
 **Hold to make perfect shapes.** Draw with the pen or highlighter and keep it still at the end of the stroke for about a second: a rough shape turns into the one it was meant to be. It recognises lines (straightened, and levelled to horizontal, vertical or 45° when close), circles and ellipses (even tilted), rectangles and squares (even tilted), diamonds, triangles, hexagons and other polygons, which become real shapes you can move, resize, colour and put text in. A wobbly or slightly bent stroke that mostly goes one way becomes a straight line (horizontal, vertical or 45° when it is close), though wide repeated swings stay a squiggle. After a line snaps in, keep the pen down and move it to set the length. Squiggles and curves it does not recognise stay as you drew them. The magnet button at the bottom left turns it off.
 
+## Extended storage and the `.kokodocs` file
+
+**Extended storage** (Settings → Extended storage) lets a person keep their files in storage they provide instead of on this server: a **WebDAV** server (Nextcloud, ownCloud, a NAS), any **S3-compatible** bucket (AWS, Cloudflare R2, MinIO, Backblaze B2, Wasabi) or a **folder** on the server's disk. Each person connects their own.
+
+- **What moves.** Once connected, a file that has been idle for a while (5 minutes by default; *Move everything now* skips the wait) is written to the storage, read back and checked, and only then removed from this server: its text, version history, comments, assistant conversations and form answers. Pictures and form attachments are moved as separate files. What stays on the server is the title, who owns it and who it is shared with, so lists, sharing and permissions keep working. Search inside moved files is limited to titles unless *Keep search working* is on, which leaves a plain-text copy of each file's words here.
+- **Opening a file.** Opening it (or someone it is shared with opening it) fetches it back, and it works as usual, with live editing. When nobody has it open and it has been idle again, it is cleared from the server again (and not re-uploaded if nothing changed). Pictures are fetched from the storage as they are shown. If the storage cannot be reached, opening says so and nothing is lost: a file is only removed from the server after it has been read back from the storage intact.
+- **Control.** *Bring everything back* copies everything back and switches the storage off; *Disconnect* is only offered when nothing is left only in the storage. Deleting a file for good also deletes its file in the storage. What lives in the storage no longer counts against the person's storage on this server. Files that are end-to-end encrypted and meeting recordings are not moved.
+- **Safety.** The storage's password or key is encrypted in the database and never sent back to the browser. Addresses must be `https` and on the public internet; whoever runs the server can allow a storage on their own network (a NAS, a MinIO box) with `KOKO_STORAGE_ALLOW_PRIVATE=1`. The *folder* choice is only offered when `KOKO_STORAGE_FOLDER_ROOT` names a folder (people can use sub-folders of it, for example a mounted NAS). The files are stored as they are, not encrypted by KokoDocs, so use storage you trust or one that encrypts at rest.
+
+The **`.kokodocs` file** is how one document is stored, and you can also take it with you: *Download as .kokodocs* in a file's menu on the home page, and open one by dropping it on the home page or with *Upload*. It is an ordinary ZIP archive (rename it to `.zip` to look inside):
+
+```
+mimetype              application/x-kokodocs   (first, uncompressed, so programs can recognise it)
+manifest.json         format "kokodocs", version, the document's id, title, kind and dates, and a SHA-256 of every other member
+state.ydoc            the document itself (a Yjs update: text, cells, slides, shapes…)
+tables/<name>.json    versions, comments, ai_conversations, form_responses, form_files (rows; binary columns are separate members)
+tables/<name>/<id>.<column>
+uploads.json          the pictures it uses (name, size, hash)
+files/uploads/<name>  and  files/form/<stored>     the pictures and attachments (only in files you download, not in extended storage, where they sit beside it)
+```
+
+A file made by a newer KokoDocs is refused with a message, and a damaged one is caught by the checksums. In extended storage the files sit at `<folder>/docs/<id>.kokodocs`, with pictures and attachments under `<folder>/files/`.
+
 ## Tables and sticky notes
 
 - **Fill handle.** Select a cell (or several) in a table and drag the small square at its corner down, up, left or right. Numbers continue (1, 2 → 3, 4, 5), as do dates (`2026-01-30`), weekdays, months and text ending in a number (`Item 1` → `Item 2`). A single cell, or anything else, is copied with its formatting.

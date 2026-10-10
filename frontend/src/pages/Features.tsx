@@ -99,6 +99,7 @@ const GROUPS: Group[] = [
     ['Recycle bin', 'Deleted files wait 30 days and can be restored.'],
   ] },
   { id: 'security', icon: ShieldCheck, name: 'Security and admin', lead: 'The boring, important parts, done properly.', shot: 'settings', url: 'docs.example.com', items: [
+    ['Your own storage', 'Connect a WebDAV server, an S3-compatible bucket or a folder, and your files (text, versions, comments, pictures and attachments) are kept there instead of on this server. Opening a file fetches it back; idle ones are cleared again. Each document is one .kokodocs file you can also download and open anywhere.'],
     ['Sign-in', 'Bcrypt passwords, optional email confirmation, single sign-on (Google, GitHub or any OAuth 2.0 / OpenID Connect provider you add) and TOTP two-factor with recovery codes.'],
     ['Hardened', 'Rate limits on sign-in and uploads, public-only fetching for links and imports, and size limits on everything people send.'],
     ['Storage', 'Per-person limits, a colour-coded breakdown by file and kind, and identical pictures stored only once.'],

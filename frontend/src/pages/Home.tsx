@@ -39,6 +39,7 @@ const GRID = [
   { icon: Keyboard, title: 'Shortcuts for everything', text: 'Press ? anywhere to see the shortcuts for the file you are in.' },
   { icon: Moon, title: 'Light and dark', text: 'Follows your system, or switch any time. Even the settings page.' },
   { icon: Smartphone, title: 'Works on a phone', text: 'Long-press for menus, tap to dictate, and pages that reflow to fit.' },
+  { icon: HardDrive, title: 'Your own storage', text: 'Keep your files in your WebDAV, S3 bucket or folder, each one a single .kokodocs file you can open anywhere.' },
   { icon: ShieldCheck, title: 'Private by default', text: 'Restricted to the people you choose, with roles enforced on the server.' },
 ] as const
 
