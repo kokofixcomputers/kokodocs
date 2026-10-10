@@ -43,10 +43,14 @@ export function Props({ tool, selected, style, apply, act, readOnly }: {
   const v: Style & { bold: boolean; italic: boolean } = first
     ? { stroke: first.stroke, fill: first.fill, fs: first.fs, sw: first.sw, ss: first.ss, ro: first.ro, op: first.op, rad: first.rad, fgap: first.fgap ?? 0, font: first.font ?? style.font, size: first.size ?? style.size, ta: first.ta ?? style.ta, tc: first.tc ?? first.stroke, hs: first.hs ?? 'none', he: first.he ?? 'arrow', curve: first.curve ?? 'straight', bold: !!first.bold, italic: !!first.italic }
     : { ...style, bold: false, italic: false }
+  const colour = first ? (first.type === 'text' ? first.tc ?? first.stroke : first.stroke) : style.stroke
+  const vv = { ...v, colour }
+  void vv
   if (readOnly || (tool === 'hand' && !selected.length) || (tool === 'image' && !selected.length) || (tool === 'eraser' && !selected.length)) return null
   const onlyImage = types.every((t) => t === 'image' || t === 'embed')
   const hasStroke = any((t) => t !== 'text' && t !== 'image' && t !== 'embed' && t !== 'frame')
   const hasFill = any((t) => isShape(t as never) || t === 'draw')
+  const hasColour = any((t) => t !== 'image' && t !== 'embed')
   const hasText = any((t) => holdsText(t as never)) && !any((t) => t === 'embed')
   const linear = any((t) => t === 'line' || t === 'arrow')
   const arrow = any((t) => t === 'arrow')
@@ -56,7 +60,7 @@ export function Props({ tool, selected, style, apply, act, readOnly }: {
   return (
     <aside className="wb-props" aria-label="Style">
       {pad && <p className="wb-hint">Click a shape to fill it with this colour, or the board to colour the background.</p>}
-      {hasStroke && !pad && <Row t="Stroke"><Colors label="stroke" value={v.stroke} list={PALETTE} onPick={(c) => apply({ stroke: c })} /></Row>}
+      {hasColour && !pad && <Row t="Colour"><Colors label="colour" value={colour} list={PALETTE} onPick={(c) => apply({ stroke: c })} /></Row>}
       {(hasFill || pad) && <Row t={pad ? 'Fill colour' : 'Background'}><Colors label="fill" value={v.fill} list={FILLS} none={!pad} onPick={(c) => apply({ fill: c })} /></Row>}
       {hasFill && !pad && v.fill !== 'transparent' && <Row t="Fill style"><Seg label="Fill style" value={v.fs} items={FS} onPick={(fs) => apply({ fs })} />{v.fs !== 'solid' && <Slide label="Fill line spacing" value={v.fgap || Math.max(7, v.sw * 4)} min={3} max={40} onPick={(fgap) => apply({ fgap })} unit="px" />}</Row>}
       {hasStroke && !pad && <Row t="Stroke width"><Seg label="Stroke width" value={v.sw} items={[{ v: 1, t: <i className="wb-w w1" />, title: 'Thin' }, { v: 2, t: <i className="wb-w w2" />, title: 'Medium' }, { v: 4, t: <i className="wb-w w4" />, title: 'Bold' }, { v: 7, t: <i className="wb-w w7" />, title: 'Extra bold' }]} onPick={(sw) => apply({ sw })} /><Slide label="Stroke width" value={v.sw} min={1} max={40} onPick={(sw) => apply({ sw })} unit="px" /></Row>}
@@ -79,7 +83,6 @@ export function Props({ tool, selected, style, apply, act, readOnly }: {
             <Seg label="Alignment" value={v.ta} items={[{ v: 'left', t: <AlignLeft size={15} />, title: 'Left' }, { v: 'center', t: <AlignCenter size={15} />, title: 'Centre' }, { v: 'right', t: <AlignRight size={15} />, title: 'Right' }]} onPick={(ta) => apply({ ta })} />
             <button type="button" className={`wb-mini ${v.bold ? 'on' : ''}`} title="Bold" aria-label="Bold" aria-pressed={v.bold} onClick={() => apply({ bold: !v.bold })}><Bold size={15} /></button>
             <button type="button" className={`wb-mini ${v.italic ? 'on' : ''}`} title="Italic" aria-label="Italic" aria-pressed={v.italic} onClick={() => apply({ italic: !v.italic })}><Italic size={15} /></button></div></Row>
-          <Row t="Text colour"><Colors label="text" value={v.tc} list={PALETTE} onPick={(c) => apply({ tc: c })} /></Row>
         </>
       )}
       {!pad && !onlyImage && <Row t={`Opacity ${v.op}%`}><input className="wb-range" type="range" min={5} max={100} step={5} value={v.op} aria-label="Opacity" onChange={(e) => apply({ op: Number(e.target.value) })} /></Row>}

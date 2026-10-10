@@ -52,7 +52,11 @@ export function recognize(raw: Pt[]): Rec | null {
     const dx = last[0] - first[0], dy = last[1] - first[1], chord = Math.hypot(dx, dy)
     if (chord > 0) {
       let dev = 0; for (const p of pts) dev = Math.max(dev, Math.abs(dy * (p[0] - first[0]) - dx * (p[1] - first[1])) / chord)
-      if (chord > 0.78 * len && dev / chord < 0.085) {
+      // held still at the end of a stroke that mostly went one way, so it is wobbly or slightly bent: straighten it
+      // (how many times it swings across the straight line between its ends: a few small swings is a wobbly line, wide repeated swings is a squiggle)
+      let cross = 0, side = 0
+      for (const p of pts) { const off = (dy * (p[0] - first[0]) - dx * (p[1] - first[1])) / chord, sd = off > 0.02 * chord ? 1 : off < -0.02 * chord ? -1 : 0; if (sd && sd !== side) { if (side) cross++; side = sd } }
+      if (chord > 0.55 * len && dev / chord < 0.19 && (cross <= 2 || dev / chord < 0.065)) {
         let b: Pt = [last[0], last[1]]
         const ang = Math.atan2(dy, dx), snap = (to: number) => Math.abs(deg(ang) - to) < 5 || Math.abs(deg(ang) - to - 180) < 5 || Math.abs(deg(ang) - to + 180) < 5
         if (snap(0)) b = [last[0], first[1]]; else if (snap(90) || snap(-90)) b = [first[0], last[1]]

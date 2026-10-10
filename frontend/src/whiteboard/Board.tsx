@@ -149,7 +149,7 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
 
   // ── creating ──
   const styleEl = (type: El['type'], extra: Partial<El> = {}): El => model.make(type, extra, style)
-  const withText = (e: El): El => (isShape(e.type) ? { ...e, font: style.font, size: style.size, ta: style.ta, tc: style.tc, rad: e.type === 'rect' ? style.rad : 0 } : e)
+  const withText = (e: El): El => (isShape(e.type) ? { ...e, font: style.font, size: style.size, ta: style.ta, tc: style.stroke, rad: e.type === 'rect' ? style.rad : 0 } : e)
   const newShape = (kind: ShapeKind, a: Pt, b: Pt, big = false): El => {
     const [dw, dh] = DEFAULT_SIZE[kind] ?? [160, 100]
     let x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]), w = Math.abs(b[0] - a[0]), h = Math.abs(b[1] - a[1])
@@ -157,7 +157,7 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
     return withText(styleEl(kind, { x, y, w, h }))
   }
   const newLinear = (type: 'line' | 'arrow', a: Pt, b: Pt, fromId?: string, toId?: string): El => {
-    const e = styleEl(type, { x: a[0], y: a[1], pts: [[0, 0], [b[0] - a[0], b[1] - a[1]]], curve: style.curve, hs: style.hs, he: type === 'arrow' ? style.he : 'none', ...(fromId ? { from: { id: fromId } } : {}), ...(toId ? { to: { id: toId } } : {}), font: style.font, size: Math.min(style.size, 20), tc: style.tc })
+    const e = styleEl(type, { x: a[0], y: a[1], pts: [[0, 0], [b[0] - a[0], b[1] - a[1]]], curve: style.curve, hs: style.hs, he: type === 'arrow' ? style.he : 'none', ...(fromId ? { from: { id: fromId } } : {}), ...(toId ? { to: { id: toId } } : {}), font: style.font, size: Math.min(style.size, 20), tc: style.stroke })
     return e
   }
   const constrain = (a: Pt, b: Pt, ev: { shiftKey: boolean }): Pt => {
@@ -240,7 +240,7 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
     if (tool === 'eraser') { ses.current = { k: 'erase', hit: new Set() }; eraseAt(w); return }
     if (tool === 'bucket') { bucket(w); return }
     if (tool === 'draw' || tool === 'highlight') { const first = pt3(w, ev); const sn: Session = { k: 'pen', pts: [first], hl: tool === 'highlight', at: s }; ses.current = sn; setPenPts([first]); armHold(sn); return }
-    if (tool === 'text') { const e = styleEl('text', { x: w[0], y: w[1], w: 20, h: style.size * 1.28, text: '', font: style.font, size: style.size, ta: 'left', tc: style.tc }); loadFont(style.font); p.setDraftText(e); return }
+    if (tool === 'text') { const e = styleEl('text', { x: w[0], y: w[1], w: 20, h: style.size * 1.28, text: '', font: style.font, size: style.size, ta: 'left', tc: style.stroke }); loadFont(style.font); p.setDraftText(e); return }
     if (tool === 'image') { p.onPickImage(w); return }
     if (tool === 'line' || tool === 'arrow') { const s0 = shapeAt(els, w); ses.current = { k: 'create', tool, start: w, id: s0?.id ?? '' }; setDraftR(newLinear(tool, w, w, s0?.id)); return }
     if (tool === 'frame' || tool === 'aiframe') { ses.current = { k: 'create', tool, start: w, id: '' }; setDraftR(styleEl('frame', { x: w[0], y: w[1], w: 1, h: 1, ai: tool === 'aiframe', name: tool === 'aiframe' ? 'AI frame' : 'Frame', stroke: '#9ca3af', fill: 'transparent' })); return }
@@ -442,7 +442,7 @@ export const Board = forwardRef<BoardHandle, Props>(function Board(p, ref) {
     const w = toWorld(ev.clientX, ev.clientY), h = topHit(w, true)
     if (h?.type === 'embed') { p.setInteractive(h.id); return }
     if (h && (isShape(h.type) || h.type === 'text' || h.type === 'arrow' || h.type === 'line' || h.type === 'frame')) { p.setSel([h.id]); p.setEditing(h.id); return }
-    if (!h && tool === 'select') { const e = styleEl('text', { x: w[0], y: w[1], w: 20, h: style.size * 1.28, text: '', font: style.font, size: style.size, ta: 'left', tc: style.tc }); loadFont(style.font); p.setDraftText(e) }
+    if (!h && tool === 'select') { const e = styleEl('text', { x: w[0], y: w[1], w: 20, h: style.size * 1.28, text: '', font: style.font, size: style.size, ta: 'left', tc: style.stroke }); loadFont(style.font); p.setDraftText(e) }
   }
   const onContext = (ev: React.MouseEvent) => { ev.preventDefault(); const w = toWorld(ev.clientX, ev.clientY), h = topHit(w); p.onContext(ev.clientX, ev.clientY, h?.id ?? null) }
 

@@ -171,7 +171,8 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   // ── editing the look of things ──
   const selected = els.filter((e) => sel.includes(e.id))
   const apply = useCallback((p: Partial<Style> & { bold?: boolean; italic?: boolean }) => {
-    const { bold, italic, ...st } = p
+    const { bold, italic, ...st0 } = p
+    const st: typeof st0 = p.stroke !== undefined ? { ...st0, tc: p.stroke } : st0   // one colour for everything: the outline, the pen and the words
     if (Object.keys(st).length) setStyleState((s) => ({ ...s, ...st }))
     if (p.font) loadFont(p.font)
     if (!selected.length) return
@@ -179,7 +180,8 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
     for (const e of selected) {
       if (e.lock) continue
       const u: Partial<El> = {}, text = e.type === 'text', line = isLinear(e.type), shape = !text && !line && e.type !== 'image' && e.type !== 'embed' && e.type !== 'frame'
-      if (p.stroke !== undefined && !text && e.type !== 'image') u.stroke = p.stroke
+      if (p.stroke !== undefined && e.type !== 'image' && e.type !== 'embed') u.stroke = p.stroke
+      if (p.stroke !== undefined && (text || shape || line) && e.type !== 'draw') u.tc = p.stroke
       if (p.fill !== undefined && (shape || e.type === 'draw')) u.fill = p.fill
       if (p.fs !== undefined && (shape || e.type === 'draw')) u.fs = p.fs
       if (p.sw !== undefined && !text) u.sw = p.sw
@@ -191,7 +193,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
       if (p.font !== undefined) u.font = p.font
       if (p.size !== undefined && (text || shape || line)) u.size = p.size
       if (p.ta !== undefined) u.ta = p.ta
-      if (p.tc !== undefined) u.tc = p.tc
+      if (p.tc !== undefined && p.stroke === undefined) u.tc = p.tc
       if (bold !== undefined) u.bold = bold
       if (italic !== undefined) u.italic = italic
       if (p.hs !== undefined && e.type === 'arrow') u.hs = p.hs
@@ -281,7 +283,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
       }
       if (t.trim()) {
         e.preventDefault(); const c = here()
-        const el = model.make('text', { x: c[0], y: c[1], text: t.trim().slice(0, 4000), font: style.font, size: style.size, ta: 'left', tc: style.tc }); Object.assign(el, fitText(el))
+        const el = model.make('text', { x: c[0], y: c[1], text: t.trim().slice(0, 4000), font: style.font, size: style.size, ta: 'left', tc: style.stroke }); Object.assign(el, fitText(el))
         setSel(model.add([el]))
       }
     }
