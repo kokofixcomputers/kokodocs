@@ -3,7 +3,7 @@
 const MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX'
 type Model = { generate(text: string, o: { voice: string }): Promise<{ toBlob(): Blob }> }
 let model: Promise<Model> | null = null
-type Cfg = { device: 'wasm' | 'webgpu'; dtype: 'q8' | 'fp32' | 'fp16' }   // (fp32 is not offered any more: fp16 is as fast and half the size)
+type Cfg = { device: 'wasm' | 'webgpu'; dtype: 'q8' | 'fp32' }   // (the 16-bit file is not used: on the graphics card it sounds like static)
 let cfg: Cfg = { device: 'wasm', dtype: 'q8' }
 let used: Cfg['device'] = 'wasm'   // what it ended up running on
 

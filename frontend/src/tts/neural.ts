@@ -50,9 +50,9 @@ function spawn(): Slot {
     else {
       if (m.type === 'audio' && m.buf) {   // (for tuning: how long a sentence took to make, against how long it lasts)
         const v = new DataView(m.buf), secs = (m.buf.byteLength - 44) / (v.getUint32(24, true) * (v.getUint16(34, true) / 8))
-        const fl = v.getUint16(20, true) === 3, n = Math.min(24000, Math.floor((m.buf.byteLength - 44) / (fl ? 4 : 2))); let sq = 0   // (loudness, to tell speech from silence)
-        for (let i = 0; i < n; i++) { const x = fl ? v.getFloat32(44 + i * 4, true) : v.getInt16(44 + i * 2, true) / 32768; sq += x * x }
-        ;((window as unknown as { __neural?: object[] }).__neural ??= []).push({ ms: m.ms, secs: Math.round(secs * 100) / 100, rms: Math.round(Math.sqrt(sq / (n || 1)) * 1000) / 1000, copies: pool.filter((p) => p.ready).length })
+        const fl = v.getUint16(20, true) === 3, n = Math.min(24000, Math.floor((m.buf.byteLength - 44) / (fl ? 4 : 2))); let sq = 0, zc = 0, prev = 0   // (loudness, and how often the wave crosses zero: speech is low, static is near 0.5)
+        for (let i = 0; i < n; i++) { const x = fl ? v.getFloat32(44 + i * 4, true) : v.getInt16(44 + i * 2, true) / 32768; sq += x * x; if ((x > 0) !== (prev > 0)) zc++; prev = x }
+        ;((window as unknown as { __neural?: object[] }).__neural ??= []).push({ ms: m.ms, secs: Math.round(secs * 100) / 100, rms: Math.round(Math.sqrt(sq / (n || 1)) * 1000) / 1000, zcr: Math.round((zc / (n || 1)) * 1000) / 1000, copies: pool.filter((p) => p.ready).length })
       }
       if (m.type === 'done') { device = m.device ?? 'wasm'; (window as unknown as { __neuralDevice?: string }).__neuralDevice = device }
       x.ok(m.type === 'audio' ? new Blob([m.buf!], { type: 'audio/wav' }) : undefined)
@@ -66,22 +66,29 @@ function spawn(): Slot {
   pool.push(slot)
   return slot
 }
-/** How the model runs. On the graphics card (WebGPU, about nine times faster) when the browser offers it with 16-bit support, which also means the smaller 160 MB file;
- *  otherwise on the processor (a 90 MB file, with several copies side by side). `localStorage['koko.tts.gpu'] = '0'` forces the processor. */
-type Cfg = { device: 'wasm' | 'webgpu'; dtype: 'q8' | 'fp16' }
+/** How the model runs. On the graphics card (WebGPU) when the browser offers one: about five times faster than the processor, but the model file is full precision,
+ *  about 330 MB (the lighter 16-bit file is as fast but sounds like static on the graphics card, so it isn't used). Otherwise on the processor (a 90 MB file, with several
+ *  copies side by side). `localStorage['koko.tts.gpu'] = '0'` forces the processor. */
+type Cfg = { device: 'wasm' | 'webgpu'; dtype: 'q8' | 'fp32' }
+export async function gpuAvailable(): Promise<boolean> {
+  try {
+    const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<object | null> } }).gpu
+    return !!(await gpu?.requestAdapter())
+  } catch { return false }
+}
+export const gpuPreferred = () => read('koko.tts.gpu') !== '0'
+export function setGpuPreferred(on: boolean) { write(KEY_GPU, on ? null : '0'); resetNeural() }
+const KEY_GPU = 'koko.tts.gpu'
 let chosen: Promise<Cfg> | null = null
 function config(): Promise<Cfg> {
-  chosen ??= (async (): Promise<Cfg> => {
-    if (read('koko.tts.gpu') !== '0') {
-      try {
-        const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<{ features: Set<string> } | null> } }).gpu
-        const a = await gpu?.requestAdapter()
-        if (a && a.features.has('shader-f16')) return { device: 'webgpu', dtype: 'fp16' }
-      } catch { /* no usable graphics card */ }
-    }
-    return { device: 'wasm', dtype: 'q8' }
-  })()
+  chosen ??= (async (): Promise<Cfg> => (gpuPreferred() && (await gpuAvailable()) ? { device: 'webgpu', dtype: 'fp32' } : { device: 'wasm', dtype: 'q8' }))()
   return chosen
+}
+/** forget the running voice (it is started again, the way the settings now say, next time something is read) */
+export function resetNeural() {
+  for (const p of pool) p.w.terminate()
+  pool.length = 0; waiting.clear()
+  ready = false; grown = false; chosen = null; device = 'wasm'
 }
 async function call<T>(slot: Slot, msg: object): Promise<T> {
   const cfg = await config()

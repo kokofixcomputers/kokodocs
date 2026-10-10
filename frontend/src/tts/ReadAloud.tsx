@@ -4,7 +4,7 @@ import { Pause, Play, SkipBack, SkipForward, Square, Volume2, X, Minus, Plus, Lo
 import { Popover } from '../ui/Popover'
 import { Select } from '../ui/Select'
 import { bestVoice, chooseVoice, chosenVoice, reader, voices } from './reader'
-import { NEURAL_VOICES, neuralChosen, neuralVoice, setNeuralChosen, setNeuralVoice } from './neural'
+import { NEURAL_VOICES, gpuAvailable, gpuPreferred, neuralChosen, neuralVoice, setGpuPreferred, setNeuralChosen, setNeuralVoice } from './neural'
 import './tts.css'
 
 const useReader = () => useSyncExternalStore(reader.subscribe, reader.getSnapshot)
@@ -16,6 +16,9 @@ export function ReadAloud({ plain }: { plain: boolean }) {
   const [list, setList] = useState(voices())
   const [neural, setNeural] = useState(neuralChosen())
   const [nv, setNv] = useState(neuralVoice())
+  const [gpu, setGpu] = useState<boolean | null>(null)   // does this browser offer the graphics card?
+  const [useGpu, setUseGpu] = useState(gpuPreferred())
+  useEffect(() => { void gpuAvailable().then(setGpu) }, [])
   useEffect(() => {
     if (typeof speechSynthesis === 'undefined') return
     const f = () => setList(voices()); speechSynthesis.addEventListener?.('voiceschanged', f); f()
@@ -43,7 +46,11 @@ export function ReadAloud({ plain }: { plain: boolean }) {
             <>
               <div className="tts-field"><span>Neural voice</span>
                 <Select label="Neural voice" value={nv} options={NEURAL_VOICES.map((v) => ({ value: v.id, label: v.label }))} onChange={(v) => { setNv(v); setNeuralVoice(v); if (on) reader.stop() }} /></div>
-              <p className="tts-hint small">Runs on this device and works offline. It uses your graphics card when the browser offers one (much faster; the first download is about 160 MB), otherwise the processor (about 90 MB). After that it starts right away. Other languages are read with the device’s voices.</p>
+              {gpu && (
+                <div className="tts-field"><span>Runs on</span>
+                  <Select label="Where the voice runs" value={useGpu ? 'gpu' : 'cpu'} onChange={(v) => { setUseGpu(v === 'gpu'); setGpuPreferred(v === 'gpu'); if (on) reader.stop() }}
+                    options={[{ value: 'gpu', label: 'Graphics card (fast, 330 MB download)' }, { value: 'cpu', label: 'Processor (slower, 90 MB download)' }]} /></div>)}
+              <p className="tts-hint small">Runs on this device and works offline. The first time it downloads the voice ({gpu && useGpu ? 'about 330 MB' : 'about 90 MB'}); after that it starts right away. Other languages are read with the device’s voices.</p>
             </>
           ) : (
             <>
