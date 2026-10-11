@@ -123,6 +123,15 @@ async def flush(room: Room) -> None:
         await asyncio.to_thread(_write, room.id, room.doc.get_update())
 
 
+async def flush_all() -> None:
+    """On shutdown (a restart for an update): write every document that changed in the last moment, so nothing waits on the save timer."""
+    for room in list(rooms.values()):
+        try:
+            await flush(room)
+        except Exception:
+            pass
+
+
 async def maybe_snapshot(room: Room, min_gap: float) -> None:
     """Record a version if the doc changed since the last one and enough time has passed."""
     if not room.snap_dirty or time.time() - room.last_snap < min_gap:

@@ -1,3 +1,9 @@
 docs.example.com {
-    reverse_proxy 127.0.0.1:8000
+    reverse_proxy 127.0.0.1:8000 {
+        # during a restart for an update (a few seconds), wait for the app to come back instead of showing an error page
+        lb_try_duration 20s
+        lb_try_interval 250ms
+        health_uri /api/health
+        health_interval 2s
+    }
 }

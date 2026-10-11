@@ -55,6 +55,18 @@ forms.start_sweeper()
 extstore_service.start()
 link_expiry.start()
 app = FastAPI(title="KokoDocs", docs_url="/api/docs-ui", openapi_url="/api/openapi.json")
+
+
+@app.get("/api/health")
+def _health():
+    return {"ok": True}
+
+
+@app.on_event("shutdown")
+async def _save_everything_on_shutdown():
+    from .collab import flush_all
+    await flush_all()   # a restart must not lose the last second of typing; open pages reconnect on their own and merge anything newer
+
 class SelectiveGZip:
     """Compress text responses (the JS bundles, JSON). Images and emoji are already compressed, and streams are left alone."""
     SKIP = ("/api/images/", "/twemoji/", "/ws/", "/api/ai/chat")
