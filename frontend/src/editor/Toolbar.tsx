@@ -9,7 +9,7 @@ import type { Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, ChevronDown, Code, Highlighter, ImagePlus, Italic,
   FileCog, Search, Info, Link2, List, ListChecks, KeyboardOff, IndentDecrease, IndentIncrease, ListOrdered, Minus, PanelTop, Paintbrush, Plus, Printer, Quote, Redo2, RemoveFormatting, Strikethrough,
-  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow, StickyNote, Sparkles, WandSparkles } from 'lucide-react'
+  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow, StickyNote, Sparkles, WandSparkles, Sigma } from 'lucide-react'
 import { DEFAULT_FONT } from '../fonts'
 import { ShapeButton } from './ShapePicker'
 import { useKeyboardOpen } from '../ui/KeyboardFit'
@@ -190,6 +190,7 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
           {onSticky && <TBtn icon={<StickyNote size={17} />} label="Sticky note: a floating note that stays in view" onClick={onSticky} />}
           <EmojiButton editor={editor} />
           <TBtn icon={<Info size={17} />} label="Callout" active={editor.isActive('callout')} onClick={() => (editor.isActive('callout') ? run().lift('callout').run() : run().setCallout('info').run())} />
+          <TBtn icon={<Sigma size={17} />} label="Equation" onClick={() => run().insertMath(false).run()} />
           <TBtn icon={<Minus size={17} />} label="Divider" onClick={() => run().setHorizontalRule().run()} />
           <TBtn icon={<Code size={17} />} label="Code" active={editor.isActive('code')} onClick={() => run().toggleCode().run()} />
           <TBtn icon={<Superscript size={17} />} label="Superscript" active={editor.isActive('superscript')} onClick={() => run().toggleSuperscript().run()} />

@@ -4,7 +4,8 @@ import { viewBottom, viewRight } from '../ui/viewport'
 import { Extension, type Editor, type Range } from '@tiptap/core'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
 import { SHAPE_KINDS } from './shapes'
-import { Sparkles, CalendarDays, Shapes, CheckSquare, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Info, List, ListOrdered, Minus, Pilcrow, Quote, Table2, TriangleAlert, Lightbulb, OctagonX, type LucideIcon } from 'lucide-react'
+import { DIVIDERS } from './Blocks'
+import { Sparkles, CalendarDays, Shapes, CheckSquare, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Info, List, ListOrdered, Minus, Pilcrow, Quote, Table2, TriangleAlert, Lightbulb, OctagonX, Sigma, ChevronRight, Columns3, TextQuote, ListTree, type LucideIcon } from 'lucide-react'
 
 export interface SlashItem { title: string; hint: string; keys: string; icon: LucideIcon; run: (editor: Editor, range: Range) => void }
 const del = (e: Editor, r: Range) => e.chain().focus().deleteRange(r)
@@ -23,6 +24,14 @@ const ITEMS: SlashItem[] = [
   { title: 'Tip callout', hint: 'Helpful hint box', keys: 'callout hint idea', icon: Lightbulb, run: (e, r) => del(e, r).setCallout('tip').run() },
   { title: 'Warning callout', hint: 'Caution box', keys: 'callout caution alert', icon: TriangleAlert, run: (e, r) => del(e, r).setCallout('warning').run() },
   { title: 'Danger callout', hint: 'Critical box', keys: 'callout error alert', icon: OctagonX, run: (e, r) => del(e, r).setCallout('danger').run() },
+  { title: 'Toggle list', hint: 'A heading that folds the text under it', keys: 'toggle collapse fold accordion details', icon: ChevronRight, run: (e, r) => del(e, r).insertToggle().run() },
+  { title: '2 columns', hint: 'Side by side', keys: 'columns layout split', icon: Columns3, run: (e, r) => del(e, r).insertColumns(2).run() },
+  { title: '3 columns', hint: 'Three side by side', keys: 'columns layout split', icon: Columns3, run: (e, r) => del(e, r).insertColumns(3).run() },
+  { title: 'Pull quote', hint: 'A big highlighted quotation', keys: 'quote pull highlight', icon: TextQuote, run: (e, r) => del(e, r).insertPullQuote().run() },
+  { title: 'Table of contents', hint: 'Links to every heading', keys: 'toc contents outline', icon: ListTree, run: (e, r) => del(e, r).insertToc().run() },
+  ...DIVIDERS.filter(([v]) => v !== 'line').map(([v, name]): SlashItem => ({ title: `Divider: ${name}`, hint: 'A different kind of line', keys: `hr rule separator ${v}`, icon: Minus, run: (e, r) => del(e, r).insertDivider(v).run() })),
+  { title: 'Equation', hint: 'A LaTeX formula on its own line', keys: 'math latex formula equation katex', icon: Sigma, run: (e, r) => del(e, r).insertMath(true).run() },
+  { title: 'Inline equation', hint: 'A formula inside a sentence', keys: 'math latex formula inline equation', icon: Sigma, run: (e, r) => del(e, r).insertMath(false).run() },
   { title: 'Code block', hint: 'Monospaced code', keys: 'code snippet pre', icon: Code2, run: (e, r) => del(e, r).toggleCodeBlock().run() },
   { title: 'Divider', hint: 'Horizontal line', keys: 'hr line rule separator', icon: Minus, run: (e, r) => del(e, r).setHorizontalRule().run() },
   ...SHAPE_KINDS.map((k): SlashItem => ({ title: `Shape: ${k.name}`, hint: 'Drop it into the text, then resize', keys: `shape draw ${k.id} box`, icon: Shapes, run: (e, r) => del(e, r).insertShape(k.id === 'line' ? { shape: k.id, w: 200, h: 24, fill: 'none', sw: 3 } : { shape: k.id }).run() })),

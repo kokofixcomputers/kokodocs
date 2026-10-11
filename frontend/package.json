@@ -25,6 +25,7 @@
     "@tiptap/extension-color": "^2.27.3",
     "@tiptap/extension-heading": "^2.27.3",
     "@tiptap/extension-highlight": "^2.27.3",
+    "@tiptap/extension-horizontal-rule": "^2.27.3",
     "@tiptap/extension-image": "^2.27.3",
     "@tiptap/extension-link": "^2.27.3",
     "@tiptap/extension-placeholder": "^2.27.3",
@@ -50,6 +51,7 @@
     "exceljs": "^4.4.0",
     "hash-wasm": "^4.12.0",
     "jszip": "^3.10.2",
+    "katex": "^0.16.11",
     "kokoro-js": "^1.2.1",
     "livekit-client": "^2.22.4",
     "lucide-react": "^1.52.0",
@@ -69,6 +71,7 @@
   },
   "devDependencies": {
     "@twemoji/svg": "^15.0.0",
+    "@types/katex": "^0.16.8",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

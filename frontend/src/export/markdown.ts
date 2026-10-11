@@ -6,6 +6,7 @@ function inline(nodes: PMNode[] = []): string {
   return nodes.map((n) => {
     if (n.type === 'hardBreak') return '  \n'
     if (n.type === 'emoji') return String(n.attrs?.char ?? '')
+    if (n.type === 'mathInline') return `$${String(n.attrs?.latex ?? '')}$`
     if (n.type === 'docShape') return n.attrs?.text ? `[shape: ${String(n.attrs.text).replace(/[\[\]]/g, '')}]` : '[shape]'
     if (n.type === 'wikiBadge') return `[[badge:${String(n.attrs?.label ?? '').replace(/[\[\]<>]/g, '')}]]`
     if (n.type === 'image') return `![${(n.attrs?.alt ?? '').replace(/[\[\]]/g, '')}](${n.attrs?.src ?? ''})`
@@ -82,6 +83,7 @@ function block(n: PMNode, depth = 0): string {
     }
     case 'codeBlock': return '```' + (n.attrs?.language ?? '') + '\n' + (n.content ?? []).map((t) => t.text ?? '').join('') + '\n```\n\n'
     case 'horizontalRule': return '---\n\n'
+    case 'mathBlock': return `$$\n${String(n.attrs?.latex ?? '')}\n$$\n\n`
     case 'wikiTabs': return ':::tabs\n' + (n.content ?? []).map((t) => `::tab ${String(t.attrs?.title ?? 'Tab').replace(/\n/g, ' ')}\n${(t.content ?? []).map((c) => block(c, depth)).join('').trim()}\n`).join('') + ':::\n\n'
     case 'apiRequest': return '```api-request\n' + JSON.stringify(n.attrs ?? {}, null, 2) + '\n```\n\n'
     case 'table': return table(n)
@@ -95,7 +97,7 @@ export function toMarkdown(doc: PMNode): string {
 
 // ───────────── plain text ─────────────
 function plainInline(nodes: PMNode[] = []): string {
-  return nodes.map((n) => (n.type === 'hardBreak' ? '\n' : n.type === 'text' ? (n.text ?? '') : n.type === 'emoji' ? String(n.attrs?.char ?? '') : n.type === 'image' ? (n.attrs?.alt ? `[${n.attrs.alt}]` : '') : plainInline(n.content))).join('')
+  return nodes.map((n) => (n.type === 'hardBreak' ? '\n' : n.type === 'text' ? (n.text ?? '') : n.type === 'emoji' ? String(n.attrs?.char ?? '') : n.type === 'mathInline' ? String(n.attrs?.latex ?? '') : n.type === 'image' ? (n.attrs?.alt ? `[${n.attrs.alt}]` : '') : plainInline(n.content))).join('')
 }
 function plainBlock(n: PMNode, depth = 0): string {
   const pad = '  '.repeat(depth)
@@ -114,6 +116,7 @@ function plainBlock(n: PMNode, depth = 0): string {
     case 'callout': return (n.attrs?.title || String(n.attrs?.kind ?? 'note').toUpperCase()) + '\n' + (n.content ?? []).map((c) => plainBlock(c, depth)).join('')
     case 'codeBlock': return (n.content ?? []).map((t) => t.text ?? '').join('') + '\n\n'
     case 'horizontalRule': return '----------\n\n'
+    case 'mathBlock': return String(n.attrs?.latex ?? '') + '\n\n'
     case 'table': return (n.content ?? []).map((tr) => (tr.content ?? []).map((c) => plainInline(c.content?.flatMap((p) => p.content ?? [])).replace(/\n/g, ' ')).join('\t')).join('\n') + '\n\n'
     default: return (n.content ?? []).map((c) => plainBlock(c, depth)).join('')
   }

@@ -1,4 +1,6 @@
 import { Callout } from './Callout'
+import { MathBlock, MathInline } from './MathNode'
+import { customBlocks } from './Blocks'
 import { DocShape } from './ShapeNode'
 import { EmojiNode } from './EmojiNode'
 import StarterKit from '@tiptap/starter-kit'
@@ -20,7 +22,7 @@ import { LinkEmbed } from './LinkEmbed'
 
 /** Everything that defines the document schema. The live editor and version previews share this list. */
 export const baseExtensions = () => [
-  StarterKit.configure({ history: false, heading: false }), AnchorHeading.configure({ levels: [1, 2, 3, 4, 5, 6] }), HeadingLinks,
+  StarterKit.configure({ history: false, heading: false, horizontalRule: false }), AnchorHeading.configure({ levels: [1, 2, 3, 4, 5, 6] }), HeadingLinks,
   Callout, EmojiNode, Underline, TextStyle, Color, FontFamily, FontSize,
   Highlight.configure({ multicolor: true }),
   TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -28,5 +30,5 @@ export const baseExtensions = () => [
   DocLink.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' } }),
   TaskList, KokoTaskItem.configure({ nested: true }),
   KokoTable.configure({ resizable: true, lastColumnResizable: false }), TableRow, KokoTableHeader, KokoTableCell,
-  ResizableImage.configure({ inline: true, allowBase64: false }), DocShape, LinkEmbed,
+  ResizableImage.configure({ inline: true, allowBase64: false }), DocShape, LinkEmbed, MathInline, MathBlock, ...customBlocks(),
 ]

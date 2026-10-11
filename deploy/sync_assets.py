@@ -3,6 +3,7 @@
 SFTP Sync Script for KokoDocs Assets - Fast & Accurate
 
 Syncs:
+- backend/app, backend/main.py and the requirements files (plain overwrite, no scanning or deleting)
 - All files from frontend/dist/assets/ (size comparison)
 - Special files: frontend/dist/index.html and frontend/dist/version.js (hash comparison)
 
@@ -86,6 +87,10 @@ REMOTE_ASSETS = "frontend/dist/assets"   # Remote assets directory
 REMOTE_SPECIAL_DIR = "frontend/dist"      # Remote directory for special files
 LOCAL_ASSETS = "/Users/ct/Documents/kokodocs/frontend/dist/assets"
 LOCAL_SPECIAL_DIR = "/Users/ct/Documents/kokodocs/frontend/dist"
+LOCAL_BACKEND = "/Users/ct/Documents/kokodocs/backend"
+REMOTE_BACKEND = "backend"
+BACKEND_FILES = ["main.py", "requirements.txt", "requirements-local.txt"]   # plus everything under backend/app
+BACKEND_SKIP_DIRS = {"__pycache__"}
 SPECIAL_FILES = {"index.html", "version.js"}
 HASH_ALGORITHM = "sha256"
 MAX_THREADS = 10
@@ -264,6 +269,38 @@ def delete_file(pool, remote_path, pb):
         pool.return_connection(sftp)
 
 
+def backend_files():
+    """(local path, remote path) for everything in the backend that gets overwritten."""
+    out = []
+    base = Path(LOCAL_BACKEND)
+    for name in BACKEND_FILES:
+        if (base / name).is_file():
+            out.append((str(base / name), f"{REMOTE_BACKEND}/{name}"))
+    for f in (base / "app").rglob("*"):
+        if f.is_file() and not (set(f.relative_to(base).parts) & BACKEND_SKIP_DIRS) and f.suffix != ".pyc":
+            out.append((str(f), f"{REMOTE_BACKEND}/{f.relative_to(base).as_posix()}"))
+    return out
+
+
+def sync_backend(pool):
+    """Overwrite the backend on the server with the local one."""
+    files = backend_files()
+    p(f"{C.CYAN}Uploading backend ({len(files)} files, overwriting)...{C.R}")
+    pb = ProgressBar(len(files), "Backend")
+    failed = []
+    with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
+        fs = {executor.submit(upload_file, pool, lp, rp, pb): rp for lp, rp in files}
+        for future in as_completed(fs):
+            ok, err = future.result()
+            if not ok:
+                failed.append((fs[future], err))
+            pb.update(1)
+    pb.finish()
+    for rp, err in failed:
+        p(f"  {C.RED}failed{C.R} {rp}: {err}")
+    return len(files) - len(failed)
+
+
 def sync_assets():
     p(f"\n{C.BOLD + C.CYAN}KokoDocs Asset Sync{C.R}\n")
     
@@ -355,8 +392,9 @@ def sync_assets():
             pb = ProgressBar(len(files_to_upload), "Uploading")
             
             with ThreadPoolExecutor(max_workers=MAX_THREADS) as executor:
-                fs = {executor.submit(upload_file, pool, lp, rp, pb): (rp, st) 
-                      for rp, lp, st, _ in files_to_upload}
+                # each entry is (relative name, local path, remote path, label): upload to the remote path, not the relative name
+                fs = {executor.submit(upload_file, pool, lp, remote, pb): rel
+                      for rel, lp, remote, _ in files_to_upload}
                 for future in as_completed(fs):
                     pb.update(1)
             pb.finish()
@@ -374,6 +412,8 @@ def sync_assets():
                     pb.update(1)
             pb.finish()
         
+        backend_done = sync_backend(pool)
+
         # Clean up empty directories
         p(f"{C.CYAN}Cleaning up...{C.R}")
         cleanup_count = 0
@@ -396,6 +436,7 @@ def sync_assets():
         p(f"  Cleaned: {C.PINK}{cleanup_count}{C.R} empty directories")
         p()
         p(f"{C.BOLD + C.GREEN}done{C.R}")
+        p(f"  Backend files: {C.GREEN}{backend_done}{C.R}")
         p(f"  Uploaded: {C.GREEN}{len(files_to_upload)}{C.R} | Deleted: {C.RED}{len(files_to_delete)}{C.R} | Cleaned: {C.PINK}{cleanup_count}{C.R}")
 
     except Exception as e:

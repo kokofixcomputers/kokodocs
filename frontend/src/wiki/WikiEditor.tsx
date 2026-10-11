@@ -9,7 +9,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import { BookOpen, Braces, History, Loader2, RotateCcw, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudOff, FilePlus2, FileText, FileUp, SpellCheck, FolderClosed, FolderOpen, FolderPlus, LogIn, Moon, MoreHorizontal, PanelLeft, Search, Share2, Sun, Trash2, X } from 'lucide-react'
+import { BookOpen, Braces, History, Loader2, RotateCcw, Sparkles, ChevronDown, ChevronLeft, ChevronRight, Cloud, CloudOff, FilePlus2, FileText, FileUp, SpellCheck, FolderClosed, FolderOpen, FolderPlus, Link2, LogIn, Moon, MoreHorizontal, PanelLeft, Search, Share2, Sun, Trash2, X } from 'lucide-react'
 import { api, type ApiError, type DocInfo, type Version } from '../api'
 import { useAuth } from '../auth'
 import { KokoProvider } from '../collab'
@@ -42,6 +42,7 @@ import { Outline } from '../editor/Outline'
 import { ShareDialog } from '../editor/ShareDialog'
 import { VersionHistory, fullLabel } from '../editor/VersionHistory'
 import { DiffToggle, VersionDiff } from '../editor/VersionDiff'
+import { backlinks, searchText, usePageIndex, type PageInfo } from './pageIndex'
 import { guestIdentity, usePresence, useProviderStatus } from '../editor/DocEditor'
 import { ApiRequest, KVEditor, MethodBadge, WikiBadge, WikiContext, WikiToolbarExtras, wikiSlashItems } from './WikiNodes'
 import { WikiTab, WikiTabs } from './WikiTabs'
@@ -203,10 +204,14 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
     return set
   }, [q, tree])
 
+  const pageIndex = usePageIndex(ydoc, tree, synced)
+  const textHits = useMemo(() => searchText(pageIndex, q), [pageIndex, q])
+
   const menuFor = (id: string): CtxItem[] => {
     const e = tree[id]
-    const items: CtxItem[] = [{ label: 'Rename', onClick: () => { if (e.t === 'page') go(id); setRenaming(id) } }]
-    if (readOnly) return []
+    const items: CtxItem[] = e.t === 'page' ? [{ label: 'Copy link to page', onClick: () => { void navigator.clipboard.writeText(`${location.origin}${location.pathname}#${encodeURIComponent(id)}`); toast('Link copied. Paste it in another page to link here.') } }] : []
+    if (readOnly) return items
+    items.push({ label: 'Rename', onClick: () => { if (e.t === 'page') go(id); setRenaming(id) } })
     if (e.t === 'folder') items.push({ label: 'New page inside', onClick: () => add('page', id) }, { label: 'New folder inside', onClick: () => add('folder', id) })
     items.push({ sep: true }, { label: 'Move up', onClick: () => nudge(id, -1) }, { label: 'Move down', onClick: () => nudge(id, 1) })
     if (e.parent) items.push({ label: 'Move out of folder', onClick: () => move(id, tree[e.parent!].parent, e.parent!) })
@@ -336,7 +341,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           <aside className={`wk-nav ${navOpen && !preview ? 'open' : ''}`} aria-label="Contents">
             <div className="wk-nav-in">
               <div className="wk-nav-top">
-                <label className="field compact"><Search size={15} /><input placeholder="Filter pages" value={q} onChange={(e) => setQ(e.target.value)} />{q && <button className="icon-btn sm" aria-label="Clear" onClick={() => setQ('')}><X size={14} /></button>}</label>
+                <label className="field compact"><Search size={15} /><input placeholder="Search pages" value={q} onChange={(e) => setQ(e.target.value)} />{q && <button className="icon-btn sm" aria-label="Clear" onClick={() => setQ('')}><X size={14} /></button>}</label>
                 {!readOnly && <>
                   <button className="icon-btn" title="New page" aria-label="New page" onClick={() => add('page', null)}><FilePlus2 size={18} /></button>
                   <button className="icon-btn" title="New folder" aria-label="New folder" onClick={() => add('folder', null)}><FolderPlus size={18} /></button>
@@ -346,7 +351,17 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
                 onDragOver={(ev) => { if (drag && (ev.target as HTMLElement).classList.contains('wk-tree')) ev.preventDefault() }}
                 onDrop={(ev) => { if (drag && (ev.target as HTMLElement).classList.contains('wk-tree')) { move(drag, null, null); setDrag(null); setDrop(null) } }}>
                 {top.map((k) => row(k, 0))}
-                {!top.length && <p className="wk-nav-empty">{q ? 'Nothing matches.' : readOnly ? 'This wiki has no pages yet.' : 'No pages yet. Add one with the button above.'}</p>}
+                {q.trim().length >= 2 && textHits.length > 0 && (
+                  <div className="wk-hits" role="group" aria-label="Found inside pages">
+                    <h5>Inside pages</h5>
+                    {textHits.slice(0, 30).map((h) => (
+                      <button key={h.id} className={`wk-hit ${h.id === cur ? 'on' : ''}`} onClick={() => go(h.id)}>
+                        <b>{tree[h.id]?.title || 'Untitled'}{h.count > 1 && <em>{h.count}</em>}</b><span>{h.snippet}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!top.length && !textHits.length && <p className="wk-nav-empty">{q ? 'Nothing matches.' : readOnly ? 'This wiki has no pages yet.' : 'No pages yet. Add one with the button above.'}</p>}
               </div>
             </div>
           </aside>
@@ -355,7 +370,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             {!synced && status !== 'denied' && <div className="sync-banner">Loading wiki</div>}
             {preview ? <WikiPreview live={ydoc} docId={info.id} version={preview} onRestore={restoreVersion} onClose={() => setPreview(null)} /> : cur && tree[cur] ? (
               <PageView key={cur} id={cur} entry={tree[cur]} crumbs={ancestors(tree, cur).map((a) => tree[a].title)} prev={order[order.indexOf(cur) - 1]} next={order[order.indexOf(cur) + 1]}
-                tree={tree} go={go} ydoc={ydoc} ymeta={ymeta} provider={provider} identity={identity} readOnly={readOnly} synced={synced} info={info}
+                tree={tree} index={pageIndex} go={go} ydoc={ydoc} ymeta={ymeta} provider={provider} identity={identity} readOnly={readOnly} synced={synced} info={info}
                 proof={proof} onEditor={setEd} onPatch={(p) => patch(cur, p)} autoFocusTitle={renaming === cur} onFocused={() => setRenaming(null)} />
             ) : synced ? (
               <div className="wiki-empty"><BookOpen size={34} /><h2>{readOnly ? 'Nothing here yet' : 'Start your wiki'}</h2><p>{readOnly ? 'The owner hasn’t added any pages.' : 'Add a page to begin. Pages can hold text, tables, code and request blocks people can try.'}</p>
@@ -406,8 +421,27 @@ const STARTER = (baseNote: string) => ({
   ],
 })
 
-function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provider, identity, readOnly, synced, info, proof, onPatch, onEditor, autoFocusTitle, onFocused }: {
-  id: string; entry: Entry; crumbs: string[]; prev?: string; next?: string; tree: Tree; go: (id: string) => void; ydoc: Y.Doc; ymeta: Y.Map<unknown>; provider: KokoProvider
+function Backlinks({ id, tree, index, go }: { id: string; tree: Tree; index: Record<string, PageInfo>; go: (id: string) => void }) {
+  const list = useMemo(() => backlinks(index, tree, id), [index, tree, id])
+  if (!list.length) return null
+  return (
+    <section className="wiki-back" aria-label="Linked from">
+      <h4><Link2 size={15} />Linked from <em>{list.length}</em></h4>
+      <div className="wiki-back-list">
+        {list.map((b) => (
+          <button key={b.id} className="wiki-back-item" onClick={() => go(b.id)}>
+            <b>{tree[b.id]?.title || 'Untitled'}</b>
+            <span className={`wiki-back-tag ${b.how}`}>{b.how === 'link' ? 'Link' : 'Mentioned'}</span>
+            {b.snippet && <span className="wiki-back-snip">{b.snippet}</span>}
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function PageView({ id, entry, crumbs, prev, next, tree, index, go, ydoc, ymeta, provider, identity, readOnly, synced, info, proof, onPatch, onEditor, autoFocusTitle, onFocused }: {
+  id: string; entry: Entry; crumbs: string[]; prev?: string; next?: string; tree: Tree; index: Record<string, PageInfo>; go: (id: string) => void; ydoc: Y.Doc; ymeta: Y.Map<unknown>; provider: KokoProvider
   identity: { name: string; color: string }; readOnly: boolean; synced: boolean; info: DocInfo; proof: ReturnType<typeof useProofread>
   onPatch: (p: Partial<Entry>) => void; onEditor: (e: Editor | null) => void; autoFocusTitle: boolean; onFocused: () => void
 }) {
@@ -457,8 +491,10 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
     if (!editor) return
     const dom = editor.view.dom
     const click = (e: MouseEvent) => {
-      const a = (e.target as HTMLElement).closest?.('a[href^="#"]') as HTMLAnchorElement | null
-      const id = a?.getAttribute('href')?.slice(1)
+      const a = (e.target as HTMLElement).closest?.('a[href*="#"]') as HTMLAnchorElement | null
+      const href = a?.getAttribute('href') ?? ''
+      if (a && !href.startsWith('#') && !href.startsWith(location.origin + location.pathname + '#')) return   // a link to some other page
+      const id = decodeURIComponent(href.slice(href.indexOf('#') + 1))
       if (a && id && tree[id]) { e.preventDefault(); if (tree[id].t === 'page') go(id) }
     }
     dom.addEventListener('click', click)
@@ -479,6 +515,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, go, ydoc, ymeta, provid
             <Select className="wk-badge wk-method-select wiki-method" tone={entry.method ? entry.method.toLowerCase() : 'none'} label="Method badge shown in the contents" value={entry.method ?? ''} options={[{ value: '', label: 'No badge' }, ...METHODS.map((m) => ({ value: m, label: m }))]} onChange={(m) => onPatch({ method: m || undefined })} />) : entry.method ? <MethodBadge method={entry.method} /> : null}
         </div>
         <EditorContent editor={editor} />
+        <Backlinks id={id} tree={tree} index={index} go={go} />
         <footer className="wiki-pn">{sibling(prev)}{sibling(next)}</footer>
       </article>
       <aside className="wiki-toc"><div className="wiki-toc-in"><Outline editor={editor} heading="On this page" /></div></aside>

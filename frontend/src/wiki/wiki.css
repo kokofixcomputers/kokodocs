@@ -149,3 +149,21 @@ select.wk-method-select, .select-btn.wk-method-select { appearance: none; border
 .wk-tabs-block[data-active="11"] > .wk-tabs-body > .wk-tab:not(:nth-child(12)) { display: none; }
 .wk-tab-input { border: 0; outline: 0; background: transparent; font: inherit; color: var(--ink); padding: 0; min-width: 4ch; max-width: 24ch; border-bottom: 2px solid var(--accent); }
 .wk-tabs-bar .wk-tab-btn.on[title] { cursor: text; }
+
+/* search inside pages, and "Linked from" */
+.wk-hits { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); display: grid; gap: 2px; }
+.wk-hits h5 { margin: 0 8px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.wk-hit { text-align: left; display: grid; gap: 2px; padding: 7px 10px; border-radius: 10px; border: 0; background: transparent; color: inherit; cursor: pointer; min-width: 0; }
+.wk-hit:hover, .wk-hit.on { background: var(--accent-soft); }
+.wk-hit b { font-size: 13.5px; display: flex; justify-content: space-between; gap: 8px; } .wk-hit b em { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 600; }
+.wk-hit span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.wiki-back { margin: 34px 0 8px; padding-top: 18px; border-top: 1px solid var(--line); }
+.wiki-back h4 { margin: 0 0 10px; display: flex; align-items: center; gap: 7px; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.wiki-back h4 em { font-style: normal; background: var(--accent-soft); border-radius: 999px; padding: 0 8px; font-size: 12px; }
+.wiki-back-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.wiki-back-item { text-align: left; display: grid; gap: 4px; padding: 11px 14px; border-radius: var(--r-lg, 14px); border: 1px solid var(--line); background: var(--surface); color: inherit; cursor: pointer; min-width: 0; }
+.wiki-back-item:hover { border-color: var(--accent, #111); }
+.wiki-back-item b { font-size: 14.5px; }
+.wiki-back-tag { justify-self: start; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); }
+.wiki-back-tag.link { background: color-mix(in srgb, #22c55e 22%, transparent); }
+.wiki-back-snip { font-size: 12.5px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

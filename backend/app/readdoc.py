@@ -43,6 +43,8 @@ def _text_of(el) -> str:
         elif isinstance(ch, XmlElement):
             if ch.tag == "hardBreak":
                 parts.append("\n")
+            elif ch.tag == "mathInline":
+                parts.append("$" + str(ch.attributes.get("latex") or "") + "$")
             elif ch.tag in ("emoji", "mention"):
                 parts.append(str(ch.attributes.get("char") or ch.attributes.get("emoji") or ch.attributes.get("label") or ""))
             else:
@@ -79,6 +81,8 @@ def _block(el, depth=0) -> list[str]:
         return ["```", _text_of(el), "```", ""]
     if tag == "horizontalRule":
         return ["---", ""]
+    if tag == "mathBlock":
+        return ["$$", str(at.get("latex") or ""), "$$", ""]
     if tag == "image":
         return [f"[image: {at.get('alt') or at.get('title') or 'picture'}]", ""]
     if tag == "table":

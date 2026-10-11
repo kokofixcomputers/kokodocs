@@ -32,6 +32,7 @@ async function inline(nodes: PMNode[] = [], ctx: Ctx, base: { size?: number; bol
   for (const n of nodes) {
     if (n.type === 'hardBreak') { out.push(new TextRun({ break: 1 })); continue }
     if (n.type === 'emoji') { out.push(new TextRun({ text: String(n.attrs?.char ?? '') })); continue }
+    if (n.type === 'mathInline') { out.push(new TextRun({ text: String(n.attrs?.latex ?? ''), font: 'Cambria Math', italics: true })); continue }
     if (n.type === 'docShape') {
       const png = await shapeToPng(n.attrs ?? {})
       if (png) out.push(new ImageRun({ type: 'png', data: png.data, transformation: { width: Math.min(MAX_IMG, png.width), height: Math.round((png.height * Math.min(MAX_IMG, png.width)) / png.width) }, altText: { title: String(n.attrs?.text || 'shape'), description: String(n.attrs?.text || 'shape'), name: 'shape' } }))
@@ -111,6 +112,9 @@ async function blocks(nodes: PMNode[] = [], ctx: Ctx, extra: Partial<IParagraphO
           children: [new TextRun({ text: l || ' ', font: 'Courier New', size: 20 })] })))
         break
       }
+      case 'mathBlock':
+        out.push(new Paragraph({ ...extra, alignment: AlignmentType.CENTER, spacing: { before: 120, after: 160 }, children: [new TextRun({ text: String(n.attrs?.latex ?? ''), font: 'Cambria Math', italics: true })] }))
+        break
       case 'horizontalRule':
         out.push(new Paragraph({ ...extra, border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: 'BBBBBB', space: 1 } }, spacing: { after: 160 } }))
         break
