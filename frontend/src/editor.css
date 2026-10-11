@@ -726,3 +726,14 @@ html.embed .ed-body { padding: 0; }
 @media (max-width: 720px) {
   html.has-voice-fab .zoom-pill { left: 16px !important; right: auto !important; bottom: calc(86px + var(--kb, 0px) + env(safe-area-inset-bottom)) !important; }
 }
+
+/* the ⋯ menu of the bars */
+.tb-item { display: contents; }
+.bar-more { min-width: 300px; max-width: min(380px, calc(100vw - 16px)); padding: 8px; }
+.more-list { display: grid; gap: 2px; max-height: min(70vh, 520px); overflow-y: auto; }
+.more-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 4px 8px; border-radius: 10px; min-height: 40px; } .more-row:hover { background: var(--accent-soft); }
+.more-row > span:first-child { font-size: 14px; } .more-ctl { display: inline-flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+.more-customize { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 10px 12px; border: 0; border-top: 1px solid var(--line); background: transparent; border-radius: 0 0 10px 10px; font-size: 14px; color: var(--muted); text-align: left; } .more-customize:hover { color: var(--ink); background: var(--accent-soft); }
+.hd-item { display: contents; }
+.page-pick { display: grid; gap: 6px; } .pp-search { font: inherit; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); width: 100%; }
+.pp-path { display: block; font-style: normal; font-size: 11.5px; color: var(--muted); }
