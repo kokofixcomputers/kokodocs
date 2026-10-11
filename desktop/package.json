@@ -18,6 +18,7 @@
     "productName": "KokoDocs",
     "files": [
       "main.js",
+      "bundle.js",
       "preload.js",
       "pages/**",
       "icon.png"
