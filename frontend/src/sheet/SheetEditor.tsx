@@ -253,6 +253,8 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
       { label: `Insert ${nc} column${nc > 1 ? 's' : ''} left`, disabled: readOnly, onClick: () => model.insertCols(sheet, R.c1, nc) },
       { label: `Insert ${nc} column${nc > 1 ? 's' : ''} right`, disabled: readOnly, onClick: () => model.insertCols(sheet, R.c2 + 1, nc) },
       { label: `Delete column${nc > 1 ? 's' : ''}`, danger: true, disabled: readOnly, onClick: () => { model.deleteCols(sheet, R.c1, nc); setSelState({ ar: sel.ar, ac: R.c1, fr: sel.ar, fc: R.c1 }) } },
+      { label: `Hide column${nc > 1 ? 's' : ''}`, hint: 'keeps the data', disabled: readOnly, onClick: () => { model.setColsHidden(sheet, R.c1, R.c2, true); const to = Math.min(R.c2 + 1, model.colCount(sheet) - 1); setSelState({ ar: sel.ar, ac: to, fr: sel.ar, fc: to }) } },
+      ...(model.hiddenCols(sheet).length ? [{ label: 'Show all hidden columns', disabled: readOnly, onClick: () => { const h = model.hiddenCols(sheet); model.setColsHidden(sheet, h[0], h[h.length - 1], false) } }] : []),
     ]
     const tail: MenuItem[] = [
       { sep: true, label: '' },

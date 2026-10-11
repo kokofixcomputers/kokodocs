@@ -226,7 +226,10 @@ export class SheetModel implements DataSource {
   }
   rowCount(sheet: string) { return Math.max(MIN_ROWS, this.used(sheet).rows + 200) }
   colCount(sheet: string) { return Math.max(MIN_COLS, this.used(sheet).cols + 6) }
-  colWidth(sheet: string, c: number) { return this.sheets.get(sheet)?.dims.get('c' + c) ?? DEFAULT_COL_W }
+  isColHidden(sheet: string, c: number) { return !!this.sheets.get(sheet)?.dims.get('h' + c) }
+  /** Columns that are collapsed (hidden), which keep their data and their width and come back with Show. */
+  hiddenCols(sheet: string): number[] { const d = this.sheets.get(sheet)?.dims; return d ? [...d.keys()].filter((k) => k[0] === 'h' && /^h\d+$/.test(k) && d.get(k)).map((k) => Number(k.slice(1))).sort((a, b) => a - b) : [] }
+  colWidth(sheet: string, c: number) { return this.isColHidden(sheet, c) ? 0 : this.sheets.get(sheet)?.dims.get('c' + c) ?? DEFAULT_COL_W }
   rowHeight(sheet: string, r: number) { return this.sheets.get(sheet)?.dims.get('r' + r) ?? DEFAULT_ROW_H }
   freeze(sheet: string) { const d = this.sheets.get(sheet)?.dims; return { rows: d?.get('fr') ?? 0, cols: d?.get('fc') ?? 0 } }
   merges(sheet: string) { return this.sheets.get(sheet)?.merges ?? [] }
@@ -323,6 +326,7 @@ export class SheetModel implements DataSource {
     })
   }
 
+  setColsHidden(sheet: string, c1: number, c2: number, hidden: boolean) { this.tx(() => { const m = this.mirror(sheet); for (let c = c1; c <= c2; c++) hidden ? m.dimsY.set('h' + c, 1) : m.dimsY.delete('h' + c) }) }
   setColWidth(sheet: string, c: number, w: number) { this.tx(() => { const m = this.mirror(sheet); if (Math.round(w) === DEFAULT_COL_W) m.dimsY.delete('c' + c); else m.dimsY.set('c' + c, Math.max(20, Math.round(w))) }) }
   setRowHeight(sheet: string, r: number, h: number) { this.tx(() => { const m = this.mirror(sheet); if (Math.round(h) === DEFAULT_ROW_H) m.dimsY.delete('r' + r); else m.dimsY.set('r' + r, Math.max(14, Math.round(h))) }) }
   setFreeze(sheet: string, rows: number, cols: number) {
@@ -372,13 +376,13 @@ export class SheetModel implements DataSource {
       const pre = axis === 'row' ? 'r' : 'c'
       const dm: [string, number | null, number][] = []
       for (const [k, v] of [...m.dimsY.entries()]) {
-        if (k[0] !== pre || !/^[rc]\d+$/.test(k)) continue
+        if ((k[0] !== pre && !(axis === 'col' && k[0] === 'h')) || !/^[rch]\d+$/.test(k)) continue   // (hidden-column marks 'h' travel with their columns)
         const i = Number(k.slice(1))
         if (count > 0 && i >= at) dm.push([k, i + count, v])
         else if (count < 0 && i >= at && i < at + del) dm.push([k, null, v])
         else if (count < 0 && i >= at + del) dm.push([k, i - del, v])
       }
-      dm.forEach(([k]) => m.dimsY.delete(k)); dm.forEach(([, ni, v]) => { if (ni !== null) m.dimsY.set(pre + ni, v) })
+      dm.forEach(([k]) => m.dimsY.delete(k)); dm.forEach(([k, ni, v]) => { if (ni !== null) m.dimsY.set(k[0] + ni, v) })
       const fk = axis === 'row' ? 'fr' : 'fc', fz = m.dimsY.get(fk) ?? 0
       if (fz && count > 0 && at < fz) m.dimsY.set(fk, fz + count)
       if (fz && count < 0) { const nf = Math.max(0, fz - Math.max(0, Math.min(fz, at + del) - at)); nf ? m.dimsY.set(fk, nf) : m.dimsY.delete(fk) }

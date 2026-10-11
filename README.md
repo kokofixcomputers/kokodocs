@@ -706,3 +706,7 @@ While the pencil is over the board (touching or hovering), the top bar, tool rai
 ### Sticky notes in spreadsheets
 
 The sticky-note button in the spreadsheet toolbar adds a floating note over the sheet (as in documents and wiki pages): drag it by its header, resize it from the corner, pick a colour, fold it up, delete it. Notes belong to the sheet tab they were made on (`stickies:<tab id>` in the shared document), stay in view while you scroll, are saved and synced like everything else, and people who can only view the spreadsheet can read them.
+
+### Hiding (collapsing) columns in spreadsheets
+
+Right-click a column header (or a selection of columns) → **Hide columns**. The columns collapse out of view but keep their data, formulas, formatting and width; a small ◂▸ handle on the boundary shows them again, and the menu also has **Show all hidden columns**. Arrow keys and Tab step over hidden columns, and hidden columns move with their neighbours when columns are inserted or deleted. Hiding is saved in the spreadsheet (`h<column>` in the sheet's dimensions), so everyone sees the same columns; people who can only view it see the same layout but can't unhide. Formulas still use hidden columns, and CSV/Excel exports still include them.

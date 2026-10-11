@@ -328,9 +328,16 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
     const s = st.current, mg = s.model.mergeAt(s.sheet, r, c)
     let nr = r, nc = c
     if (mg) { nr = dr > 0 ? mg.r2 : dr < 0 ? mg.r1 : r; nc = dc > 0 ? mg.c2 : dc < 0 ? mg.c1 : c }
-    nr = Math.max(0, Math.min(s.nRows - 1, nr + dr)); nc = Math.max(0, Math.min(s.nCols - 1, nc + dc))
+    nr = Math.max(0, Math.min(s.nRows - 1, nr + dr)); nc = skipHidden(Math.max(0, Math.min(s.nCols - 1, nc + dc)), dc, c)
     const m2 = s.model.mergeAt(s.sheet, nr, nc)
     return m2 ? [m2.r1, m2.c1] : [nr, nc]
+  }
+
+  /** Arrow keys and Tab step over collapsed columns. */
+  const skipHidden = (col: number, dc: number, from: number) => {
+    const s = st.current; let n = col
+    while (dc && s.model.isColHidden(s.sheet, n) && n + dc >= 0 && n + dc < s.nCols) n += dc
+    return s.model.isColHidden(s.sheet, n) ? from : n
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -341,7 +348,7 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
     const move = (dr: number, dc: number) => {
       e.preventDefault()
       if (e.shiftKey) {
-        const [fr2, fc2] = mod ? jump(s.sel.fr, s.sel.fc, dr, dc) : [Math.max(0, Math.min(s.nRows - 1, s.sel.fr + dr)), Math.max(0, Math.min(s.nCols - 1, s.sel.fc + dc))]
+        const [fr2, fc2] = mod ? jump(s.sel.fr, s.sel.fc, dr, dc) : [Math.max(0, Math.min(s.nRows - 1, s.sel.fr + dr)), skipHidden(Math.max(0, Math.min(s.nCols - 1, s.sel.fc + dc)), dc, s.sel.fc)]
         select(s.sel.ar, s.sel.ac, fr2, fc2)
       } else {
         const [r, c] = mod ? jump(s.sel.ar, s.sel.ac, dr, dc) : stepFrom(s.sel.ar, s.sel.ac, dr, dc)
@@ -555,11 +562,18 @@ export const Grid = forwardRef<GridHandle, Props>(function Grid(p, ref) {
   const selCols = (c: number) => c >= rect.c1 && c <= rect.c2
   const selRows = (r: number) => r >= rect.r1 && r <= rect.r2
   const fullCols = rect.r1 === 0 && rect.r2 >= nRows - 1, fullRows = rect.c1 === 0 && rect.c2 >= nCols - 1
-  const colHeader = (c: number) => (
-    <div key={`ch${c}`} className={`sg-ch${selCols(c) ? ' sel' : ''}${selCols(c) && fullCols ? ' full' : ''}`} style={{ left: X(c), width: colX[c + 1] - colX[c], height: HEADER_H }}>
-      {colName(c)}<span className="sg-rz c" data-rz={`c:${c}`} />
-    </div>
-  )
+  const colHeader = (c: number) => {
+    if (colX[c + 1] - colX[c] === 0 && model.isColHidden(sheet, c)) return null   // a collapsed column has no header of its own
+    let s0 = c; while (s0 > 0 && model.isColHidden(sheet, s0 - 1)) s0--
+    const hiddenLeft = s0 < c   // columns collapsed just before this one: a small handle on the boundary brings them back
+    return (
+      <div key={`ch${c}`} className={`sg-ch${selCols(c) ? ' sel' : ''}${selCols(c) && fullCols ? ' full' : ''}`} style={{ left: X(c), width: colX[c + 1] - colX[c], height: HEADER_H }}>
+        {colName(c)}<span className="sg-rz c" data-rz={`c:${c}`} />
+        {hiddenLeft && !p.readOnly && <button type="button" className="sg-unhide" title={`Show column${c - s0 > 1 ? 's' : ''} ${colName(s0)}${c - s0 > 1 ? '–' + colName(c - 1) : ''}`} aria-label="Show hidden columns"
+          onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); model.setColsHidden(sheet, s0, c - 1, false) }}>◂▸</button>}
+      </div>
+    )
+  }
   const rowHeader = (r: number) => (
     <div key={`rh${r}`} className={`sg-rh${selRows(r) ? ' sel' : ''}${selRows(r) && fullRows ? ' full' : ''}`} style={{ top: Y(r), height: rowY[r + 1] - rowY[r], width: HEADER_W }}>
       {r + 1}<span className="sg-rz r" data-rz={`r:${r}`} />

@@ -69,3 +69,6 @@
 
 .ctx-menu .menu button { padding: 6px 12px; font-size: 13.5px; }
 .ctx-menu .menu-sep { margin: 3px 6px; }
+
+/* collapsed columns: a small handle on the boundary shows them again */
+.sg-unhide { position: absolute; left: -11px; top: 50%; transform: translateY(-50%); z-index: 4; height: 20px; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 10px; line-height: 1; letter-spacing: -1px; cursor: pointer; } .sg-unhide:hover { color: var(--ink); border-color: var(--accent); }
