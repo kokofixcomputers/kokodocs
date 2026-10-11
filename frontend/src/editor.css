@@ -722,9 +722,9 @@ html.embed .ed-body { padding: 0; }
 .ext-block-body.missing { padding: 12px 14px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 14px; }
 .ext-form b { font-size: 15px; } .ext-field { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); } .ext-field input, .ext-field textarea { font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); } .ext-field input[type=color] { padding: 2px; height: 36px; }
 
-/* phones: the zoom pill sits above the microphone button instead of on top of it */
+/* phones: the zoom pill sits above the microphone button and the word-count pill, not on top of them */
 @media (max-width: 720px) {
-  html:has(.voice-fab) .zoom-pill { bottom: calc(var(--zb, 0px) + var(--kb, 0px) + 150px + env(safe-area-inset-bottom)) !important; }
+  html:has(.voice-fab) .zoom-pill { bottom: calc(var(--zb, 0px) + var(--kb, 0px) + 196px + env(safe-area-inset-bottom)) !important; }   /* above the mic button and the word-count pill */
 }
 
 /* the ⋯ menu of the bars */
