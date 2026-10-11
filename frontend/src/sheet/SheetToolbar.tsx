@@ -7,6 +7,7 @@ import { Popover } from '../ui/Popover'
 import { ColorPicker } from '../editor/ColorPicker'
 import { FontPicker } from '../editor/FontPicker'
 import { TBtn } from '../editor/Toolbar'
+import { StickyNote } from 'lucide-react'
 import { colName } from './engine/refs'
 import { PRESETS } from './engine/format'
 import { CellError } from './engine/values'
@@ -27,9 +28,9 @@ export function changeDecimals(code: string | undefined, delta: number): string 
   return c.slice(0, m.index) + repl + c.slice(m.index + m[0].length)
 }
 
-export function SheetToolbar({ model, sheet, rect, active, readOnly, version, setSel, onChart, onImport, onExport, focusGrid }: {
+export function SheetToolbar({ model, sheet, rect, active, readOnly, version, setSel, onChart, onSticky, onImport, onExport, focusGrid }: {
   model: SheetModel; sheet: string; rect: Rect; active: { r: number; c: number }; readOnly: boolean; version: number
-  setSel: (a: number, b: number, c: number, d: number) => void; onChart: () => void; onImport: (f: File) => void; onExport: () => void; focusGrid: () => void
+  setSel: (a: number, b: number, c: number, d: number) => void; onChart: () => void; onSticky?: () => void; onImport: (f: File) => void; onExport: () => void; focusGrid: () => void
 }) {
   void version
   const cur = model.style(sheet, active.r, active.c)
@@ -172,6 +173,7 @@ export function SheetToolbar({ model, sheet, rect, active, readOnly, version, se
               </>)}
           </Popover>
           <TBtn icon={<ChartColumn size={17} />} label="Insert chart" onClick={onChart} />
+          {onSticky && <TBtn icon={<StickyNote size={17} />} label="Sticky note: a floating note that stays in view on this sheet" onClick={onSticky} />}
         </div>
       </fieldset>
       <div className="tb-group">

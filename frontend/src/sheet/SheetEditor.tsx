@@ -32,6 +32,7 @@ import { Grid, expandRect, selRect, type Editing, type GridHandle, type Remote, 
 import { HEADER_H, HEADER_W, SheetModel, type Chart, type ClipPayload, type Rect, type Style, type Tab } from './model'
 import { SheetTabs } from './SheetTabs'
 import { SheetToolbar } from './SheetToolbar'
+import { StickyLayer, addSticky } from '../editor/StickyNotes'
 import './sheet.css'
 
 const ANIMALS = ['Otter', 'Fox', 'Koala', 'Panda', 'Heron', 'Lynx', 'Gecko', 'Falcon', 'Narwhal', 'Quokka']
@@ -330,7 +331,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
 
       <div className="ed-toolbar-wrap">
         <SheetToolbar model={model} sheet={sheet} rect={rect} active={{ r: sel.ar, c: sel.ac }} readOnly={readOnly || !!preview} version={version}
-          setSel={(a, b, c, d) => setSelState({ ar: a, ac: b, fr: c, fc: d })} onChart={openChartDialog} onImport={onImport} onExport={onExport} focusGrid={focusGrid} />
+          setSel={(a, b, c, d) => setSelState({ ar: a, ac: b, fr: c, fc: d })} onChart={openChartDialog} onSticky={readOnly || preview ? undefined : () => addSticky(ydoc, 'stickies:' + sheet)} onImport={onImport} onExport={onExport} focusGrid={focusGrid} />
       </div>
       <FormulaBar sel={sel} rect={rect} raw={raw} editing={editing} readOnly={readOnly || !!preview} startEdit={startEdit} setText={setEditingText} commit={commit} cancel={cancel}
         goTo={(r1, c1, r2, c2) => { setEditing(null); setSelState({ ar: r1, ac: c1, fr: r2, fc: c2 }); requestAnimationFrame(focusGrid) }} />
@@ -357,6 +358,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
                 for (let r = 0; r < Math.max(1, u.rows); r++) h += model.rowHeight(sheet, r)
                 uz.set(Math.max(0.1, Math.min(1, el.clientWidth / w, el.clientHeight / h))); el.scrollTo({ left: 0, top: 0 })
               }} />
+              <StickyLayer key={sheet} doc={ydoc} mapKey={'stickies:' + sheet} readOnly={readOnly} />
               <div className="sheet-foot">
                 <SheetTabs model={model} tabs={tabs} active={sheet} setActive={setActive} readOnly={readOnly} />
                 {stats && (

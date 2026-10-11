@@ -702,3 +702,7 @@ The small on-device language model (about 365 MB, used by on-device suggestions)
 ### Palms and the Apple Pencil on whiteboards
 
 While the pencil is over the board (touching or hovering), the top bar, tool rail, style panel and side panels ignore touches, so a resting palm no longer lights up icons or colour swatches; about a second after the pencil leaves the board, or the moment it moves onto a bar, they listen again (a class `pen-writing` on the page, `whiteboard/WhiteboardEditor.tsx`). The bars also no longer flash on touch or select their labels (`whiteboard/whiteboard.css`). Fingers on the board itself were already ignored once a pencil has been used.
+
+### Sticky notes in spreadsheets
+
+The sticky-note button in the spreadsheet toolbar adds a floating note over the sheet (as in documents and wiki pages): drag it by its header, resize it from the corner, pick a colour, fold it up, delete it. Notes belong to the sheet tab they were made on (`stickies:<tab id>` in the shared document), stay in view while you scroll, are saved and synced like everything else, and people who can only view the spreadsheet can read them.
