@@ -42,10 +42,16 @@ export const DEFAULT_BARS: BarPrefs = {
 }
 
 const ids = (items: BarItem[], level: number) => items.filter((i) => i.level <= level).map((i) => i.id)
-export function profileSets(p: BarProfile): { toolbar: Set<string>; header: Set<string> } {
-  if (p.preset === 'custom') return { toolbar: new Set(p.toolbar), header: new Set(p.header) }
+const known = (list: string[], all: BarItem[]) => { const ok = new Set(all.map((i) => i.id)); return [...new Set(list)].filter((x) => ok.has(x)) }
+/** The buttons a layout shows, in the order they appear. A preset uses the standard order; Custom uses the order you arranged. */
+export function profileLists(p: BarProfile): { toolbar: string[]; header: string[] } {
+  if (p.preset === 'custom') return { toolbar: known(p.toolbar, TOOLBAR_ITEMS), header: known(p.header, HEADER_ITEMS) }
   const lv = LEVEL[p.preset] ?? 2
-  return { toolbar: new Set(ids(TOOLBAR_ITEMS, lv)), header: new Set(ids(HEADER_ITEMS, lv)) }
+  return { toolbar: ids(TOOLBAR_ITEMS, lv), header: ids(HEADER_ITEMS, lv) }
+}
+export function profileSets(p: BarProfile) {
+  const l = profileLists(p)
+  return { ...l, toolbarSet: new Set(l.toolbar), headerSet: new Set(l.header) }
 }
 /** The buttons a preset shows, as lists (what Custom starts from). */
 export const presetLists = (preset: Exclude<Preset, 'custom'>) => ({ toolbar: ids(TOOLBAR_ITEMS, LEVEL[preset]), header: ids(HEADER_ITEMS, LEVEL[preset]) })
@@ -62,5 +68,6 @@ export function useBarLayout() {
   const { bars } = usePrefs()
   const phone = useIsPhone()
   const p = bars.same ? bars.desktop : phone ? bars.mobile : bars.desktop
-  return profileSets(p)
+  const sets = profileSets(p)
+  return { toolbar: sets.toolbarSet, header: sets.headerSet, toolbarOrder: sets.toolbar, headerOrder: sets.header }
 }

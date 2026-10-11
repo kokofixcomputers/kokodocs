@@ -96,7 +96,8 @@ export function Toolbar({ pageLinks, editor, onImage, onHeaderFooter, onPageSetu
   const inList = editor.isActive('bulletList') || editor.isActive('orderedList') || editor.isActive('taskList')
   const lift = () => { const t = editor.isActive('taskItem') ? 'taskItem' : 'listItem'; run().liftListItem(t).run() }
   const sink = () => { const t = editor.isActive('taskItem') ? 'taskItem' : 'listItem'; run().sinkListItem(t).run() }
-  const shown = useBarLayout().toolbar
+  const layout = useBarLayout()
+  const shown = layout.toolbar
 
   /** Every button of the bar, by id. `g` groups neighbours that sit together; `wide` ones are shown as a labelled row inside ⋯. */
   const items: { id: string; g: string; node: React.ReactNode; wide?: boolean; off?: boolean }[] = [
@@ -196,7 +197,7 @@ export function Toolbar({ pageLinks, editor, onImage, onHeaderFooter, onPageSetu
   ]
   const label = (id: string) => TOOLBAR_ITEMS.find((i) => i.id === id)?.label ?? id
   const avail = items.filter((i) => !i.off)
-  const vis = avail.filter((i) => shown.has(i.id)), hid = avail.filter((i) => !shown.has(i.id))
+  const vis = layout.toolbarOrder.map((id) => avail.find((i) => i.id === id)).filter((i): i is (typeof avail)[number] => !!i), hid = avail.filter((i) => !shown.has(i.id))
   const groups: { g: string; list: typeof vis }[] = []
   for (const i of vis) { const last = groups[groups.length - 1]; if (last && last.g === i.g) last.list.push(i); else groups.push({ g: i.g, list: [i] }) }
 

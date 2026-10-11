@@ -349,7 +349,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
 
   if (import.meta.env.DEV && editor) (window as any).__koko = editor
 
-  const shownHeader = useBarLayout().header
+  const barLayout = useBarLayout(), shownHeader = barLayout.header
   if (!editor) return <div className="splash"><span className="spinner" /></div>
 
   const headerBtns: { id: string; label: string; node: (close?: () => void) => React.ReactNode }[] = [
@@ -390,7 +390,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         </div>
         <div className="ed-right">
           <PresenceStack people={people} followId={follow.target?.id ?? null} onToggle={follow.toggle} />
-          {headerBtns.filter((h) => shownHeader.has(h.id)).map((h) => <span key={h.id} className="hd-item" data-bar={h.id}>{h.node()}</span>)}
+          {barLayout.headerOrder.map((id) => headerBtns.find((h) => h.id === id)).filter((h): h is (typeof headerBtns)[number] => !!h).map((h) => <span key={h.id} className="hd-item" data-bar={h.id}>{h.node()}</span>)}
           {headerBtns.some((h) => !shownHeader.has(h.id)) && (
             <Popover align="end" className="bar-more" trigger={({ toggle, open }) => <button type="button" className={`icon-btn ${open ? 'active' : ''}`} title="More" aria-label="More" onClick={toggle}><MoreHorizontal size={19} /></button>}>
               {(close) => (
