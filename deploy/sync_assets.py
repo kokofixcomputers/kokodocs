@@ -89,7 +89,9 @@ LOCAL_ASSETS = "/Users/ct/Documents/kokodocs/frontend/dist/assets"
 LOCAL_SPECIAL_DIR = "/Users/ct/Documents/kokodocs/frontend/dist"
 LOCAL_BACKEND = "/Users/ct/Documents/kokodocs/backend"
 REMOTE_BACKEND = "backend"
-BACKEND_FILES = ["main.py", "requirements.txt", "requirements-local.txt"]   # plus everything under backend/app
+BACKEND_FILES = ["main.py", "gunicorn_conf.py", "requirements.txt", "requirements-local.txt"]   # plus everything under backend/app
+ROOT_FILES = ["run.py", "requirements.txt", "requirements-local.txt"]   # the start-up script and requirements next to the backend and frontend folders
+LOCAL_ROOT = "/Users/ct/Documents/kokodocs"
 BACKEND_SKIP_DIRS = {"__pycache__"}
 SPECIAL_FILES = {"index.html", "version.js"}
 HASH_ALGORITHM = "sha256"
@@ -276,6 +278,9 @@ def backend_files():
     for name in BACKEND_FILES:
         if (base / name).is_file():
             out.append((str(base / name), f"{REMOTE_BACKEND}/{name}"))
+    for name in ROOT_FILES:
+        if (Path(LOCAL_ROOT) / name).is_file():
+            out.append((str(Path(LOCAL_ROOT) / name), name))
     for f in (base / "app").rglob("*"):
         if f.is_file() and not (set(f.relative_to(base).parts) & BACKEND_SKIP_DIRS) and f.suffix != ".pyc":
             out.append((str(f), f"{REMOTE_BACKEND}/{f.relative_to(base).as_posix()}"))
