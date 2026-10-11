@@ -3,7 +3,7 @@ import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view'
 import { getWriting } from '../prefs'
 import { AUTOCOMPLETE_SYSTEM, POLISHED_PREFIX, aiConnected, askModel, tidySuggestion } from './ai/model'
-import { cancelLocal, completeLocal, loadLocalModel } from './ai/local'
+import { cancelLocal, completeLocal, loadLocalModel, localAllowed } from './ai/local'
 
 /** Grey suggestions while you type, like GitHub Copilot: pause after a few words and the likely rest of the sentence appears after the cursor.
  *  Tab takes it, Cmd/Ctrl+→ takes one word, anything else (or Esc) dismisses it. Off until it is switched on in Settings → Writing; the suggestions come from a small
@@ -51,6 +51,7 @@ export const Autocomplete = Extension.create<{ allowServer: () => boolean }>({
         const stop = () => { window.clearTimeout(timer); if (ctl) { ctl.abort(); ctl = null; cancelLocal() } }
         const eligible = (v: EditorView) => {
           const w = getWriting(), sel = v.state.selection
+          if (w.engine === 'device' && !localAllowed()) return false   // (an iPhone would run out of memory loading the model)
           if (!w.autocomplete || !v.editable || v.composing || !(sel instanceof TextSelection) || !sel.empty) return false
           const $h = sel.$head
           if (!$h.parent.isTextblock || $h.parent.type.spec.code || $h.parentOffset !== $h.parent.content.size || $h.parent.textContent.trim().length < 4) return false

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Download, Loader2 } from 'lucide-react'
 import { api } from '../api'
-import { LOCAL_MODEL, loadLocalModel, removeLocalModel, useLocalModel } from '../editor/ai/local'
+import { LOCAL_MODEL, loadLocalModel, localAllowed, removeLocalModel, useLocalModel } from '../editor/ai/local'
 import { aiConnected } from '../editor/ai/model'
 import { Plus, Trash2 } from 'lucide-react'
 import { saveSnippets, saveWriting, usePrefs, type Snippet } from '../prefs'
@@ -78,7 +78,9 @@ function AiHelpers() {
           <span className="st-btns"><Toggle on={w.autocomplete} label="Suggestions while you write" set={(v) => { void save({ autocomplete: v }); if (v && w.engine === 'device' && !lm.downloaded) void loadLocalModel().catch(() => undefined) }} /></span></div>
         {w.autocomplete && (
           <div className="st-row" style={{ alignItems: 'flex-start' }}><div><b>Where suggestions come from</b>
-            <span>{w.engine === 'device'
+            <span>{w.engine === 'device' && !localAllowed()
+              ? 'This device can’t run the on-device model (it needs more memory than an iPhone or a small phone has), so no suggestions appear here. Pick “AI connection” to get them on this device; the choice is saved with your account, so your computer keeps using the on-device model if you set it that way.'
+              : w.engine === 'device'
               ? `${LOCAL_MODEL.name}, a small model that runs on this device. Nothing you write leaves it, and it works offline once downloaded (about ${LOCAL_MODEL.mb} MB, kept by the browser). It is modest: expect short, plain continuations.`
               : conn === false ? 'Uses the AI model connected under Assistant, but none is connected yet. Connect one there first.' : 'Uses an AI model from your connections (pick which below, by default the one Koko uses). The text before your cursor is sent to that provider. It is not used for encrypted documents.'}</span>
             {w.engine === 'server' && conn && <span className="st-inline" style={{ gap: 10, marginTop: 8 }}>Model: <ModelPick value={w.completionModel} models={models} label="Model for suggestions" onPick={(id) => void save({ completionModel: id })} /></span>}

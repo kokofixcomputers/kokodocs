@@ -44,8 +44,17 @@ async function usableGpu(): Promise<boolean> {
   } catch { return false }
 }
 
+/** iPhones, iPads and devices with little memory can't hold the model (about 365 MB to download and more to run): the system closes the page, and it
+ *  reloads and tries again. So the on-device model is never started there. */
+export function localAllowed(): boolean {
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const mem = (navigator as unknown as { deviceMemory?: number }).deviceMemory
+  return !ios && !(typeof mem === 'number' && mem < 4)
+}
+
 /** download (the first time) and start the model */
 export function loadLocalModel(): Promise<void> {
+  if (!localAllowed()) return Promise.reject(new Error('The on-device model can’t run on this device (not enough memory). Use the AI connection instead.'))
   if (snap.status === 'ready') return Promise.resolve()
   loading ??= (async () => {
     set({ status: 'loading', error: '', progress: snap.downloaded ? 1 : 0 })
