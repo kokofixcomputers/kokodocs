@@ -42,3 +42,8 @@ export function reading(tree: Tree): string[] {
 }
 
 export const uid = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4)
+
+/** Every page in reading order with the folders it sits in, for "link to a page" pickers. */
+export function pageList(tree: Tree): { id: string; title: string; path: string }[] {
+  return reading(tree).map((id) => ({ id, title: tree[id].title || 'Untitled page', path: ancestors(tree, id).map((a) => tree[a].title || 'Untitled').join(' › ') }))
+}

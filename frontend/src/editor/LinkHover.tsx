@@ -6,13 +6,14 @@ import { ArrowRight, Check, Copy, ExternalLink, Link2, LayoutPanelTop, Pencil, U
 import { HeadingPicker, findHeading, isInternal, jumpTo } from './headingLinks'
 import { toast } from '../ui/Toast'
 import { embedAt } from './LinkEmbed'
+import { PagePicker, type PageTarget } from './PagePicker'
 
 interface Hit { el: HTMLAnchorElement; href: string; rect: DOMRect }
-const normalize = (u: string) => (/^(https?:|mailto:|#h-)/i.test(u.trim()) ? u.trim() : `https://${u.trim()}`)
+const normalize = (u: string) => (/^(https?:|mailto:|#)/i.test(u.trim()) ? u.trim() : `https://${u.trim()}`)
 const shown = (href: string) => { const s = href.replace(/^https?:\/\//i, '').replace(/^mailto:/i, '').replace(/\/$/, ''); return s.length > 44 ? s.slice(0, 43) + '…' : s }
 
 /** A small pill that floats under a link when you point at it: the address, plus open, copy, edit and remove. */
-export function LinkHover({ editor }: { editor: Editor }) {
+export function LinkHover({ editor, pages, goPage }: { editor: Editor; pages?: PageTarget[]; goPage?: (id: string) => void }) {
   const [hit, setHit] = useState<Hit | null>(null)
   const [editing, setEditing] = useState(false)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
@@ -59,6 +60,8 @@ export function LinkHover({ editor }: { editor: Editor }) {
   if (!hit) return null
   const editable = editor.isEditable
   const internal = isInternal(hit.href)
+  const pageId = pages && /^#[A-Za-z0-9]+$/.test(hit.href) && !internal ? hit.href.slice(1) : null   // in a wiki a link like #abc123 points at a page
+  const page = pageId ? pages!.find((x) => x.id === pageId) ?? null : null
   const target = internal ? findHeading(editor, hit.href.slice(1)) : null
   const select = () => {   // select the whole link so the next command applies to all of it
     const at = editor.view.posAtDOM(hit.el, 0)
@@ -87,11 +90,18 @@ export function LinkHover({ editor }: { editor: Editor }) {
           <input name="url" autoFocus onFocus={(e) => e.currentTarget.select()} spellCheck={false} defaultValue={hit.href} placeholder="Paste a link" aria-label="Link address" onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEditing(false) } }} />
           <button type="submit" className="lp-btn" aria-label="Save link" title="Save"><Check size={16} /></button>
           <button type="button" className="lp-btn" aria-label="Cancel" title="Cancel" onClick={() => setEditing(false)}><X size={16} /></button>
-          <div className="link-heads lp-heads"><h5>Or jump to a heading</h5><HeadingPicker editor={editor} current={isInternal(hit.href) ? hit.href.slice(1) : null} onPick={(a) => apply(`#${a}`)} /></div>
+          {pages
+            ? <div className="link-heads lp-heads"><h5>Or link to a page</h5><PagePicker pages={pages} current={pageId} onPick={(pg) => apply(`#${pg.id}`)} /></div>
+            : <div className="link-heads lp-heads"><h5>Or jump to a heading</h5><HeadingPicker editor={editor} current={isInternal(hit.href) ? hit.href.slice(1) : null} onPick={(a) => apply(`#${a}`)} /></div>}
         </form>
       ) : (
         <>
-          {internal ? (
+          {pageId ? (
+            <>
+              <button type="button" className="lp-url" title="Open this page" onClick={() => { if (page) goPage?.(page.id); setHit(null) }}><ArrowRight size={15} /><span>{page ? page.title : 'Page no longer exists'}</span></button>
+              <button type="button" className="lp-btn" aria-label="Go to page" title="Go to the page" disabled={!page} onClick={() => { if (page) goPage?.(page.id); setHit(null) }}><ArrowRight size={15} /></button>
+            </>
+          ) : internal ? (
             <>
               <button type="button" className="lp-url" title="Jump to this heading" onClick={() => { jumpTo(editor, hit.href.slice(1)); setHit(null) }}><ArrowRight size={15} /><span>{target ? target.text || 'Heading' : 'Heading no longer exists'}</span></button>
               <button type="button" className="lp-btn" aria-label="Go to heading" title="Go to the heading" disabled={!target} onClick={() => { jumpTo(editor, hit.href.slice(1)); setHit(null) }}><ArrowRight size={15} /></button>

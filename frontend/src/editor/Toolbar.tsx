@@ -22,6 +22,7 @@ import { ColorPicker } from './ColorPicker'
 import { useFormatPainter } from './FormatPainter'
 import { FontPicker } from './FontPicker'
 import { HeadingPicker } from './headingLinks'
+import { PagePicker, type PageTarget } from './PagePicker'
 
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72, 96]
 const HEADING_SIZE: Record<number, number> = { 1: 26, 2: 20, 3: 16, 4: 14, 5: 12, 6: 11 }
@@ -59,7 +60,7 @@ function TablePicker({ onPick }: { onPick: (r: number, c: number) => void }) {
 /** Pressing the bar must not take focus from the page: on a phone that would close the keyboard. Text boxes inside menus still work. */
 const keepFocus = (e: React.SyntheticEvent) => { if (!(e.target as HTMLElement).closest('input, textarea, select')) e.preventDefault() }
 
-export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, onSticky, voice, extras, docId }: { onSticky?: () => void; extras?: React.ReactNode; docId?: string; editor: Editor; onImage: (f: File) => void; onHeaderFooter?: () => void; onPageSetup?: () => void; onFind?: () => void; voice?: Voice }) {
+export function Toolbar({ pageLinks, editor, onImage, onHeaderFooter, onPageSetup, onFind, onSticky, voice, extras, docId }: { pageLinks?: PageTarget[]; onSticky?: () => void; extras?: React.ReactNode; docId?: string; editor: Editor; onImage: (f: File) => void; onHeaderFooter?: () => void; onPageSetup?: () => void; onFind?: () => void; voice?: Voice }) {
   const file = useRef<HTMLInputElement>(null)
   const { writing } = usePrefs()
   const [ocr, setOcr] = useState(false)
@@ -77,7 +78,13 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
   const setLink = (close: () => void, url: string) => {
     close()
     if (!url.trim()) run().extendMarkRange('link').unsetLink().run()
-    else run().extendMarkRange('link').setLink({ href: /^(https?:|mailto:|#h-)/i.test(url) ? url : `https://${url}` }).run()
+    else run().extendMarkRange('link').setLink({ href: /^(https?:|mailto:|#)/i.test(url) ? url : `https://${url}` }).run()
+  }
+  const linkToPage = (close: () => void, pg: PageTarget) => {   // in a wiki a link goes to a page
+    close()
+    const { from, to } = editor.state.selection
+    if (from === to && !editor.isActive('link')) run().insertContent({ type: 'text', text: pg.title, marks: [{ type: 'link', attrs: { href: `#${pg.id}` } }] }).run()
+    else run().extendMarkRange('link').setLink({ href: `#${pg.id}` }).run()
   }
   const linkToHeading = (close: () => void, anchor: string, h: { text: string }) => {   // a link that jumps to a heading in this document
     close()
@@ -143,7 +150,9 @@ export function Toolbar({ editor, onImage, onHeaderFooter, onPageSetup, onFind, 
               <input name="url" autoFocus placeholder="Paste a link" defaultValue={editor.getAttributes('link').href ?? ''} />
               <button className="btn btn-primary btn-pill btn-sm">Apply</button>
             </form>
-            <div className="link-heads"><h5>Or jump to a heading in this document</h5><HeadingPicker editor={editor} current={String(editor.getAttributes('link').href ?? '').slice(1) || null} onPick={(a, h) => linkToHeading(close, a, h)} /></div>
+            {pageLinks
+              ? <div className="link-heads"><h5>Or link to a page in this wiki</h5><PagePicker pages={pageLinks} current={String(editor.getAttributes('link').href ?? '').slice(1) || null} onPick={(pg) => linkToPage(close, pg)} /></div>
+              : <div className="link-heads"><h5>Or jump to a heading in this document</h5><HeadingPicker editor={editor} current={String(editor.getAttributes('link').href ?? '').slice(1) || null} onPick={(a, h) => linkToHeading(close, a, h)} /></div>}
           </>)}
       </Popover>) },
 

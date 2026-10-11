@@ -48,7 +48,7 @@ import { guestIdentity, usePresence, useProviderStatus } from '../editor/DocEdit
 import { ApiRequest, KVEditor, MethodBadge, WikiBadge, WikiContext, WikiToolbarExtras, wikiSlashItems } from './WikiNodes'
 import { WikiTab, WikiTabs } from './WikiTabs'
 import { METHODS, type KV, type Vars } from './request'
-import { ancestors, children, descendants, nextPos, place, reading, uid, type Entry, type Tree } from './tree'
+import { ancestors, children, descendants, nextPos, pageList, place, reading, uid, type Entry, type Tree } from './tree'
 import { ProofMenu, ProofreadMarks, ProofreadPanel, useProofread } from '../editor/Proofread'
 import { NonPrinting } from '../editor/NonPrinting'
 import { Snippets } from '../editor/Snippets'
@@ -205,6 +205,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
     return set
   }, [q, tree])
 
+  const pageLinks = useMemo(() => pageList(tree), [tree])
   const pageIndex = usePageIndex(ydoc, tree, synced)
   const textHits = useMemo(() => searchText(pageIndex, q), [pageIndex, q])
 
@@ -334,7 +335,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           </div>
         </header>
 
-        {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} extras={<WikiToolbarExtras editor={ed} />} onSticky={cur ? () => addSticky(ydoc, 'stickies:' + cur) : undefined} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
+        {ed && !readOnly && !preview && <div className="ed-toolbar-wrap"><Toolbar pageLinks={pageLinks} voice={voice} docId={info.id} extras={<WikiToolbarExtras editor={ed} />} onSticky={cur ? () => addSticky(ydoc, 'stickies:' + cur) : undefined} editor={ed} onImage={(f) => api.uploadImage(info.id, f).then((src) => ed.chain().focus().setImage({ src, width: 360 } as never).run()).catch((e) => toast(e.message))} /></div>}
 
         <FollowPill target={follow.target} onStop={follow.stop} />
         <div className="wiki-body">
@@ -501,6 +502,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, index, go, ydoc, ymeta,
     dom.addEventListener('click', click)
     return () => dom.removeEventListener('click', click)
   }, [editor, tree, go])
+  const pagesForLinks = useMemo(() => pageList(tree), [tree])
   if (!editor) return <div className="splash small"><span className="spinner" /></div>
   const sibling = (pid?: string) => pid && tree[pid] ? <button className="wk-pn" onClick={() => go(pid)}>{pid === prev ? <ChevronLeft size={18} /> : null}<span><em>{pid === prev ? 'Previous' : 'Next'}</em><b>{tree[pid].title || 'Untitled'}</b></span>{pid === next ? <ChevronRight size={18} /> : null}</button> : <span />
   return (
@@ -521,7 +523,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, index, go, ydoc, ymeta,
       </article>
       <aside className="wiki-toc"><div className="wiki-toc-in"><Outline editor={editor} heading="On this page" /></div></aside>
       {!readOnly && <DocContextMenu editor={editor} issues={proof.issues} recheck={proof.recheck} ignore={proof.ignore} onComment={undefined} onFind={() => {}} />}
-      <LinkHover editor={editor} />
+      <LinkHover editor={editor} pages={pagesForLinks} goPage={go} />
       <FormatMenu editor={editor} /><TableMenu editor={editor} /><CalloutMenu editor={editor} /><ImageMenu editor={editor} /><ShapeMenu editor={editor} />
     </div>
   )

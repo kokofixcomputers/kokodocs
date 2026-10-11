@@ -735,3 +735,5 @@ html.embed .ed-body { padding: 0; }
 .more-row > span:first-child { font-size: 14px; } .more-ctl { display: inline-flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
 .more-customize { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 10px 12px; border: 0; border-top: 1px solid var(--line); background: transparent; border-radius: 0 0 10px 10px; font-size: 14px; color: var(--muted); text-align: left; } .more-customize:hover { color: var(--ink); background: var(--accent-soft); }
 .hd-item { display: contents; }
+.page-pick { display: grid; gap: 6px; } .pp-search { font: inherit; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); width: 100%; }
+.pp-path { display: block; font-style: normal; font-size: 11.5px; color: var(--muted); }

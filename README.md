@@ -658,7 +658,7 @@ The app is built for docs.kokodev.cc and the address can't be changed (change `S
 
 ## Wikis: backlinks and search inside pages
 
-*Linked from* under every page lists pages that link to it (a link to the page's `#id`, made with *Copy link to page* in the contents menu, or an imported link) and pages that merely mention its title. The search box now looks inside page text too, with snippets under the matching titles. The index is rebuilt in the browser a moment after edits (`wiki/pageIndex.ts`).
+*Linked from* under every page lists pages that link to it (made with the **Link** button, which in a wiki offers a searchable list of its pages instead of headings, with *Copy link to page* in the contents menu, or an imported link). Hovering such a link names the page and opens it in the same tab and pages that merely mention its title. The search box now looks inside page text too, with snippets under the matching titles. The index is rebuilt in the browser a moment after edits (`wiki/pageIndex.ts`).
 
 ## Extensions
 
