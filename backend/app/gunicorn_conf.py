@@ -4,14 +4,14 @@ When a .py file under backend/ changes, the master waits until the files stop ch
 file still compiles (a half-uploaded or broken file must never take the site down), then does a graceful reload: the new worker starts before the old
 one stops, so no request is refused and open pages reconnect on their own. Turn it off with KOKO_AUTORELOAD=0.
 
-Use:  gunicorn -c gunicorn_conf.py app.main:app      (run.py does exactly this when gunicorn is installed)"""
+Use:  gunicorn -c app/gunicorn_conf.py app.main:app      (from the backend folder)      (run.py does exactly this when gunicorn is installed)"""
 import os
 import signal
 import threading
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent   # backend/
 port = os.environ.get("PORT") or os.environ.get("SERVER_PORT") or "8000"
 bind = os.environ.get("KOKO_BIND", f"0.0.0.0:{port}")
 workers = 1

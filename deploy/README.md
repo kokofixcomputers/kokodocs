@@ -56,7 +56,7 @@ Edit the script to change:
 
 ## Updating without downtime
 
-`python run.py` (and `gunicorn -c gunicorn_conf.py app.main:app`, as in `kokodocs.service`) runs gunicorn with one worker plus a watcher: whenever a `.py` file under `backend/` changes, it waits two seconds for the changes to stop (an upload of many files takes a moment), checks that every changed file compiles, and then reloads gracefully. The new worker starts before the old one stops, so nothing is refused, and open pages reconnect on their own. If a file doesn't compile it logs `code changed but NOT reloaded` and the site keeps running the old code until you fix it. Set `KOKO_AUTORELOAD=0` to turn the watcher off.
+`python run.py` (and `gunicorn -c app/gunicorn_conf.py app.main:app`, as in `kokodocs.service`) runs gunicorn with one worker plus a watcher: whenever a `.py` file under `backend/` changes, it waits two seconds for the changes to stop (an upload of many files takes a moment), checks that every changed file compiles, and then reloads gracefully. The new worker starts before the old one stops, so nothing is refused, and open pages reconnect on their own. If a file doesn't compile it logs `code changed but NOT reloaded` and the site keeps running the old code until you fix it. Set `KOKO_AUTORELOAD=0` to turn the watcher off.
 
 - **Docker or a panel:** nothing to configure beyond installing `gunicorn` (it is in the requirements files) and starting with `python run.py`. Upload the new files into the running container's folder and it reloads itself. Changes baked into a new image still need a container restart. Reload by hand with `docker kill -s HUP <container>` (gunicorn is the container's main process).
 - **systemd:** `sudo systemctl reload kokodocs` also works.

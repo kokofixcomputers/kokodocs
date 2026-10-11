@@ -24,7 +24,7 @@ except ImportError:
 def run_gunicorn() -> None:
     """The preferred way: gunicorn with one worker and a watcher that reloads it, with no downtime, whenever the backend's code changes (backend/gunicorn_conf.py).
     exec replaces this process, so gunicorn is the container's main process (docker kill -s HUP <container> also reloads it)."""
-    os.execv(sys.executable, [sys.executable, "-m", "gunicorn", "-c", "gunicorn_conf.py", "app.main:app"])
+    os.execv(sys.executable, [sys.executable, "-m", "gunicorn", "-c", "app/gunicorn_conf.py", "app.main:app"])
 
 
 if __name__ == "__main__":
@@ -34,6 +34,8 @@ if __name__ == "__main__":
         except ImportError:
             print("KokoDocs: gunicorn is not installed, so updates will restart the server (pip install gunicorn to reload with no downtime)", flush=True)
         else:
-            run_gunicorn()
+            if (ROOT / "backend" / "app" / "gunicorn_conf.py").exists():
+                run_gunicorn()
+            print("KokoDocs: app/gunicorn_conf.py is missing, starting without the no-downtime reload", flush=True)
     port = int(os.environ.get("PORT") or os.environ.get("SERVER_PORT") or 8000)
     uvicorn.run("app.main:app", host="0.0.0.0", port=port, proxy_headers=True, forwarded_allow_ips="*")
