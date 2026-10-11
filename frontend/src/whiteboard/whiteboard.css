@@ -69,3 +69,15 @@
 .wb-full .ed-top:hover, .wb-full .ed-top:focus-within { transform: none; }
 .wb-full .wb-body { padding: 0; } .wb-full .wb-main { border-radius: 0; border: 0; }
 :root[data-theme='dark'] .wb-sw { border-color: rgba(255,255,255,.34); }
+@media (pointer: coarse), (max-width: 720px) {
+  .wb-tool { width: 46px; height: 46px; border-radius: 13px; } .wb-tool.more { width: 36px; } .wb-tool svg { width: 21px; height: 21px; }
+  .wb-mini { width: 44px; height: 44px; border-radius: 12px; } .wb-zoom-pct { min-width: 56px; height: 44px; }
+  .wb-sw { width: 34px; height: 34px; border-radius: 10px; } .wb-colors { gap: 8px; }
+  .wb-seg button { min-width: 44px; height: 44px; font-size: 14px; }
+  .wb-font { height: 44px; } .wb-num input { height: 38px; width: 56px; }
+  .wb-range { height: 34px; }
+  .wb-layer { padding: 10px; } .wb-layer .wb-mini { width: 40px; height: 40px; }
+  .wb-shape-pop button { min-height: 46px; }
+  .wb-mode { height: 44px; width: 190px; } .wb-mode-knob { height: 38px; top: 2px; } .wb-frame-go { height: 44px; }
+  .wb-props { width: 280px; } 
+}

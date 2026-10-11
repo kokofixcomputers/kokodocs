@@ -286,7 +286,7 @@ body.painting .koko-prose, body.painting .koko-prose * { cursor: url("data:image
   .status-pill { display: inline-grid; place-items: center; }
   .ed-toolbar-wrap { padding: 2px 8px 6px; }
   .toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; border-radius: 22px; padding: 6px; gap: 6px; scroll-snap-type: x proximity; } .toolbar::-webkit-scrollbar { display: none; }
-  .toolbar .tb-group { flex: none; scroll-snap-align: start; } .toolbar .tb-btn { width: 38px; height: 38px; }
+  .toolbar .tb-group { flex: none; scroll-snap-align: start; } .toolbar .tb-btn { width: 44px; height: 44px; }
   .tb-fieldset { display: flex; gap: 6px; flex: none; align-items: center; }
   .ed-body { padding: 0 4px; } .canvas { padding: 10px 6px 0; border-radius: 14px 14px 0 0; } .sheet { border-radius: 12px; }
   .canvas .koko-prose { font-size: 16px; }
@@ -614,3 +614,22 @@ html.embed .ed-body { padding: 0; }
 .link-pill.editing .lp-form svg { color: var(--muted); }
 .link-pill.editing .lp-btn { color: var(--muted); } .link-pill.editing .lp-btn:hover { background: var(--accent-soft); color: var(--accent); }
 .link-pill.editing .lp-heads { flex: 0 0 100%; width: 100%; margin-top: 8px; max-height: 220px; overflow-y: auto; }
+
+/* touch: every button in the toolbars and bubbles is at least 44 px square (the size fingers need) */
+@media (pointer: coarse), (max-width: 720px) {
+  .tb-btn { width: 44px; height: 44px; } .tb-btn svg { width: 20px; height: 20px; } .tb-btn.color i { left: 12px; right: 12px; bottom: 6px; }
+  .tb-group { gap: 4px; padding: 4px; }
+  .tb-select { height: 44px; padding: 0 14px; font-size: 14.5px; }
+  .tb-num button, .tb-step { width: 40px; height: 44px; }
+  .bb-btn { height: 44px; min-width: 44px; } .bb-text { height: 44px; padding: 0 14px; } .bb-sep { margin: 0 2px; }
+  .bubble { padding: 4px; }
+  .icon-btn { width: 44px; height: 44px; } .icon-btn.sm { width: 44px; height: 44px; }
+  .lp-btn { width: 44px; height: 44px; } .link-pill { height: 54px; }
+  .menu button, .menu-link, .menu-row { min-height: 44px; }
+  .swatch { width: 34px; height: 34px; }
+  .zoom-pill button, .zp-btn { min-width: 44px; height: 44px; }
+  .sticky-btn { width: 40px; height: 40px; } .sticky-dot { width: 22px; height: 22px; }
+  .follow-pill button { min-height: 40px; }
+  .pres-btn { padding: 4px; }
+}
+@media (max-width: 720px) { .ed-top { flex-wrap: wrap; } .ed-right { max-width: 100%; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; padding-bottom: 2px; } .ed-right::-webkit-scrollbar { display: none; } .ed-right > * { flex: none; } }
