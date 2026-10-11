@@ -81,3 +81,8 @@
   .wb-mode { height: 44px; width: 190px; } .wb-mode-knob { height: 38px; top: 2px; } .wb-frame-go { height: 44px; }
   .wb-props { width: 280px; } 
 }
+
+/* palms and pencils (iPad): no tap flash or text selection on the bars, and while the pencil writes the bars don't react to touches at all */
+.wb-shell .ed-top, .wb-shell .wb-tools, .wb-shell .wb-props, .wb-shell .side, .wb-shell .zoom-pill { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.wb-shell .wb-props input, .wb-shell .wb-props textarea, .wb-shell .side input, .wb-shell .side textarea { -webkit-user-select: text; user-select: text; }
+html.pen-writing .wb-shell .ed-top, html.pen-writing .wb-shell .wb-tools, html.pen-writing .wb-shell .wb-props, html.pen-writing .wb-shell .side, html.pen-writing .wb-shell .zoom-pill { pointer-events: none; }

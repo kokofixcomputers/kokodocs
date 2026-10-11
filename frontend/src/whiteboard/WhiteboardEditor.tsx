@@ -367,6 +367,21 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   useEffect(() => { const f = (e: Event) => void bringFrame((e as CustomEvent<string>).detail).catch(() => undefined); window.addEventListener('koko:aiframe', f); return () => window.removeEventListener('koko:aiframe', f) }, [bringFrame])
   const assistantDeps = { bringFrameToLife: async (id: string, instruction?: string) => { await bringFrame(id, instruction); return 'Built it. The website is next to the frame.' }, reviseWebsite: async (id: string, instruction: string) => { await reviseEmbed(id, instruction); return 'Updated.' }, model, getSel: () => sel, setSel, getTitle: () => title, canEdit: () => !readOnly, docId: info.id, getView: () => view, setView, fit: () => fit(), size: () => board.current?.size() ?? { w: 800, h: 600 }, here }
 
+  // While the Apple Pencil is writing on the board, the bars around it ignore touches: a resting palm no longer lights up icons or colours.
+  // (The pencil over the bars themselves works as usual: the moment it leaves the board they listen again.)
+  useEffect(() => {
+    const root = document.documentElement
+    let t: number | undefined
+    const off = () => { window.clearTimeout(t); root.classList.remove('pen-writing') }
+    const on = (e: PointerEvent) => {
+      if (e.pointerType !== 'pen') return
+      if ((e.target as HTMLElement | null)?.closest?.('.wb-board')) { root.classList.add('pen-writing'); window.clearTimeout(t); t = window.setTimeout(off, 900) } else off()
+    }
+    const evs = ['pointerdown', 'pointermove', 'pointerup'] as const
+    evs.forEach((n) => document.addEventListener(n, on, true))
+    return () => { evs.forEach((n) => document.removeEventListener(n, on, true)); off() }
+  }, [])
+
   return (
     <div className={`editor-shell wb-shell ${full ? 'wb-full' : ''}`}>
       <header className="ed-top">

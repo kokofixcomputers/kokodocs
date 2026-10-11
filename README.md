@@ -698,3 +698,7 @@ Settings → **Toolbar**: choose how much the top bar (Download, History, Commen
 ### On-device models and phones
 
 The small on-device language model (about 365 MB, used by on-device suggestions) is never started on iPhones, iPads or devices that report under 4 GB of memory (`localAllowed()` in `editor/ai/local.ts`): the system closes a page that uses that much memory and it reloads and tries again, which showed up as Safari saying "a problem repeatedly occurred" a couple of seconds after tapping into a paragraph. Those devices simply get no on-device suggestions; Settings → Writing explains it and offers the AI connection instead. Preferences are shared by your account, so a setting made on a computer reaches the phone, which is why the phone must protect itself.
+
+### Palms and the Apple Pencil on whiteboards
+
+While the pencil is over the board (touching or hovering), the top bar, tool rail, style panel and side panels ignore touches, so a resting palm no longer lights up icons or colour swatches; about a second after the pencil leaves the board, or the moment it moves onto a bar, they listen again (a class `pen-writing` on the page, `whiteboard/WhiteboardEditor.tsx`). The bars also no longer flash on touch or select their labels (`whiteboard/whiteboard.css`). Fingers on the board itself were already ignored once a pencil has been used.
