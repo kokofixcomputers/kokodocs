@@ -659,3 +659,21 @@ The app is built for docs.kokodev.cc and the address can't be changed (change `S
 ## Wikis: backlinks and search inside pages
 
 *Linked from* under every page lists pages that link to it (a link to the page's `#id`, made with *Copy link to page* in the contents menu, or an imported link) and pages that merely mention its title. The search box now looks inside page text too, with snippets under the matching titles. The index is rebuilt in the browser a moment after edits (`wiki/pageIndex.ts`).
+
+## Extensions
+
+Settings → **Extensions**: small JavaScript programs that follow your account (stored in your synced settings, up to 20 of 100 KB each, `PUT /api/me/prefs/extensions`) and run on every device, even offline. Start from an example (Rosé Pine, Rosé Pine Dawn, Dracula, a dice roller, a word-count line, a progress-bar block) or write your own. Turn each on or off, edit its code, and pick one of their **themes**, which recolours the whole app (a theme sets CSS variables such as `--bg`, `--surface`, `--ink`, `--accent`, and says whether it is `light` or `dark`; the last theme is cached in the browser so the page doesn't flash).
+
+What an extension can do, through the `koko` object:
+
+```js
+koko.theme({ id, name, base: 'dark' | 'light', vars: { '--bg': '#191724', ... } })
+koko.css('...')                                                   // extra styles for the app
+koko.slash({ title, hint, keys, run({ text, date }) { return 'text or <p>html</p>' } })   // a "/" command
+koko.block({ id, title, hint, defaults, fields, render(data) { return '<html>' } })       // a new block type
+koko.toast('message')
+```
+
+**Safety.** Every extension runs in its own sandboxed iframe (`sandbox="allow-scripts"`, no same-origin) with a content-security-policy that forbids all network access, so it can't read your account, your storage, cookies or documents, or send anything out. A `/` command is handed the document's text (so it can, for example, count words) and returns text or HTML that the editor parses itself. A block's markup is cleaned (scripts, styles, frames, forms, event handlers and `javascript:` addresses are removed) before it is shown. Blocks are saved in the document as the extension's id, the block id and its settings; on an account without the extension they show a placeholder. Code: `frontend/src/extensions/`.
+
+Insights now ends its top section with **What you can improve**: a short list (hard-to-read text, over-long sentences or paragraphs, passive voice, repeated words, one-sided tone) or a note that nothing stands out.

@@ -5,7 +5,9 @@ import { Extension, type Editor, type Range } from '@tiptap/core'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
 import { SHAPE_KINDS } from './shapes'
 import { DIVIDERS } from './Blocks'
-import { Sparkles, CalendarDays, Shapes, CheckSquare, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Info, List, ListOrdered, Minus, Pilcrow, Quote, Table2, TriangleAlert, Lightbulb, OctagonX, Sigma, ChevronRight, Columns3, TextQuote, ListTree, type LucideIcon } from 'lucide-react'
+import { callExt, extState } from '../extensions/runtime'
+import { toast } from '../ui/Toast'
+import { Sparkles, CalendarDays, Shapes, CheckSquare, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Info, List, ListOrdered, Minus, Pilcrow, Quote, Table2, TriangleAlert, Lightbulb, OctagonX, Sigma, Puzzle, ChevronRight, Columns3, TextQuote, ListTree, type LucideIcon } from 'lucide-react'
 
 export interface SlashItem { title: string; hint: string; keys: string; icon: LucideIcon; run: (editor: Editor, range: Range) => void }
 const del = (e: Editor, r: Range) => e.chain().focus().deleteRange(r)
@@ -38,7 +40,24 @@ const ITEMS: SlashItem[] = [
   { title: 'Image', hint: 'Upload a picture', keys: 'photo picture upload', icon: ImageIcon, run: (e, r) => { del(e, r).run(); window.dispatchEvent(new Event('koko:pick-image')) } },
   { title: 'Today’s date', hint: new Date().toLocaleDateString(undefined, { dateStyle: 'long' }), keys: 'date today time', icon: CalendarDays, run: (e, r) => del(e, r).insertContent(new Date().toLocaleDateString(undefined, { dateStyle: 'long' }) + ' ').run() },
 ]
-const filter = (q: string, extra: SlashItem[]) => { const s = q.toLowerCase().trim(); const all = [...ITEMS, ...extra]; return s ? all.filter((i) => i.title.toLowerCase().includes(s) || i.keys.includes(s)) : all }
+/** Slash commands and blocks that extensions add. */
+const extItems = (): SlashItem[] => {
+  const { slashes, blocks } = extState()
+  return [
+    ...slashes.map((x): SlashItem => ({ title: x.title, hint: x.hint || 'From an extension', keys: `${x.keys} extension`.toLowerCase(), icon: Puzzle, run: (e, r) => {
+      del(e, r).run()
+      const text = e.getText().slice(0, 20000)
+      callExt(x.ext, x.fn, { text, date: new Date().toISOString() }).then((out) => {
+        if (out == null || out === '') return
+        if (typeof out === 'string') e.chain().focus().insertContent(out).run()
+        else if (typeof out === 'object' && typeof out.text === 'string') e.chain().focus().insertContent({ type: 'text', text: out.text }).run()
+        else if (typeof out === 'object' && typeof out.html === 'string') e.chain().focus().insertContent(out.html).run()
+      }).catch((err: Error) => toast(`${x.title}: ${err.message}`))
+    } })),
+    ...blocks.map((b): SlashItem => ({ title: b.title, hint: b.hint || 'Block from an extension', keys: `${b.title} extension block`.toLowerCase(), icon: Puzzle, run: (e, r) => del(e, r).insertExtBlock(b.ext, b.id, b.defaults).run() })),
+  ]
+}
+const filter = (q: string, extra: SlashItem[]) => { const s = q.toLowerCase().trim(); const all = [...ITEMS, ...extItems(), ...extra]; return s ? all.filter((i) => i.title.toLowerCase().includes(s) || i.keys.includes(s)) : all }
 
 interface Live { items: SlashItem[]; rect: DOMRect | null; command: (i: SlashItem) => void; sel: number }
 let live: Live | null = null

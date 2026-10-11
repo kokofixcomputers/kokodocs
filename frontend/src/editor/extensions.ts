@@ -1,6 +1,7 @@
 import { Callout } from './Callout'
 import { MathBlock, MathInline } from './MathNode'
 import { customBlocks } from './Blocks'
+import { ExtBlock } from '../extensions/ExtBlock'
 import { DocShape } from './ShapeNode'
 import { EmojiNode } from './EmojiNode'
 import StarterKit from '@tiptap/starter-kit'
@@ -30,5 +31,5 @@ export const baseExtensions = () => [
   DocLink.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' } }),
   TaskList, KokoTaskItem.configure({ nested: true }),
   KokoTable.configure({ resizable: true, lastColumnResizable: false }), TableRow, KokoTableHeader, KokoTableCell,
-  ResizableImage.configure({ inline: true, allowBase64: false }), DocShape, LinkEmbed, MathInline, MathBlock, ...customBlocks(),
+  ResizableImage.configure({ inline: true, allowBase64: false }), DocShape, LinkEmbed, MathInline, MathBlock, ...customBlocks(), ExtBlock,
 ]

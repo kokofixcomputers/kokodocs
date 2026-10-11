@@ -714,3 +714,10 @@ html.embed .ed-body { padding: 0; }
 .branch-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: inherit; font-size: 12.5px; text-decoration: none; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; } .branch-chip:hover { text-decoration: underline; }
 .cmp { display: grid; gap: 10px; min-width: 0; padding: 0 22px 6px; } .cmp-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .cmp-lbl { font-weight: 600; } .cmp-note { margin: 0; font-size: 13px; }
 .cmp-scroll { max-height: 62vh; overflow: auto; border-radius: var(--r-lg); }
+
+.ins-sum { display: grid; gap: 8px; padding: 12px 14px; border-radius: 16px; background: var(--accent-soft); } .ins-sum h4 { margin: 0; }
+.ins-sum ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; } .ins-sum li { display: flex; gap: 9px; font-size: 13.5px; line-height: 1.4; } .ins-sum li svg { flex: none; margin-top: 2px; color: hsl(38 85% 50%); } .ins-sum li.good svg { color: hsl(140 55% 42%); }
+
+.ext-block { margin: 10px 0; padding: 4px; border-radius: 12px; cursor: default; } .ext-block:hover, .ext-block.ProseMirror-selectednode { outline: 2px solid var(--accent-soft-2); }
+.ext-block-body.missing { padding: 12px 14px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 14px; }
+.ext-form b { font-size: 15px; } .ext-field { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); } .ext-field input, .ext-field textarea { font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); } .ext-field input[type=color] { padding: 2px; height: 36px; }

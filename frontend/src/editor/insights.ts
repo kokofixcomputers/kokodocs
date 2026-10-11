@@ -8,6 +8,7 @@ export interface Insights {
   readMin: number; speakMin: number
   top: { word: string; n: number }[]
   score: number
+  tips: { good: boolean; text: string }[]
 }
 
 const STOP = new Set(('a an and are as at be been but by can could did do does for from had has have he her his how i if in into is it its just may me more my no not of on one or our out she so some than that the their them then there these they this to too up us was we were what when which who will with would you your about after all also any because both each few get got him over said same should such very while where why').split(' '))
@@ -62,8 +63,27 @@ export function analyse(paragraphs: string[]): Insights {
   const varietyScore = clamp(((variety - 0.4) / 0.5) * 100)
   const score = words < 10 ? 0 : Math.round(ease * 0.45 + varietyScore * 0.3 + lengthBalance * 0.25)
 
+  const passive = sentences.filter((x) => /\b(?:is|are|was|were|been|being|be)\s+(?:\w+ly\s+)?\w+(?:ed|en)\b(?:\s+by\b)?/i.test(x)).length
+  const longParas = paragraphs.filter((p) => (p.match(/[\p{L}\p{N}]+/gu) ?? []).length > 120).length
+  const tips: { good: boolean; text: string }[] = []
+  if (words >= 10) {
+    const round = Math.round(ease)
+    if (round < 50) tips.push({ good: false, text: `Hard to read (reading ease ${round}). Shorter sentences and everyday words will help.` })
+    else if (round >= 60) tips.push({ good: true, text: 'Easy to read: plain words and sensible sentence lengths.' })
+    const long = sLens.filter((l) => l > 30).length
+    if (long) tips.push({ good: false, text: `${long} ${long === 1 ? 'sentence is' : 'sentences are'} over 30 words. Try splitting ${long === 1 ? 'it' : 'them'} in two.` })
+    if (sentences.length >= 4 && avgSentence < 8) tips.push({ good: false, text: 'Most sentences are very short. Mixing in a few longer ones makes the writing flow.' })
+    if (sentences.length >= 4 && passive / sentences.length > 0.25) tips.push({ good: false, text: `About ${Math.round((passive / sentences.length) * 100)}% of sentences look passive (“was done by…”). Active voice is usually clearer.` })
+    if (words >= 80 && varietyScore < 45) tips.push({ good: false, text: `Lots of repeated words${top.length ? ` (“${top.slice(0, 3).map((t) => t.word).join('”, “')}”)` : ''}. Swap a few for synonyms.` })
+    else if (words >= 80 && varietyScore >= 75) tips.push({ good: true, text: 'Good vocabulary variety.' })
+    if (longParas) tips.push({ good: false, text: `${longParas} ${longParas === 1 ? 'paragraph runs' : 'paragraphs run'} past 120 words. Breaking ${longParas === 1 ? 'it' : 'them'} up helps skimmers.` })
+    if (evidence >= 6 && Math.abs(sentiment) > 0.6) tips.push({ good: false, text: `The tone is very ${sentiment > 0 ? 'positive' : 'negative'}. Fine if you mean it; otherwise balance it with some neutral facts.` })
+    if (words >= 150 && paragraphs.filter((p) => p.trim()).length < 3) tips.push({ good: false, text: 'It is one big block. Add headings or paragraph breaks.' })
+    if (!tips.some((t) => !t.good)) tips.push({ good: true, text: 'Nothing stands out to fix. Nice work.' })
+  }
+
   return {
-    words, sentences: sentences.length, paragraphs: paragraphs.filter((p) => p.trim()).length, chars: text.length,
+    tips, words, sentences: sentences.length, paragraphs: paragraphs.filter((p) => p.trim()).length, chars: text.length,
     ease: Math.round(ease), grade: Math.round(grade * 10) / 10, easeLabel: words < 3 ? '—' : easeLabel(ease),
     sentiment, sentimentLabel: evidence < 2 ? 'Neutral' : sentiment > 0.25 ? 'Positive' : sentiment < -0.25 ? 'Negative' : 'Balanced', pos, neg,
     variety: Math.round(varietyScore), unique: uniq.size,

@@ -10,8 +10,9 @@ from .db import get_db
 from .routes import must_user
 
 router = APIRouter(prefix="/api")
-KEYS = {"snippets", "writing"}   # what can be stored
+KEYS = {"snippets", "writing", "extensions"}   # what can be stored
 MAX = 64 * 1024
+MAX_EXT = 512 * 1024   # extensions are small programs: up to 20, 100 KB each
 
 
 @router.get("/me/prefs")
@@ -34,7 +35,7 @@ def put_pref(key: str, body: PrefIn, user=Depends(must_user), db=Depends(get_db)
     if key not in KEYS:
         raise HTTPException(404, "Unknown setting")
     raw = json.dumps(body.value, separators=(",", ":"))
-    if len(raw.encode()) > MAX:
+    if len(raw.encode()) > (MAX_EXT if key == "extensions" else MAX):
         raise HTTPException(413, "That is too much to keep (64 KB at most)")
     if key == "snippets":
         v = body.value
@@ -48,6 +49,18 @@ def put_pref(key: str, body: PrefIn, user=Depends(must_user), db=Depends(get_db)
             if t in seen:
                 raise HTTPException(422, f"“{t}” is used twice")
             seen.add(t)
+    if key == "extensions":
+        v = body.value
+        items = v.get("items") if isinstance(v, dict) else None
+        if not isinstance(items, list) or len(items) > 20 or not isinstance(v.get("theme", ""), str):
+            raise HTTPException(422, "Extensions are a list of at most 20")
+        ids = set()
+        for x in items:
+            if not (isinstance(x, dict) and isinstance(x.get("id"), str) and isinstance(x.get("name"), str) and isinstance(x.get("code"), str) and isinstance(x.get("enabled"), bool)):
+                raise HTTPException(422, "Each extension needs an id, name, code and enabled flag")
+            if len(x["code"].encode()) > 100 * 1024 or not 1 <= len(x["name"]) <= 80 or not x["id"].replace("-", "").isalnum() or len(x["id"]) > 40 or x["id"] in ids:
+                raise HTTPException(422, "An extension is too big (100 KB), has no name, or has a bad id")
+            ids.add(x["id"])
     db.execute("INSERT INTO user_prefs (user_id, key, value, updated_at) VALUES (?,?,?,?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", (user["id"], key, raw, time.time()))
     db.commit()
     return {"ok": True}

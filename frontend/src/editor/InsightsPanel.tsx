@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import { Clock3, Gauge, Mic } from 'lucide-react'
+import { CheckCircle2, Clock3, Gauge, Lightbulb, Mic } from 'lucide-react'
 import { api, type Version } from '../api'
 import { analyse, type Insights } from './insights'
 
@@ -74,6 +74,10 @@ export function InsightsPanel({ editor, docId, refreshKey }: { editor: Editor; d
           <div className="ins-hero">
             <Ring value={res.score} size={150} stroke={14}><b className="ins-big">{res.score}</b><span>Writing score</span></Ring>
             <p className="ins-hero-note">{res.score >= 75 ? 'Clear and easy to follow.' : res.score >= 55 ? 'Solid. A few shorter sentences would help.' : 'Dense in places. Try shorter sentences and simpler words.'}</p>
+          </div>
+          <div className="ins-sum" aria-label="What you can improve">
+            <h4 className="ins-h">{res.tips.some((t) => !t.good) ? 'What you can improve' : 'Summary'}</h4>
+            <ul>{[...res.tips].sort((a, b) => Number(a.good) - Number(b.good)).slice(0, 5).map((t, i) => <li key={i} className={t.good ? 'good' : ''}>{t.good ? <CheckCircle2 size={16} /> : <Lightbulb size={16} />}<span>{t.text}</span></li>)}</ul>
           </div>
           <div className="ins-rings">
             <div className="ins-card"><Ring value={res.ease}><b>{res.ease}</b></Ring><h4>Readability</h4><span>{res.easeLabel} · grade {res.grade}</span></div>

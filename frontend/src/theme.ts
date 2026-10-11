@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { extThemeBase, setSelectedTheme } from './extensions/runtime'
+import { getExtensions, saveExtensions } from './prefs'
 
 /** What the person chose. "system" follows the device, and is what you get until you pick light or dark. */
 export type ThemePref = 'light' | 'dark' | 'system'
@@ -13,19 +15,21 @@ const systemDark = () => typeof matchMedia === 'function' && matchMedia('(prefer
 export function useTheme() {
   const [pref, setPrefState] = useState<ThemePref>(readPref)
   const [sysDark, setSysDark] = useState(systemDark)
-  const theme: 'light' | 'dark' = pref === 'system' ? (sysDark ? 'dark' : 'light') : pref
+  const [tick, setTick] = useState(0)
+  const theme: 'light' | 'dark' = extThemeBase() ?? (pref === 'system' ? (sysDark ? 'dark' : 'light') : pref)
 
   useEffect(() => {
-    const sync = () => setPrefState(readPref())
+    const sync = () => { setPrefState(readPref()); setTick((n) => n + 1) }
     window.addEventListener('koko:theme', sync)
     const mq = matchMedia('(prefers-color-scheme: dark)')
     const onSys = (e: MediaQueryListEvent) => setSysDark(e.matches)
     mq.addEventListener('change', onSys)
     return () => { window.removeEventListener('koko:theme', sync); mq.removeEventListener('change', onSys) }
   }, [])
-  useEffect(() => { document.documentElement.dataset.theme = theme }, [theme])
+  useEffect(() => { document.documentElement.dataset.theme = extThemeBase() ?? theme }, [theme, tick])   // a theme from an extension decides light or dark itself
 
   const setPref = useCallback((p: ThemePref) => {
+    if (extThemeBase()) { setSelectedTheme(''); void saveExtensions(getExtensions().items, '').catch(() => {}) }   // choosing light or dark puts the usual colours back
     try { localStorage.setItem(KEY, p) } catch { /* private mode */ }
     setPrefState(p)
     window.dispatchEvent(new Event('koko:theme'))
