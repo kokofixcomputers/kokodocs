@@ -29,7 +29,7 @@ function spacingEdits(doc: PMNode, from: number, to: number): { from: number; to
     const start = pos + 1, text = textOf(node)
     const del = (a: number, b: number) => { if (b > a && start + a >= from && start + b <= to + 1) out.push({ from: start + a, to: start + b }) }
     for (const m of text.matchAll(/ {2,}/g)) if (m.index > 0) del(m.index + 1, m.index + m[0].length)   // two spaces or more → one
-    for (const m of text.matchAll(/(?<=\S) +(?=[,.;](?!\d))/g)) del(m.index, m.index + m[0].length)     // a space before , . ;
+    for (const m of text.matchAll(/(\S)( +)(?=[,.;](?!\d))/g)) del(m.index + 1, m.index + m[0].length)     // a space before , . ;
     const lead = /^[ \t ]+/.exec(text)?.[0].length ?? 0, trail = /[ \t ]+$/.exec(text)?.[0].length ?? 0
     if (lead && lead < text.length) del(0, lead)
     if (trail && trail < text.length) del(text.length - trail, text.length)

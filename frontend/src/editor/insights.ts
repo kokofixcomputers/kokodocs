@@ -29,7 +29,7 @@ const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v))
 
 export function analyse(paragraphs: string[]): Insights {
   const text = paragraphs.join('\n')
-  const sentences = paragraphs.flatMap((p) => p.split(/(?<=[.!?…])\s+|\n+/)).map((s) => s.trim()).filter((s) => /[\p{L}\p{N}]/u.test(s))
+  const sentences = paragraphs.flatMap((p) => p.replace(/([.!?…])\s+/g, '$1\u0001').split(/\u0001|\n+/)).map((s) => s.trim()).filter((s) => /[\p{L}\p{N}]/u.test(s))
   const tokens = (text.toLowerCase().match(/[\p{L}\p{N}]+(?:['’][\p{L}]+)?/gu) ?? []).map((t) => t.replace(/’/g, "'"))
   const words = tokens.length
   const syl = tokens.reduce((n, t) => n + syllables(t), 0)

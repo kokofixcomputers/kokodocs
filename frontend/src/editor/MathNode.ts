@@ -83,7 +83,7 @@ function mathNode(name: 'mathInline' | 'mathBlock') {
     addInputRules() {
       return block
         ? [nodeInputRule({ find: /^\$\$\s$/, type: this.type, getAttributes: () => { fresh = true; return { latex: '' } } })]
-        : [new InputRule({ find: /(?<![\\$])\$([^$\n]+?)\$$/, handler: ({ state, range, match }) => { state.tr.replaceWith(range.from, range.to, this.type.create({ latex: match[1].trim() })) } })]
+        : [new InputRule({ find: /(^|[^\\$])\$([^$\n]+?)\$$/, handler: ({ state, range, match }) => { state.tr.replaceWith(range.from + match[1].length, range.to, this.type.create({ latex: match[2].trim() })) } })]
     },
     addNodeView() {
       return ({ node, getPos, editor }) => {

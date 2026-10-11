@@ -19,7 +19,7 @@ export function wrapLines(text: string, css: string, maxW: number): string[] {
   for (const para of text.split('\n')) {
     if (!para) { out.push(''); continue }
     let line = ''
-    for (const word of para.split(/(?<=\s)/)) {
+    for (const word of (para.match(/[^\s]*\s|[^\s]+$/g) ?? [])) {
       const t = line + word
       if (!line || measure(t.trimEnd(), css) <= maxW) { line = t; continue }
       out.push(line.trimEnd()); line = word
