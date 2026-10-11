@@ -66,7 +66,7 @@ def must_user(user=Depends(current_user)):
 
 
 def public_user(u) -> dict:
-    return {"id": u["id"], "email": u["email"], "name": u["name"], "color": u["color"], "is_admin": access.is_admin(u), "has_password": bool(u["pw_set"]), "notify_email": bool(u["notify_email"]), "totp": bool(u["totp_enabled"]), "google": u["google_email"], "zk": bool(u["zk_enabled"]), "zk_pub": u["zk_pub"]}
+    return {"id": u["id"], "email": u["email"], "name": u["name"], "color": u["color"], "avatar": access.avatar_url(u["id"], u["avatar"]), "is_admin": access.is_admin(u), "has_password": bool(u["pw_set"]), "notify_email": bool(u["notify_email"]), "totp": bool(u["totp_enabled"]), "google": u["google_email"], "zk": bool(u["zk_enabled"]), "zk_pub": u["zk_pub"]}
 
 
 # ───────────────────────── auth ─────────────────────────
@@ -252,7 +252,7 @@ def recent_docs(limit: int = 8, user=Depends(must_user), db=Depends(get_db)):
 @router.get("/docs/{doc_id}")
 def get_doc(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
     doc, acc = access.require(db, doc_id, *c)
-    owner = db.execute("SELECT name, email FROM users WHERE id = ?", (doc["owner_id"],)).fetchone()
+    owner = db.execute("SELECT id, name, email, avatar FROM users WHERE id = ?", (doc["owner_id"],)).fetchone()
     starred = False
     if acc.user:   # remember what this person opened, for the Recent row
         db.execute("INSERT INTO recents (user_id, doc_id, opened_at) VALUES (?,?,?) ON CONFLICT(user_id, doc_id) DO UPDATE SET opened_at = excluded.opened_at", (acc.user["id"], doc_id, time.time()))
@@ -260,7 +260,7 @@ def get_doc(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
         db.commit()
     return {
         **doc_summary(doc, acc.role, owner["name"], starred, sealed=(db.execute("SELECT sealed FROM zk_grants WHERE doc_id = ? AND email = ?", (doc_id, acc.user["email"])).fetchone() or {"sealed": None})["sealed"] if acc.user and doc["zk"] else None),
-        "owner_email": owner["email"],
+        "owner_email": owner["email"], "owner_avatar": access.avatar_url(owner["id"], owner["avatar"]),
         "branch": branch_info(db, doc, acc),
         "link": {"access": "restricted" if access.expired(doc["link_expires_at"]) else doc["link_access"], "expires_at": doc["link_expires_at"], "role": "viewer" if doc["kind"] == "form" else doc["link_role"]},
     }
@@ -348,7 +348,7 @@ def expiry_value(choice: str, current, link_access: str):
 
 def sharing_view(db, doc) -> dict:
     rows = db.execute(
-        """SELECT s.email, s.role, u.name FROM shares s LEFT JOIN users u ON u.email = s.email
+        """SELECT s.email, s.role, u.name, u.id AS uid, u.avatar FROM shares s LEFT JOIN users u ON u.email = s.email
            WHERE s.doc_id = ? ORDER BY s.created_at""",
         (doc["id"],),
     ).fetchall()

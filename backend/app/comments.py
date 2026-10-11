@@ -27,10 +27,10 @@ class NewComment(BaseModel):
     anchor: dict | None = None   # where a spreadsheet or slide comment points: {"sheet","r","c"} or {"slide","el"}
 
 
-def view(r, names):
+def view(r, names, avatars=None):
     return {
         "id": r["id"], "parent_id": r["parent_id"], "body": r["body"], "quote": r["quote"], "resolved": bool(r["resolved"]),
-        "created_at": r["created_at"], "user_id": r["user_id"], "author": names.get(r["user_id"], "Someone"),
+        "created_at": r["created_at"], "user_id": r["user_id"], "author": names.get(r["user_id"], "Someone"), "avatar": (avatars or {}).get(r["user_id"]),
         "mentions": json.loads(r["mentions"]), "anchor": json.loads(r["anchor"]) if r["anchor"] else None,
     }
 
@@ -43,12 +43,21 @@ def names_for(db, rows):
     return {u["id"]: u["name"] for u in db.execute(f"SELECT id, name FROM users WHERE id IN ({q})", tuple(ids)).fetchall()}
 
 
+def avatars_for(db, rows):
+    ids = {r["user_id"] for r in rows}
+    if not ids:
+        return {}
+    q = ",".join("?" * len(ids))
+    return {u["id"]: access.avatar_url(u["id"], u["avatar"]) for u in db.execute(f"SELECT id, avatar FROM users WHERE id IN ({q})", tuple(ids)).fetchall()}
+
+
 @router.get("/docs/{doc_id}/comments")
 def list_comments(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
     access.require(db, doc_id, *c)
     rows = db.execute("SELECT * FROM comments WHERE doc_id = ? ORDER BY created_at", (doc_id,)).fetchall()
     names = names_for(db, rows)
-    return [view(r, names) for r in rows]
+    av = avatars_for(db, rows)
+    return [view(r, names, av) for r in rows]
 
 
 @router.get("/docs/{doc_id}/people")
@@ -100,7 +109,7 @@ def add_comment(doc_id: str, b: NewComment, request: Request, tasks: BackgroundT
         tasks.add_task(notifications.send_mail_background, to, *notifications.mention_mail(actor, doc["title"], text or "The comment is encrypted: open the document to read it.", base + link))
     r = db.execute("SELECT * FROM comments WHERE id = ?", (cid,)).fetchone()
     notify_comments(doc_id)
-    return {**view(r, {user["id"]: user["name"]}), "skipped": skipped}
+    return {**view(r, {user["id"]: user["name"]}, {user["id"]: access.avatar_url(user["id"], user["avatar"])}), "skipped": skipped}
 
 
 class Resolve(BaseModel):

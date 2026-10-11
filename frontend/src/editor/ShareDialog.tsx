@@ -34,7 +34,7 @@ function PlainShareDialog({ info, onClose }: { info: DocInfo; onClose: () => voi
   const [linkRole, setLinkRole] = useState<R>(info.link.role)
   const [password, setPassword] = useState('')
   const [expires, setExpires] = useState<Expiry>('keep')
-  const [shares, setShares] = useState<{ email: string; role: R; name: string | null }[]>([])
+  const [shares, setShares] = useState<{ email: string; role: R; name: string | null; avatar?: string | null }[]>([])
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<R>(info.kind === 'form' ? 'viewer' : 'editor')
   const [err, setErr] = useState('')
@@ -89,12 +89,12 @@ function PlainShareDialog({ info, onClose }: { info: DocInfo; onClose: () => voi
 
           <div className="people">
             <div className="person">
-              <Avatar name={info.owner ?? 'Owner'} color="#111111" /><div className="p-info"><b>{info.owner}{isOwner ? ' (you)' : ''}</b><span>{info.owner_email}</span></div>
+              <Avatar name={info.owner ?? 'Owner'} color="#111111" src={info.owner_avatar} /><div className="p-info"><b>{info.owner}{isOwner ? ' (you)' : ''}</b><span>{info.owner_email}</span></div>
               <span className="p-role">Owner</span>
             </div>
             {shares.map((s) => (
               <div className="person rise" key={s.email}>
-                <Avatar name={s.name ?? s.email} color="#8b8aa5" />
+                <Avatar name={s.name ?? s.email} color="#8b8aa5" src={s.avatar} />
                 <div className="p-info"><b>{s.name ?? s.email}{user?.email === s.email ? ' (you)' : ''}</b>{s.name && <span>{s.email}</span>}</div>
                 <RoleSelect form={isForm} value={s.role} onChange={(r) => setShares((l) => l.map((x) => (x.email === s.email ? { ...x, role: r } : x)))} />
                 <button className="icon-btn sm" aria-label="Remove" onClick={() => setShares((l) => l.filter((x) => x.email !== s.email))}><X size={16} /></button>

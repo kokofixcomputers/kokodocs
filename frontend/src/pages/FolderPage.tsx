@@ -60,7 +60,7 @@ export function FolderPage() {
         <Link to="/" className="brand"><Logo size={30} /><span>KokoDocs</span></Link>
         <div className="top-actions">
           <button className="icon-btn" onClick={toggle} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
-          {user ? <Link to="/" className="avatar-btn"><Avatar name={user.name} color={user.color} size={34} /></Link>
+          {user ? <Link to="/" className="avatar-btn"><Avatar name={user.name} color={user.color} src={user.avatar} size={34} /></Link>
             : <Link className="btn btn-pill btn-ghost" to="/login" state={{ from: `/f/${id}` }}><LogIn size={16} />Sign in</Link>}
         </div>
       </header>

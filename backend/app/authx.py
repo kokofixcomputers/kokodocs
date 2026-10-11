@@ -197,6 +197,8 @@ async def delete_account(b: DeleteAccount, user=Depends(must_user), db=Depends(g
         raise HTTPException(400, "This is a built-in admin account and can't be deleted here")
     quota.drop_uploads(db, "owner_id = ?", (user["id"],))
     quota.drop_recordings(db, "owner_id = ?", (user["id"],))
+    from .avatars import remove_file
+    remove_file(user["id"])
     db.execute("DELETE FROM users WHERE id = ?", (user["id"],))   # documents, folders, versions, comments, settings cascade
     db.commit()
     await refresh_all()

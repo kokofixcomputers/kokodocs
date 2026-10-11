@@ -16,7 +16,7 @@ export function CardComments({ docId, cardId, user, list, refresh }: { docId: st
       {mine.length === 0 && <p className="bd-muted">No comments yet.</p>}
       {mine.map((m) => (
         <div key={m.id} className="cm-msg">
-          <Avatar name={m.author} color="#8b8aa5" size={26} />
+          <Avatar name={m.author} color="#8b8aa5" src={m.avatar} size={26} />
           <div className="cm-main">
             <div className="cm-meta"><b>{m.author}</b><span>{ago(m.created_at)}</span>
               {user && m.mentions.includes(me) && <em>mentions you</em>}

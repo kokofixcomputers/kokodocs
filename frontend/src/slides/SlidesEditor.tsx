@@ -49,7 +49,7 @@ function useStatus(p: KokoProvider) { const [, f] = useState(0); useEffect(() =>
 export default function SlidesEditor({ info }: { info: DocInfo }) {
   const { user } = useAuth()
   const readOnly = info.role === 'viewer'
-  const identity = useMemo(() => (user ? { name: user.name, color: user.color } : guestIdentity()), [user])
+  const identity = useMemo(() => (user ? { name: user.name, color: user.color, avatar: user.avatar ?? null } : guestIdentity()), [user])
   const ydoc = useMemo(() => new Y.Doc(), [])
   const model = useMemo(() => new SlidesModel(ydoc), [ydoc])
   const [provider, setProvider] = useState<KokoProvider | null>(null)
@@ -83,7 +83,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const [verKey, setVerKey] = useState(0)
   const [presenting, setPresenting] = useState<number | null>(null)
   const [remotes, setRemotes] = useState<RemoteSel[]>([])
-  const [people, setPeople] = useState<{ id: number; name: string; color: string }[]>([])
+  const [people, setPeople] = useState<{ id: number; name: string; color: string; avatar?: string | null }[]>([])
   const clip = useRef<El[]>([])
   const [chartEdit, setChartEdit] = useState<string | null>(null)
   const [activeCell, setActiveCell] = useState<{ r: number; c: number } | null>(null)
@@ -115,7 +115,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   useEffect(() => { provider.awareness.setLocalStateField('sel', { slide: slide?.id, ids: sel }) }, [provider, slide?.id, sel])
   useEffect(() => {
     const f = () => {
-      const r: RemoteSel[] = [], p: { id: number; name: string; color: string }[] = []
+      const r: RemoteSel[] = [], p: { id: number; name: string; color: string; avatar?: string | null }[] = []
       provider.awareness.getStates().forEach((s, id) => {
         if (id === provider.doc.clientID || !s.user) return
         const u = s.user as { name: string; color: string }, rs = s.sel as { slide?: string; ids?: string[] } | undefined
@@ -246,7 +246,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
           <EncryptionBadge info={info} />
         </div>
         <div className="ed-right">
-          <div className="presence">{people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} size={32} ring />)}{people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}</div>
+          <div className="presence">{people.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} color={p.color} src={p.avatar} size={32} ring />)}{people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}</div>
           <button className="btn btn-pill btn-soft" onClick={() => setPresenting(index)}><Play size={16} /><span className="lbl">Present</span></button>
           <SlidesExportMenu model={model} slides={slides} title={title} />
           {!readOnly && <button className={`icon-btn ${panel === 'history' ? 'active' : ''}`} title="Version history" aria-label="Version history" onClick={() => { setPreview(null); setPanel((p) => (p === 'history' ? 'none' : 'history')) }}><History size={19} /></button>}
@@ -259,7 +259,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
           <RequestAccess info={info} />
           <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
           {user ? (
-            <Popover align="end" trigger={({ toggle }) => <button className="avatar-btn" onClick={toggle}><Avatar name={user.name} color={user.color} size={34} /></button>}>
+            <Popover align="end" trigger={({ toggle }) => <button className="avatar-btn" onClick={toggle}><Avatar name={user.name} color={user.color} src={user.avatar} size={34} /></button>}>
               {(close) => (<div className="menu wide"><div className="menu-head"><strong>{user.name}</strong><span>{user.email}</span></div><Link to="/" className="menu-link" onClick={close}>All documents</Link><button onClick={() => { close(); openSettings() }}>Settings</button><button onClick={() => { close(); logout() }}>Sign out</button></div>)}
             </Popover>
           ) : <Link className="btn btn-pill btn-ghost" to="/login" state={{ from: `/d/${info.id}` }}><LogIn size={16} />Sign in</Link>}

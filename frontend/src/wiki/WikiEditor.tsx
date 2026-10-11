@@ -67,7 +67,7 @@ export default function WikiEditor({ info }: { info: DocInfo }) {
   const { user, logout } = useAuth()
   const { theme, toggle } = useTheme()
   const readOnly = info.role === 'viewer'
-  const identity = useMemo(() => (user ? { name: user.name, color: user.color } : guestIdentity()), [user])
+  const identity = useMemo(() => (user ? { name: user.name, color: user.color, avatar: user.avatar ?? null } : guestIdentity()), [user])
   const ydoc = useMemo(() => new Y.Doc(), [])
   const [provider, setProvider] = useState<KokoProvider | null>(null)
   useEffect(() => {
@@ -322,7 +322,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             <RequestAccess info={info} />
           <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
             {user ? (
-              <Popover align="end" trigger={({ toggle }) => <button className="avatar-btn" onClick={toggle}><Avatar name={user.name} color={user.color} size={34} /></button>}>
+              <Popover align="end" trigger={({ toggle }) => <button className="avatar-btn" onClick={toggle}><Avatar name={user.name} color={user.color} src={user.avatar} size={34} /></button>}>
                 {(close) => (
                   <div className="menu wide">
                     <div className="menu-head"><strong>{user.name}</strong><span>{user.email}</span></div>

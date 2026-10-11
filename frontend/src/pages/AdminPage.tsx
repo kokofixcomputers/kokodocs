@@ -613,7 +613,7 @@ export function AdminPage() {
             {SECTIONS.filter((x) => x.group === g).map((x) => (
               <button key={x.id} className={`ad-nav ${sec === x.id ? 'on' : ''}`} aria-current={sec === x.id ? 'page' : undefined} onClick={() => open(x.id)}>{x.icon}<span>{x.label}</span></button>))}
           </div>))}
-        <div className="ad-me"><Avatar name={user.name} color={user.color} size={30} /><div><b>{user.name}</b><span>{user.email}</span></div></div>
+        <div className="ad-me"><Avatar name={user.name} color={user.color} src={user.avatar} size={30} /><div><b>{user.name}</b><span>{user.email}</span></div></div>
       </nav>
       <main className="ad-main">
         <div className="ad-main-inner">

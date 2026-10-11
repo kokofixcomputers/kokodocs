@@ -10,7 +10,7 @@ import { HEADER_H, HEADER_W, rectHas, rectNorm, type ClipPayload, type Rect, typ
 
 export interface Sel { ar: number; ac: number; fr: number; fc: number }
 export interface Editing { r: number; c: number; text: string; mode: 'enter' | 'edit'; from: 'cell' | 'bar' }
-export interface Remote { id: number; name: string; color: string; sel?: Sel; sheet?: string }
+export interface Remote { id: number; name: string; color: string; avatar?: string | null; sel?: Sel; sheet?: string }
 export interface Layout { colX: number[]; rowY: number[]; X: (c: number) => number; Y: (r: number) => number; totalW: number; totalH: number }
 
 /** Readable text color for a custom cell fill (so a light fill never gets light text in dark mode). */

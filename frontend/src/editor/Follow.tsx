@@ -10,7 +10,7 @@ import type { KokoProvider } from '../collab'
 
 /** Follow mode: pick a collaborator's picture at the top and your view stays with their cursor, scrolling as they type or move around (and, in a wiki, going to the page they are on).
  *  Scrolling, clicking or typing yourself stops it. */
-export interface Person { id: number; name: string; color: string }
+export interface Person { id: number; name: string; color: string; avatar?: string | null }
 
 export function useFollow({ provider, editor, scroller, page, goPage }: {
   provider: KokoProvider; editor: Editor | null; scroller: React.RefObject<HTMLElement | null>; page?: string | null; goPage?: (id: string) => void
@@ -64,7 +64,7 @@ export function PresenceStack({ people, followId, onToggle }: { people: Person[]
         <button key={p.id} type="button" className={`pres-btn ${followId === p.id ? 'following' : ''}`} aria-pressed={followId === p.id}
           title={followId === p.id ? `Stop following ${p.name}` : `Follow ${p.name}: your view stays with their cursor`} aria-label={followId === p.id ? `Stop following ${p.name}` : `Follow ${p.name}`}
           style={{ ['--pc' as string]: p.color }} onClick={() => onToggle(p)}>
-          <Avatar name={p.name} color={p.color} size={32} ring />{followId === p.id && <i className="pres-eye"><Eye size={10} /></i>}
+          <Avatar name={p.name} color={p.color} src={p.avatar} size={32} ring />{followId === p.id && <i className="pres-eye"><Eye size={10} /></i>}
         </button>))}
       {people.length > 5 && <span className="more" data-tip={people.slice(5).map((x) => x.name).join(', ')}>+{people.length - 5}</span>}
     </div>

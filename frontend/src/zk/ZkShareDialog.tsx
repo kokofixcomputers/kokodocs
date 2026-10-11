@@ -21,7 +21,7 @@ export function ZkShareDialog({ info, onClose }: { info: DocInfo; onClose: () =>
   const { user } = useAuth()
   const owner = info.role === 'owner' || info.role === 'manager'
   const [data, setData] = useState<Sharing | null>(null)
-  const [shares, setShares] = useState<{ email: string; role: R; name: string | null }[]>([])
+  const [shares, setShares] = useState<{ email: string; role: R; name: string | null; avatar?: string | null }[]>([])
   const [prints, setPrints] = useState<Record<string, string>>({})
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<R>('editor')
@@ -82,12 +82,12 @@ export function ZkShareDialog({ info, onClose }: { info: DocInfo; onClose: () =>
           </div>
           <div className="people">
             <div className="person">
-              <Avatar name={info.owner ?? 'Owner'} color="#111111" /><div className="p-info"><b>{info.owner}{info.role === 'owner' ? ' (you)' : ''}</b><span>{info.owner_email}</span></div>
+              <Avatar name={info.owner ?? 'Owner'} color="#111111" src={info.owner_avatar} /><div className="p-info"><b>{info.owner}{info.role === 'owner' ? ' (you)' : ''}</b><span>{info.owner_email}</span></div>
               <span className="p-role">Owner</span>
             </div>
             {shares.map((s) => (
               <div className="person rise" key={s.email}>
-                <Avatar name={s.name ?? s.email} color="#8b8aa5" />
+                <Avatar name={s.name ?? s.email} color="#8b8aa5" src={s.avatar} />
                 <div className="p-info"><b>{s.name ?? s.email}{user?.email === s.email ? ' (you)' : ''}</b><span>{s.name ? s.email : ''}{prints[s.email] ? <span className="zk-fp" title="Compare with what they see in Settings, Security, to be sure this key is really theirs"> {prints[s.email]}</span> : null}</span></div>
                 <RoleSelect value={s.role} onChange={(r) => setShares((l) => l.map((x) => (x.email === s.email ? { ...x, role: r } : x)))} />
                 <button className="icon-btn sm" aria-label="Remove" onClick={() => setShares((l) => l.filter((x) => x.email !== s.email))}><X size={16} /></button>

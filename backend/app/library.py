@@ -192,11 +192,11 @@ class FolderSharingIn(BaseModel):
 
 def folder_sharing_view(db, fid: str) -> dict:
     rows = db.execute(
-        """SELECT s.email, s.role, u.name FROM folder_shares s LEFT JOIN users u ON u.email = s.email
+        """SELECT s.email, s.role, u.name, u.id AS uid, u.avatar FROM folder_shares s LEFT JOIN users u ON u.email = s.email
            WHERE s.folder_id = ? ORDER BY s.created_at""", (fid,)).fetchall()
     f = db.execute("SELECT link_access, link_role, link_expires_at FROM folders WHERE id = ?", (fid,)).fetchone()
     return {"link_access": f["link_access"], "link_role": f["link_role"], "link_expires_at": f["link_expires_at"],
-            "shares": [{"email": r["email"], "role": r["role"], "name": r["name"]} for r in rows]}
+            "shares": [{"email": r["email"], "role": r["role"], "name": r["name"], "avatar": access.avatar_url(r["uid"], r["avatar"]) if r["uid"] else None} for r in rows]}
 
 
 @router.get("/folders/{fid}/sharing")

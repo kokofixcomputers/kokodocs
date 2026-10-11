@@ -114,7 +114,7 @@ export function CommentsPanel({ editor, docId, user, list, refresh, draft, onDra
               {c.quote && <div className="cm-quote" title={orphan ? 'The commented text was deleted' : undefined}>{orphan ? 'Text deleted: ' : ''}{c.quote}</div>}
               {all.map((m) => (
                 <div key={m.id} className="cm-msg">
-                  <Avatar name={m.author} color="#8b8aa5" size={24} />
+                  <Avatar name={m.author} color="#8b8aa5" src={m.avatar} size={24} />
                   <div className="cm-main">
                     <div className="cm-meta"><b>{m.author}</b><span>{ago(m.created_at)}</span>
                       {m.mentions.includes(me) && <em>mentions you</em>}

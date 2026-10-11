@@ -101,6 +101,8 @@ def delete_user(uid: str, admin=Depends(must_admin), db=Depends(get_db)):
         raise HTTPException(400, "This account is a built-in admin")
     quota.drop_uploads(db, "owner_id = ?", (uid,))
     quota.drop_recordings(db, "owner_id = ?", (uid,))
+    from .avatars import remove_file
+    remove_file(uid)
     db.execute("DELETE FROM users WHERE id = ?", (uid,))   # their documents, folders, comments and settings cascade
     db.commit()
     return {"ok": True}

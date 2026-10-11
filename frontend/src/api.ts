@@ -6,7 +6,7 @@ import { importZkImage, uploadZkImage } from './zk/images'
 import { openConversation, openConversationTitle, sealConversation } from './zk/conversations'
 import { decorate, decorateAll, decryptComment, docKeyOf, encryptComment, encryptTitle, newDocKey, sealDocKeyForMe, setDocKey, zkNewEncrypted, zkUnlocked, type ZkFields } from './zk/session'
 import type { Answers, FormItem, PublicForm } from './forms/model'
-export interface User { id: string; email: string; name: string; color: string; is_admin?: boolean; has_password?: boolean; notify_email?: boolean; totp?: boolean; google?: string | null; zk?: boolean; zk_pub?: string | null }
+export interface User { id: string; email: string; name: string; color: string; avatar?: string | null; is_admin?: boolean; has_password?: boolean; notify_email?: boolean; totp?: boolean; google?: string | null; zk?: boolean; zk_pub?: string | null }
 export interface AdminUser { id: string; email: string; name: string; color: string; created_at: number; is_admin: boolean; builtin_admin: boolean; disabled: boolean; used: number; quota_mb: number | null; limit_mb: number; totp: boolean; docs: number; sheets: number }
 export interface AdminFile { id: string; title: string; kind: DocKind; created_at: number; updated_at: number; deleted_at: number | null; link_access: LinkAccess; link_role: string; owner_id: string; owner_name: string; owner_email: string }
 export type SttProvider = 'groq' | 'mistral' | 'openai' | 'cloudflare' | 'openai-compatible' | 'local'
@@ -45,15 +45,15 @@ export interface SharedFolderView {
 }
 export interface FolderSharing {
   link_access: 'restricted' | 'anyone'; link_role: 'viewer' | 'editor'; link_expires_at?: number | null
-  shares: { email: string; role: 'viewer' | 'editor'; name: string | null }[] }
+  shares: { email: string; role: 'viewer' | 'editor'; name: string | null; avatar?: string | null }[] }
 export interface Version {
   id: string; created_at: number; kind: 'auto' | 'manual'; label: string | null
   authors: string[]; words: number; preview: string
 }
-export interface DocInfo extends DocSummary { branch?: { id: string; title: string; label: string | null } | null; owner_email: string; link: { access: LinkAccess; role: 'viewer' | 'editor'; expires_at?: number | null } }
+export interface DocInfo extends DocSummary { owner_avatar?: string | null; branch?: { id: string; title: string; label: string | null } | null; owner_email: string; link: { access: LinkAccess; role: 'viewer' | 'editor'; expires_at?: number | null } }
 export interface Sharing {
   link_access: LinkAccess; link_role: 'viewer' | 'editor'; has_password: boolean; link_expires_at?: number | null
-  shares: { email: string; role: 'viewer' | 'editor' | 'manager'; name: string | null }[]
+  shares: { email: string; role: 'viewer' | 'editor' | 'manager'; name: string | null; avatar?: string | null }[]
 }
 export interface ProofIssue {
   block: number; offset: number; length: number
@@ -77,7 +77,7 @@ export interface StorageState {
 export interface StorageIn { kind: 's3' | 'webdav' | 'folder'; config: Record<string, string>; enabled: boolean; idle_minutes: number; keep_search: boolean }
 export interface Notice { id: string; kind: 'mention' | 'comment' | 'share' | 'access'; doc_id: string; doc_title: string; actor: string; text: string; link: string; created_at: number; read: boolean }
 export interface MentionSkip { email: string; reason: 'not_shared' }
-export interface Comment { anchor: Record<string, unknown> | null; id: string; parent_id: string | null; body: string; quote: string; resolved: boolean; created_at: number; user_id: string; author: string; mentions: string[] }
+export interface Comment { avatar?: string | null; anchor: Record<string, unknown> | null; id: string; parent_id: string | null; body: string; quote: string; resolved: boolean; created_at: number; user_id: string; author: string; mentions: string[] }
 export interface FormFileRef { id: string; name: string; size: number }
 export interface FormResponse { id: string; created_at: number; name: string | null; email: string | null; answers: Record<string, string | string[] | FormFileRef> }
 export interface MeetSettings {
@@ -356,6 +356,8 @@ export const api = {
   notificationCount: () => request<{ unread: number }>('/api/notifications/count'),
   markRead: (b: { ids?: string[]; all?: boolean }) => request('/api/notifications/read', { method: 'POST', ...json(b) }),
   wikiProxy: (b: { method: string; url: string; headers: Record<string, string>; body?: string }) => request<{ status: number; status_text: string; ms: number; size: number; binary: boolean; body: string; headers: Record<string, string> }>('/api/wiki/proxy', { method: 'POST', ...json(b) }),
+  uploadAvatar: (file: Blob) => { const fd = new FormData(); fd.append('file', file, 'avatar.jpg'); return request<{ avatar: string }>('/api/me/avatar', { method: 'POST', body: fd }) },
+  removeAvatar: () => request<{ avatar: null }>('/api/me/avatar', { method: 'DELETE' }),
   setProfile: (name: string) => request<{ name: string }>('/api/me/profile', { method: 'PUT', ...json({ name }) }),
   setPrefs: (b: { notify_email: boolean }) => request('/api/me/prefs', { method: 'PUT', ...json(b) }),
   comments: async (id: string) => {

@@ -25,6 +25,11 @@ def get_user(db: sqlite3.Connection, token: str | None):
     return None if u is not None and u["disabled"] else u
 
 
+def avatar_url(uid: str, ver) -> str | None:
+    """Where a person's profile picture is served, or None if they haven't set one. The number changes with each upload so browsers can cache it for good."""
+    return f"/api/avatars/{uid}?v={int(ver * 1000)}" if ver else None
+
+
 def admin_emails() -> set[str]:
     """Accounts with these emails are always admins (comma-separated KOKO_ADMIN_EMAILS, default koko@kokodev.cc)."""
     import os

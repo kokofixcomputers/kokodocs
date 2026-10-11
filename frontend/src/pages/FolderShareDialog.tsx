@@ -16,7 +16,7 @@ const RoleSelect = ({ value, onChange }: { value: R; onChange: (r: R) => void })
 export function FolderShareDialog({ folder, ownerName, ownerEmail, onClose, onSaved }: {
   folder: Folder; ownerName: string; ownerEmail: string; onClose: () => void; onSaved: () => void
 }) {
-  const [shares, setShares] = useState<{ email: string; role: R; name: string | null }[]>([])
+  const [shares, setShares] = useState<{ email: string; role: R; name: string | null; avatar?: string | null }[]>([])
   const [loaded, setLoaded] = useState(false)
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<R>('viewer')
@@ -72,7 +72,7 @@ export function FolderShareDialog({ folder, ownerName, ownerEmail, onClose, onSa
           </div>
           {shares.map((s) => (
             <div className="person rise" key={s.email}>
-              <Avatar name={s.name ?? s.email} color="#8b8aa5" />
+              <Avatar name={s.name ?? s.email} color="#8b8aa5" src={s.avatar} />
               <div className="p-info"><b>{s.name ?? s.email}</b>{s.name && <span>{s.email}</span>}</div>
               <RoleSelect value={s.role} onChange={(r) => setShares((l) => l.map((x) => (x.email === s.email ? { ...x, role: r } : x)))} />
               <button className="icon-btn sm" aria-label="Remove" onClick={() => setShares((l) => l.filter((x) => x.email !== s.email))}><X size={16} /></button>

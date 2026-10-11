@@ -639,3 +639,7 @@ a.brand { color: var(--ink); text-decoration: none; }
 
 .ext-trust { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--accent-soft); } .ext-trust span { display: grid; gap: 2px; } .ext-trust b { display: inline-flex; align-items: center; gap: 6px; } .ext-trust em { font-style: normal; font-size: 12.5px; color: var(--muted); } .ext-trust.on { background: var(--danger-soft); } .ext-trust.on b { color: var(--danger); }
 .ext-dlg { display: grid; gap: 12px; } .ext-dlg-from { margin: 0; font-size: 12.5px; color: var(--muted); } .ext-dlg-msg { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; } .ext-dlg-warn { display: flex; gap: 10px; margin: 0; padding: 12px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); font-size: 14px; } .ext-dlg-warn svg { flex: none; margin-top: 2px; } .ext-dlg-html { overflow-wrap: anywhere; max-height: 50vh; overflow: auto; }
+
+.avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.avatar.has-pic { background: var(--accent-soft) !important; }
+.st-profile { flex-wrap: wrap; }

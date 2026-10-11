@@ -39,8 +39,25 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 const Card = ({ children }: { children: ReactNode }) => <div className="st-card">{children}</div>
 
+/** A centred square, 512 px, so a big phone photo uploads quickly; the server crops again to be sure. Falls back to the original file. */
+async function squarePicture(file: File): Promise<Blob> {
+  try {
+    const bmp = await createImageBitmap(file)
+    const side = Math.min(bmp.width, bmp.height), c = document.createElement('canvas'); c.width = c.height = Math.min(512, side)
+    c.getContext('2d')!.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, c.width, c.height)
+    return await new Promise<Blob>((ok, no) => c.toBlob((b) => (b ? ok(b) : no(new Error('x'))), 'image/jpeg', 0.9))
+  } catch { return file }
+}
+
 function Account() {
-  const { user, acceptToken, logout } = useAuth()
+  const { user, acceptToken, logout, reloadUser } = useAuth()
+  const [picBusy, setPicBusy] = useState(false)
+  const pick = async (f: File | undefined) => {
+    if (!f) return
+    setPicBusy(true)
+    try { await api.uploadAvatar(await squarePicture(f)); await reloadUser(); toast('Profile picture updated') } catch (e) { toast((e as Error).message) } finally { setPicBusy(false) }
+  }
+  const dropPic = async () => { setPicBusy(true); try { await api.removeAvatar(); await reloadUser(); toast('Profile picture removed') } catch (e) { toast((e as Error).message) } finally { setPicBusy(false) } }
   const [name, setName] = useState(user?.name ?? '')
   const [busy, setBusy] = useState(false)
   const [del, setDel] = useState(false)
@@ -53,7 +70,12 @@ function Account() {
   return (
     <Section title="My account">
       <Card>
-        <div className="st-profile"><Avatar name={user!.name} color={user!.color} size={64} /><div><b>{user!.name}</b><span>{user!.email}</span></div></div>
+        <div className="st-profile"><Avatar name={user!.name} color={user!.color} src={user!.avatar} size={64} /><div><b>{user!.name}</b><span>{user!.email}</span></div>
+          <span className="st-btns" style={{ marginLeft: 'auto' }}>
+            <label className={`btn btn-pill btn-soft btn-sm ${picBusy ? 'disabled' : ''}`} style={{ cursor: 'pointer' }}>{picBusy ? 'Working…' : user!.avatar ? 'Change photo' : 'Upload photo'}
+              <input type="file" accept="image/*" hidden disabled={picBusy} onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = '' }} /></label>
+            {user!.avatar && <button className="btn btn-pill btn-ghost btn-sm" disabled={picBusy} onClick={() => void dropPic()}>Remove</button>}
+          </span></div>
         <label className="st-field"><span>Display name</span>
           <span className="st-inline"><span className="field"><input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && name !== user?.name && save()} /></span>
             <button className="btn btn-pill btn-primary btn-sm" disabled={busy || !name.trim() || name.trim() === user?.name} onClick={save}>Save</button></span></label>
@@ -328,7 +350,7 @@ export function SettingsHost() {
     <div className={`st-overlay ${mobileList ? 'list' : 'detail'}`} role="dialog" aria-label="Settings">
       <nav className="st-side" aria-label="Settings sections">
         <div className="st-side-inner">
-          <div className="st-who"><Avatar name={user.name} color={user.color} size={32} /><div><b>{user.name}</b><span>{user.email}</span></div>
+          <div className="st-who"><Avatar name={user.name} color={user.color} src={user.avatar} size={32} /><div><b>{user.name}</b><span>{user.email}</span></div>
             <button className="icon-btn st-x-m" onClick={closeSettings} aria-label="Close settings"><X size={18} /></button></div>
           {groups.map((g) => (
             <div key={g} className="st-group"><h3>{g}</h3>

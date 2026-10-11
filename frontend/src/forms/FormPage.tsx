@@ -38,7 +38,7 @@ export default function FormPage({ info }: { info: DocInfo }) {
         <span className="fm-spacer" />
         <button className="icon-btn" onClick={toggle} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
         {user ? (
-          <Popover align="end" trigger={({ toggle: t }) => <button className="avatar-btn" onClick={t}><Avatar name={user.name} color={user.color} size={34} /></button>}>
+          <Popover align="end" trigger={({ toggle: t }) => <button className="avatar-btn" onClick={t}><Avatar name={user.name} color={user.color} src={user.avatar} size={34} /></button>}>
             {(close) => (<div className="menu wide"><div className="menu-head"><strong>{user.name}</strong><span>{user.email}</span></div><Link to="/" className="menu-link" onClick={close}>All documents</Link><button onClick={() => { close(); openSettings() }}>Settings</button><button onClick={() => { close(); logout() }}>Sign out</button></div>)}
           </Popover>
         ) : <Link className="btn btn-pill btn-ghost" to="/login" state={{ from: `/d/${info.id}` }}><LogIn size={16} />Sign in</Link>}
