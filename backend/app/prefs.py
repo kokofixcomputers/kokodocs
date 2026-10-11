@@ -58,9 +58,14 @@ def put_pref(key: str, body: PrefIn, user=Depends(must_user), db=Depends(get_db)
         for x in items:
             if not (isinstance(x, dict) and isinstance(x.get("id"), str) and isinstance(x.get("name"), str) and isinstance(x.get("code"), str) and isinstance(x.get("enabled"), bool)):
                 raise HTTPException(422, "Each extension needs an id, name, code and enabled flag")
+            if "trusted" in x and not isinstance(x["trusted"], bool):
+                raise HTTPException(422, "trusted must be true or false")
             if len(x["code"].encode()) > 100 * 1024 or not 1 <= len(x["name"]) <= 80 or not x["id"].replace("-", "").isalnum() or len(x["id"]) > 40 or x["id"] in ids:
                 raise HTTPException(422, "An extension is too big (100 KB), has no name, or has a bad id")
             ids.add(x["id"])
+        st = v.get("settings", {})
+        if not isinstance(st, dict) or len(st) > 20 or not all(isinstance(k, str) and isinstance(vals, dict) and len(vals) <= 60 and all(isinstance(a, str) and isinstance(b, (str, int, float, bool)) or b is None for a, b in vals.items()) for k, vals in st.items()):
+            raise HTTPException(422, "Extension settings are a map of extension id to {name: text, number or on/off}")
     db.execute("INSERT INTO user_prefs (user_id, key, value, updated_at) VALUES (?,?,?,?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at", (user["id"], key, raw, time.time()))
     db.commit()
     return {"ok": True}

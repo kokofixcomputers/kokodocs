@@ -75,7 +75,7 @@ export const ExtBlock = Node.create({
         }).catch((e: Error) => { if (mine === token) { body.className = 'ext-block-body missing'; body.textContent = e.message } })
       }
       draw()
-      const off = subscribeExt(() => { const d = def(); const k = d ? 'y' : 'n'; if (dom.dataset.k !== k) { dom.dataset.k = k; draw() } })
+      const off = subscribeExt(() => { const d = def(); const k = (d ? 'y' : 'n') + extState().rev; if (dom.dataset.k !== k) { dom.dataset.k = k; draw() } })
       dom.addEventListener('click', () => {
         const d = def(); if (!d || !d.fields.length || !editor.isEditable) return
         const pos = getPos(); if (typeof pos !== 'number') return

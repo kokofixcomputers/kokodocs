@@ -23,4 +23,9 @@ ok("at most 20", put({"items": [ext(id=f"x{i}") for i in range(21)], "theme": ""
 ok("duplicate ids refused", put({"items": [ext(), ext()], "theme": ""}) == 422)
 ok("name required", put({"items": [ext(name="")], "theme": ""}) == 422)
 ok("bad shape refused", put({"items": "nope"}) == 422)
+ok("settings and trusted save", put({"items": [ext(trusted=True)], "theme": "", "settings": {"abc123": {"name": "Zed", "n": 3, "on": True}}}) == 200)
+got = call("GET", "/api/me/prefs", tok=T)[1]["extensions"]
+ok("…and come back", got["items"][0]["trusted"] is True and got["settings"]["abc123"]["name"] == "Zed")
+ok("trusted must be a boolean", put({"items": [ext(trusted="yes")], "theme": ""}) == 422)
+ok("settings must be flat values", put({"items": [ext()], "theme": "", "settings": {"abc123": {"x": {"deep": 1}}}}) == 422)
 print("fails", fails); sys.exit(1 if fails else 0)

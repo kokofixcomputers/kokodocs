@@ -17,6 +17,7 @@ import { MeetingsPage } from './meet/MeetingsPage'
 import { MeetingSettingsPage } from './meet/MeetingSettingsPage'
 import { FolderPage } from './pages/FolderPage'
 import { DialogHost } from './ui/Dialogs'
+import { ExtDialogHost } from './extensions/ExtDialogs'
 import { Toaster } from './ui/Toast'
 import { Tooltips } from './ui/Tooltips'
 import { SearchPalette } from './ui/Search'
@@ -99,6 +100,7 @@ if (!ssoPopupLanding()) ReactDOM.createRoot(document.getElementById('root')!).re
         <KeyboardFit />
         <SettingsHost />
         <DialogHost />
+        <ExtDialogHost />
         <ZkLock />
         <DecryptingPage />
       </AuthProvider>
