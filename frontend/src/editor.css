@@ -690,3 +690,27 @@ html.embed .ed-body { padding: 0; }
 .ProseMirror hr[data-variant="dots"] { border: 0; height: 24px; background: none; text-align: center; overflow: visible; } .ProseMirror hr[data-variant="dots"]::after { content: '•  •  •'; letter-spacing: .3em; color: var(--muted); font-size: 18px; }
 .ProseMirror hr[data-variant="stars"] { border: 0; height: 24px; background: none; text-align: center; overflow: visible; } .ProseMirror hr[data-variant="stars"]::after { content: '✦ ✦ ✦'; letter-spacing: .3em; color: var(--muted); font-size: 16px; }
 .ProseMirror hr[data-variant="fade"] { border: 0; height: 2px; background: linear-gradient(90deg, transparent, currentColor, transparent); opacity: .5; }
+
+/* insights dashboard */
+.ins { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; min-width: 0; box-sizing: border-box; } .ins > * { min-width: 0; }
+.ins-hero { display: grid; justify-items: center; gap: 8px; padding: 14px 8px 6px; }
+.ins-hero-note { margin: 0; text-align: center; font-size: 13.5px; color: var(--muted); max-width: 240px; }
+.ins-ring { position: relative; flex: none; } .ins-ring svg { display: block; }
+.ins-ring-in { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; line-height: 1.1; }
+.ins-ring-in b { font-size: 24px; font-weight: 700; } .ins-ring-in .ins-big { font-size: 44px; letter-spacing: -.02em; } .ins-ring-in span { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.ins-rings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ins-card { display: grid; justify-items: center; gap: 4px; text-align: center; padding: 12px 4px 10px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.ins-card .ins-ring { width: 72px !important; height: 72px !important; } .ins-card .ins-ring svg { width: 72px; height: 72px; } .ins-card .ins-ring-in b { font-size: 19px; }
+.ins-card h4 { margin: 4px 0 0; font-size: 13px; } .ins-card > span { font-size: 11.5px; color: var(--muted); line-height: 1.25; padding: 0 4px; }
+.ins-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ins-tiles div { display: grid; gap: 1px; padding: 10px 12px; border-radius: 14px; background: var(--accent-soft); } .ins-tiles b { font-size: 21px; } .ins-tiles span { font-size: 12px; color: var(--muted); }
+.ins-times { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); } .ins-times span { display: inline-flex; align-items: center; gap: 6px; }
+.ins-h { margin: 6px 0 0; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ins-bars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; height: 110px; align-items: end; }
+.ins-bar { display: grid; grid-template-rows: 1fr auto auto; justify-items: center; height: 100%; gap: 2px; text-align: center; font-size: 12px; } .ins-bar i { align-self: end; width: 70%; border-radius: 8px 8px 3px 3px; min-height: 3px; transition: height .5s; } .ins-bar span { color: var(--muted); font-size: 11px; }
+.ins-spark { width: 100%; height: 64px; color: var(--accent, #111); }
+.ins-muted { margin: 0; font-size: 12.5px; color: var(--muted); }
+.ins-words { display: flex; flex-wrap: wrap; gap: 6px; } .ins-words span { padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); font-size: 13px; } .ins-words em { font-style: normal; margin-left: 6px; color: var(--muted); font-size: 12px; }
+.branch-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: inherit; font-size: 12.5px; text-decoration: none; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; } .branch-chip:hover { text-decoration: underline; }
+.cmp { display: grid; gap: 10px; min-width: 0; padding: 0 22px 6px; } .cmp-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .cmp-lbl { font-weight: 600; } .cmp-note { margin: 0; font-size: 13px; }
+.cmp-scroll { max-height: 62vh; overflow: auto; border-radius: var(--r-lg); }

@@ -372,6 +372,9 @@ def migrate(db: sqlite3.Connection) -> None:
     if "link_expires_at" not in fcols:
         db.execute("ALTER TABLE folders ADD COLUMN link_expires_at REAL")
     dcols = {r["name"] for r in db.execute("PRAGMA table_info(documents)")}
+    if "branch_of" not in dcols:
+        db.execute("ALTER TABLE documents ADD COLUMN branch_of TEXT")   # the document this one was forked from
+        db.execute("ALTER TABLE documents ADD COLUMN branch_label TEXT")
     if "link_expires_at" not in dcols:
         db.execute("ALTER TABLE documents ADD COLUMN link_expires_at REAL")
 

@@ -50,7 +50,7 @@ export interface Version {
   id: string; created_at: number; kind: 'auto' | 'manual'; label: string | null
   authors: string[]; words: number; preview: string
 }
-export interface DocInfo extends DocSummary { owner_email: string; link: { access: LinkAccess; role: 'viewer' | 'editor'; expires_at?: number | null } }
+export interface DocInfo extends DocSummary { branch?: { id: string; title: string; label: string | null } | null; owner_email: string; link: { access: LinkAccess; role: 'viewer' | 'editor'; expires_at?: number | null } }
 export interface Sharing {
   link_access: LinkAccess; link_role: 'viewer' | 'editor'; has_password: boolean; link_expires_at?: number | null
   shares: { email: string; role: 'viewer' | 'editor' | 'manager'; name: string | null }[]
@@ -239,6 +239,8 @@ export const api = {
   listVersions: (id: string) => docKeyOf(id) ? Promise.resolve([] as Version[]) : request<Version[]>(`/api/docs/${id}/versions`, {}, id),
   createVersion: (id: string, label?: string) => docKeyOf(id) ? Promise.reject(new Error('Version history isn\'t available in encrypted documents, because the server can\'t read them.')) : request<{ id: string }>(`/api/docs/${id}/versions`, { method: 'POST', ...json({ label: label ?? null }) }, id),
   renameVersion: (id: string, vid: string, label: string) => request(`/api/docs/${id}/versions/${vid}`, { method: 'PATCH', ...json({ label }) }, id),
+  branchDoc: (id: string, versionId?: string) => request<DocSummary>(`/api/docs/${id}/branch`, { method: 'POST', ...json({ version_id: versionId ?? null }) }, id),
+  docState: (id: string) => requestBlob(`/api/docs/${id}/state`, id),
   versionData: (id: string, vid: string) => requestBlob(`/api/docs/${id}/versions/${vid}/data`, id),
   getDoc: (id: string) => cached(`doc:${id}`, async () => decorate(await request<DocInfo>(`/api/docs/${id}`, {}, id)), (d) => (d.zk || getDocToken(id) ? (undefined as unknown as DocInfo) : d)),
   /** Encrypted documents keep their title encrypted too. */

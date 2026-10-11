@@ -1,4 +1,5 @@
 import { SavePill } from '../ui/SavePill'
+import { BranchButton } from '../editor/Branch'
 import { RequestAccess, useOpenShareFromUrl } from '../editor/RequestAccess'
 import { useWheelZoom, useZoom, ZoomPill } from '../ui/zoom'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -423,6 +424,7 @@ function SheetPreview({ docId, version, live, onRestore, onClose }: { live: Y.Do
         <div className="ver-bar-actions">
           <DiffToggle on={diff} onClick={() => setDiff((d) => !d)} />
           <button className="btn btn-ghost btn-pill btn-sm" onClick={onClose}>Back to current</button>
+          {snap && <BranchButton docId={docId} title="this file" versionId={version.id} />}
           <button className="btn btn-primary btn-pill btn-sm" disabled={!snap || busy} onClick={async () => { if (!snap) return; setBusy(true); try { await onRestore(snap, version) } finally { setBusy(false) } }}>
             {busy ? <Loader2 size={14} className="spin" /> : <RotateCcw size={14} />}Restore this version
           </button>

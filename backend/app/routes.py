@@ -261,8 +261,19 @@ def get_doc(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
     return {
         **doc_summary(doc, acc.role, owner["name"], starred, sealed=(db.execute("SELECT sealed FROM zk_grants WHERE doc_id = ? AND email = ?", (doc_id, acc.user["email"])).fetchone() or {"sealed": None})["sealed"] if acc.user and doc["zk"] else None),
         "owner_email": owner["email"],
+        "branch": branch_info(db, doc, acc),
         "link": {"access": "restricted" if access.expired(doc["link_expires_at"]) else doc["link_access"], "expires_at": doc["link_expires_at"], "role": "viewer" if doc["kind"] == "form" else doc["link_role"]},
     }
+
+
+def branch_info(db, doc, acc):
+    """Where a branch came from, shown only to people who can open the original."""
+    if not doc["branch_of"]:
+        return None
+    src = db.execute("SELECT * FROM documents WHERE id = ? AND deleted_at IS NULL", (doc["branch_of"],)).fetchone()
+    if not src or not access.resolve(db, src, acc.user, None).role:
+        return None
+    return {"id": src["id"], "title": src["title"], "label": doc["branch_label"]}
 
 
 @router.get("/docs/{doc_id}/state")

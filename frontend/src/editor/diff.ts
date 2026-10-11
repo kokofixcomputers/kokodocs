@@ -95,7 +95,7 @@ export function fragLines(root: Y.XmlFragment): string[] {
   return out
 }
 
-function diffLines(a: string[], b: string[], context = 2): Diff {
+export function diffLines(a: string[], b: string[], context = 2): Diff {
   const ops = lcs(a, b)
   const rows: Row[] = []
   let added = 0, removed = 0, changed = 0

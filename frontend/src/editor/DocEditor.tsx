@@ -1,4 +1,7 @@
 import { SavePill } from '../ui/SavePill'
+import { BranchButton, BranchChip } from './Branch'
+import { CompareDialog } from './Compare'
+import { InsightsPanel } from './InsightsPanel'
 import { RequestAccess, useOpenShareFromUrl } from './RequestAccess'
 import { yXmlFragmentToProsemirrorJSON } from 'y-prosemirror'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
@@ -10,7 +13,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import { Cloud, CloudOff, History, LogIn, X, MessageSquare, Moon, PanelLeft, Share2, Sparkles, SpellCheck, Sun, Loader2 } from 'lucide-react'
+import { Gauge, GitCompareArrows, Cloud, CloudOff, History, LogIn, X, MessageSquare, Moon, PanelLeft, Share2, Sparkles, SpellCheck, Sun, Loader2 } from 'lucide-react'
 import { api, ApiError, type DocInfo, type Version } from '../api'
 import { useAuth } from '../auth'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -126,10 +129,11 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const [title, setTitle] = useState(info.title)
   const [leftOpen, setLeftOpen] = useState(() => window.innerWidth > 1100)
   const [initialPrompt] = useState(() => takePrompt(info.id))
-  const [panel, setPanel] = useState<'none' | 'proof' | 'history' | 'assistant' | 'comments'>(initialPrompt ? 'assistant' : 'none')
+  const [panel, setPanel] = useState<'none' | 'proof' | 'history' | 'assistant' | 'comments' | 'insights'>(initialPrompt ? 'assistant' : 'none')
   const [preview, setPreview] = useState<Version | null>(null)
   const [verKey, setVerKey] = useState(0)
   const [share, setShare] = useState(false)
+  const [compare, setCompare] = useState(false)
   useOpenShareFromUrl(info.role === 'owner' || info.role === 'manager', setShare)
   const [hf, setHf] = useState(false)
   const [setup, setSetup] = useState(false)
@@ -355,6 +359,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
           <input className="title-input" value={title} readOnly={readOnly} onChange={(e) => onTitle(e.target.value)}
             placeholder="Untitled document" aria-label="Document title" maxLength={200} />
           <SavePill provider={provider} status={status} readOnly={readOnly} />
+          <BranchChip info={info} />
           <EncryptionBadge info={info} />
         </div>
         <div className="ed-right">
@@ -369,6 +374,9 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
               <MessageSquare size={19} />{openThreads > 0 && <b className="badge">{openThreads}</b>}
             </button>
           )}
+          {user && !preview && !info.zk && <button className="icon-btn" title="Compare with another document or version" aria-label="Compare" onClick={() => setCompare(true)}><GitCompareArrows size={19} /></button>}
+          {user && !preview && !info.zk && <BranchButton docId={info.id} title={info.title} icon />}
+          {!preview && <button className={`icon-btn ${panel === 'insights' ? 'active' : ''}`} title="Insights: readability, tone and word count" aria-label="Insights" onClick={() => setPanel((p) => (p === 'insights' ? 'none' : 'insights'))}><Gauge size={19} /></button>}
           <ReadAloud plain={!!info.zk} />
           {user && !preview && (
             <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'assistant' ? 'none' : 'assistant'))}><Sparkles size={17} /><span className="lbl">Assistant</span></button>
@@ -425,6 +433,8 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
               ? <Suspense fallback={null}><AssistantHost docId={info.id} user={user} initialPrompt={initialPrompt} onClose={() => setPanel('none')} source={{ kind: 'doc', deps: assistantDeps }} /></Suspense>
               : panel === 'comments' && user && editor
               ? <CommentsPanel editor={editor} docId={info.id} user={user} list={comments.list} refresh={comments.refresh} draft={draft} onDraft={setDraft} activeId={activeComment} setActiveId={setActiveComment} />
+              : panel === 'insights' && editor
+              ? <InsightsPanel editor={editor} docId={info.id} refreshKey={verKey} />
               : panel === 'history'
               ? <VersionHistory docId={info.id} open selected={preview} refreshKey={verKey} onSelect={(v) => { setPreview(v); if (narrow) setPanel('none') }} />
               : <ProofreadPanel editor={editor} state={proof} />}
@@ -449,6 +459,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       <FormatMenu editor={editor} onComment={user ? startComment : undefined} />
       <ImageMenu editor={editor} /><ShapeMenu editor={editor} />
       {share && <ShareDialog info={info} onClose={() => setShare(false)} />}
+      {compare && <CompareDialog docId={info.id} title={title} live={ydoc} onClose={() => setCompare(false)} />}
       {setup && <PageSetupDialog meta={meta} onSave={saveMeta} onClose={() => setSetup(false)} />}
       {hf && <HeaderFooterDialog meta={meta} onSave={saveMeta} onClose={() => setHf(false)} />}
     </div>
