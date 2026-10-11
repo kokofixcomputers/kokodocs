@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { api } from './api'
+import { DEFAULT_BARS, type BarPrefs } from './editor/bars'
 import { setTrustHandler, stopAllExtensions, syncExtensions, type Extension } from './extensions/runtime'
 
 /** A person's own settings that follow them between devices (text snippets, the writing helpers). Kept in memory and in this browser, so they work offline too. */
@@ -28,9 +29,11 @@ export const getSnippets = (): Snippet[] => (Array.isArray(snap.snippets) ? snap
 export const getWriting = (): Writing => ({ ...DEFAULT_WRITING, ...(snap.writing ?? {}) })
 
 export async function saveSnippets(list: Snippet[]) { await api.savePref('snippets', list); prefs.snippets = list; emit() }
+export const getBars = (): BarPrefs => { const b = snap.bars; return b && b.desktop && b.mobile ? { ...DEFAULT_BARS, ...b } : DEFAULT_BARS }
+export async function saveBars(b: BarPrefs) { prefs.bars = b; emit(); await api.savePref('bars', b) }
 export async function saveWriting(w: Partial<Writing>) { const next = { ...getWriting(), ...w }; prefs.writing = next; emit(); await api.savePref('writing', next) }
 
 export function usePrefs() {
   useSyncExternalStore((f) => { subs.add(f); return () => { subs.delete(f) } }, () => snap)
-  return { snippets: getSnippets(), writing: getWriting(), extensions: getExtensions() }
+  return { snippets: getSnippets(), writing: getWriting(), extensions: getExtensions(), bars: getBars() }
 }

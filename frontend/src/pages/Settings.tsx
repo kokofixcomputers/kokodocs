@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronLeft, Circle, FileQuestion, Copy, Lock, LogOut, Monitor, Mic, Moon, Palette, ShieldCheck, Sparkles, Sun, Trash2, User as UserIcon, Bell, HardDrive, X, Keyboard, Laptop, Zap, Puzzle, CloudUpload } from 'lucide-react'
+import { Check, ChevronLeft, Circle, FileQuestion, Copy, Lock, LogOut, Monitor, Mic, Moon, Palette, ShieldCheck, Sparkles, Sun, Trash2, User as UserIcon, Bell, HardDrive, X, Keyboard, Laptop, Zap, Puzzle, SlidersHorizontal, CloudUpload } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api, getToken, type AiSettings, type Storage, type StorageItems } from '../api'
 import { KindIcon } from '../ui/KindIcon'
@@ -19,6 +19,7 @@ import { OnDevice } from './OnDevice'
 import { SnippetsSettings } from './SnippetsSettings'
 import { ExtendedStorage } from './ExtendedStorage'
 import { ExtensionsSettings } from './ExtensionsSettings'
+import { ToolbarSettings } from './ToolbarSettings'
 
 const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string }[] = [
   { id: 'account', label: 'My account', icon: <UserIcon size={17} />, group: 'User settings' },
@@ -30,6 +31,7 @@ const NAV: { id: SettingsSection; label: string; icon: ReactNode; group: string 
   { id: 'assistant', label: 'AI assistant', icon: <Sparkles size={17} />, group: 'App settings' },
   { id: 'voice', label: 'Voice typing', icon: <Mic size={17} />, group: 'App settings' },
   { id: 'snippets', label: 'Writing', icon: <Zap size={17} />, group: 'App settings' },
+  { id: 'toolbar', label: 'Toolbar', icon: <SlidersHorizontal size={17} />, group: 'App settings' },
   { id: 'extensions', label: 'Extensions', icon: <Puzzle size={17} />, group: 'App settings' },
   { id: 'device', label: 'On this device', icon: <Laptop size={17} />, group: 'App settings' },
 ]
@@ -236,6 +238,7 @@ const BODY: Record<SettingsSection, () => ReactNode> = {
   snippets: () => <SnippetsSettings />,
   extended: () => <ExtendedStorage />,
   extensions: () => <ExtensionsSettings />,
+  toolbar: () => <ToolbarSettings />,
 }
 const PARTS = [
   { key: 'text', label: 'Text and data', hint: 'What you typed, cells, slides and settings' },

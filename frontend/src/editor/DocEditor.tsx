@@ -1,6 +1,7 @@
 import { SavePill } from '../ui/SavePill'
 import { BranchButton, BranchChip } from './Branch'
 import { CompareDialog } from './Compare'
+import { useBarLayout } from './bars'
 import { InsightsPanel } from './InsightsPanel'
 import { RequestAccess, useOpenShareFromUrl } from './RequestAccess'
 import { yXmlFragmentToProsemirrorJSON } from 'y-prosemirror'
@@ -13,7 +14,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import { Gauge, GitCompareArrows, Cloud, CloudOff, History, LogIn, X, MessageSquare, Moon, PanelLeft, Share2, Sparkles, SpellCheck, Sun, Loader2 } from 'lucide-react'
+import { MoreHorizontal, SlidersHorizontal, Gauge, GitCompareArrows, Cloud, CloudOff, History, LogIn, X, MessageSquare, Moon, PanelLeft, Share2, Sparkles, SpellCheck, Sun, Loader2 } from 'lucide-react'
 import { api, ApiError, type DocInfo, type Version } from '../api'
 import { useAuth } from '../auth'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -348,8 +349,33 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
 
   if (import.meta.env.DEV && editor) (window as any).__koko = editor
 
+  const shownHeader = useBarLayout().header
   if (!editor) return <div className="splash"><span className="spinner" /></div>
 
+  const headerBtns: { id: string; label: string; node: (close?: () => void) => React.ReactNode }[] = [
+    { id: 'export', label: 'Download', node: () => <DocExportMenu editor={editor} title={title} meta={meta} /> },
+    ...(!readOnly ? [{ id: 'history', label: 'Version history', node: (close?: () => void) => (
+      <button className={`icon-btn ${panel === 'history' ? 'active' : ''}`} title="Version history" aria-label="Version history"
+        onClick={() => { close?.(); setPreview(null); setPanel((p) => (p === 'history' ? 'none' : 'history')) }}><History size={19} /></button>) }] : []),
+    ...(user && !preview ? [{ id: 'comments', label: 'Comments', node: (close?: () => void) => (
+      <button className={`icon-btn comments-btn ${panel === 'comments' ? 'active' : ''}`} title="Comments" aria-label="Comments" onClick={() => { close?.(); setPanel((p) => (p === 'comments' ? 'none' : 'comments')) }}>
+        <MessageSquare size={19} />{openThreads > 0 && <b className="badge">{openThreads}</b>}
+      </button>) }] : []),
+    ...(user && !preview && !info.zk ? [
+      { id: 'compare', label: 'Compare', node: (close?: () => void) => <button className="icon-btn" title="Compare with another document or version" aria-label="Compare" onClick={() => { close?.(); setCompare(true) }}><GitCompareArrows size={19} /></button> },
+      { id: 'branch', label: 'Branch', node: () => <BranchButton docId={info.id} title={info.title} icon /> },
+    ] : []),
+    ...(!preview ? [{ id: 'insights', label: 'Insights', node: (close?: () => void) => <button className={`icon-btn ${panel === 'insights' ? 'active' : ''}`} title="Insights: readability, tone and word count" aria-label="Insights" onClick={() => { close?.(); setPanel((p) => (p === 'insights' ? 'none' : 'insights')) }}><Gauge size={19} /></button> }] : []),
+    { id: 'readaloud', label: 'Read aloud', node: () => <ReadAloud plain={!!info.zk} /> },
+    ...(user && !preview ? [{ id: 'assistant', label: 'Assistant', node: (close?: () => void) => (
+      <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => { close?.(); setPanel((p) => (p === 'assistant' ? 'none' : 'assistant')) }}><Sparkles size={17} /><span className="lbl">Assistant</span></button>) }] : []),
+    { id: 'proofread', label: 'Proofread', node: (close?: () => void) => (
+      <button className={`btn btn-pill btn-soft proof-btn ${panel === 'proof' ? 'active' : ''}`} onClick={() => { close?.(); setPreview(null); setPanel((p) => (p === 'proof' ? 'none' : 'proof')) }}>
+        <SpellCheck size={17} /><span className="lbl">Proofread</span>
+        {proof.issues.length > 0 && <b className="badge">{proof.issues.length}</b>}
+      </button>) },
+    { id: 'theme', label: 'Light or dark', node: () => <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button> },
+  ]
   return (
     <div className="editor-shell">
       <header className="ed-top">
@@ -364,28 +390,16 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
         </div>
         <div className="ed-right">
           <PresenceStack people={people} followId={follow.target?.id ?? null} onToggle={follow.toggle} />
-          <DocExportMenu editor={editor} title={title} meta={meta} />
-          {!readOnly && (
-            <button className={`icon-btn ${panel === 'history' ? 'active' : ''}`} title="Version history" aria-label="Version history"
-              onClick={() => { setPreview(null); setPanel((p) => (p === 'history' ? 'none' : 'history')) }}><History size={19} /></button>
+          {headerBtns.filter((h) => shownHeader.has(h.id)).map((h) => <span key={h.id} className="hd-item" data-bar={h.id}>{h.node()}</span>)}
+          {headerBtns.some((h) => !shownHeader.has(h.id)) && (
+            <Popover align="end" className="bar-more" trigger={({ toggle, open }) => <button type="button" className={`icon-btn ${open ? 'active' : ''}`} title="More" aria-label="More" onClick={toggle}><MoreHorizontal size={19} /></button>}>
+              {(close) => (
+                <div className="more-list" role="menu" aria-label="More">
+                  {headerBtns.filter((h) => !shownHeader.has(h.id)).map((h) => <div className="more-row" key={h.id} data-bar={h.id}><span>{h.label}</span><span className="more-ctl">{h.node(close)}</span></div>)}
+                  <button className="more-customize" onClick={() => { close(); openSettings('toolbar') }}><SlidersHorizontal size={15} />Customize toolbar…</button>
+                </div>)}
+            </Popover>
           )}
-          {user && !preview && (
-            <button className={`icon-btn comments-btn ${panel === 'comments' ? 'active' : ''}`} title="Comments" aria-label="Comments" onClick={() => setPanel((p) => (p === 'comments' ? 'none' : 'comments'))}>
-              <MessageSquare size={19} />{openThreads > 0 && <b className="badge">{openThreads}</b>}
-            </button>
-          )}
-          {user && !preview && !info.zk && <button className="icon-btn" title="Compare with another document or version" aria-label="Compare" onClick={() => setCompare(true)}><GitCompareArrows size={19} /></button>}
-          {user && !preview && !info.zk && <BranchButton docId={info.id} title={info.title} icon />}
-          {!preview && <button className={`icon-btn ${panel === 'insights' ? 'active' : ''}`} title="Insights: readability, tone and word count" aria-label="Insights" onClick={() => setPanel((p) => (p === 'insights' ? 'none' : 'insights'))}><Gauge size={19} /></button>}
-          <ReadAloud plain={!!info.zk} />
-          {user && !preview && (
-            <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'assistant' ? 'none' : 'assistant'))}><Sparkles size={17} /><span className="lbl">Assistant</span></button>
-          )}
-          <button className={`btn btn-pill btn-soft proof-btn ${panel === 'proof' ? 'active' : ''}`} onClick={() => { setPreview(null); setPanel((p) => (p === 'proof' ? 'none' : 'proof')) }}>
-            <SpellCheck size={17} /><span className="lbl">Proofread</span>
-            {proof.issues.length > 0 && <b className="badge">{proof.issues.length}</b>}
-          </button>
-          <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
           <RequestAccess info={info} />
           <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
           {user ? (

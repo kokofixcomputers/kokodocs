@@ -10,7 +10,7 @@ from .db import get_db
 from .routes import must_user
 
 router = APIRouter(prefix="/api")
-KEYS = {"snippets", "writing", "extensions"}   # what can be stored
+KEYS = {"snippets", "writing", "extensions", "bars"}   # what can be stored
 MAX = 64 * 1024
 MAX_EXT = 512 * 1024   # extensions are small programs: up to 20, 100 KB each
 
@@ -49,6 +49,12 @@ def put_pref(key: str, body: PrefIn, user=Depends(must_user), db=Depends(get_db)
             if t in seen:
                 raise HTTPException(422, f"“{t}” is used twice")
             seen.add(t)
+    if key == "bars":
+        v = body.value
+        def prof(x):
+            return isinstance(x, dict) and x.get("preset") in ("essential", "standard", "everything", "custom") and all(isinstance(x.get(k), list) and len(x[k]) <= 80 and all(isinstance(i, str) and len(i) <= 30 for i in x[k]) for k in ("toolbar", "header"))
+        if not (isinstance(v, dict) and isinstance(v.get("same"), bool) and prof(v.get("desktop")) and prof(v.get("mobile"))):
+            raise HTTPException(422, "Toolbar settings are {same, desktop, mobile}, each with a preset and lists of buttons")
     if key == "extensions":
         v = body.value
         items = v.get("items") if isinstance(v, dict) else None

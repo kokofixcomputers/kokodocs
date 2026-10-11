@@ -28,4 +28,11 @@ got = call("GET", "/api/me/prefs", tok=T)[1]["extensions"]
 ok("…and come back", got["items"][0]["trusted"] is True and got["settings"]["abc123"]["name"] == "Zed")
 ok("trusted must be a boolean", put({"items": [ext(trusted="yes")], "theme": ""}) == 422)
 ok("settings must be flat values", put({"items": [ext()], "theme": "", "settings": {"abc123": {"x": {"deep": 1}}}}) == 422)
+prof = lambda **k: {"preset": "standard", "toolbar": [], "header": [], **k}
+putb = lambda v: call("PUT", "/api/me/prefs/bars", {"value": v}, T)[0]
+ok("toolbar layout saves", putb({"same": False, "desktop": prof(), "mobile": prof(preset="essential")}) == 200)
+ok("custom lists save", putb({"same": True, "desktop": prof(preset="custom", toolbar=["bold"], header=["share"]), "mobile": prof()}) == 200)
+ok("unknown preset refused", putb({"same": False, "desktop": prof(preset="wild"), "mobile": prof()}) == 422)
+ok("same must be a boolean", putb({"same": "yes", "desktop": prof(), "mobile": prof()}) == 422)
+ok("lists must be short strings", putb({"same": False, "desktop": prof(toolbar=[1]), "mobile": prof()}) == 422)
 print("fails", fails); sys.exit(1 if fails else 0)
