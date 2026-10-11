@@ -38,7 +38,7 @@ import { useVoiceTyping } from '../voice/useVoiceTyping'
 import { VoicePill } from '../voice/VoicePill'
 import { VoiceFab } from '../voice/VoiceControl'
 import { ReadAloud } from '../tts/ReadAloud'
-import { useWheelZoom, useZoom, ZoomPill } from '../ui/zoom'
+import { useTypingZoom, useWheelZoom, useZoom, ZoomPill } from '../ui/zoom'
 import { Outline } from '../editor/Outline'
 import { ShareDialog } from '../editor/ShareDialog'
 import { VersionHistory, fullLabel } from '../editor/VersionHistory'
@@ -109,6 +109,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const proof = useProofread(ed, info.id)
   const voice = useVoiceTyping({ editor: ed, docId: info.id, enabled: !readOnly && !preview })
   const uz = useZoom('wiki'), canvasRef = useRef<HTMLDivElement>(null)
+  const ez = useTypingZoom(uz.z)
   useWheelZoom(canvasRef, uz)
   const { status, synced } = useProviderStatus(provider)
   const people = usePresence(provider)
@@ -368,7 +369,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             </div>
           </aside>
 
-          <div className="canvas wiki-canvas" ref={canvasRef} style={{ ['--uz' as string]: uz.z }}>
+          <div className="canvas wiki-canvas" ref={canvasRef} style={{ ['--uz' as string]: ez }}>
             {!synced && status !== 'denied' && <div className="sync-banner">Loading wiki</div>}
             {preview ? <WikiPreview live={ydoc} docId={info.id} version={preview} onRestore={restoreVersion} onClose={() => setPreview(null)} /> : cur && tree[cur] ? (
               <PageView key={cur} id={cur} entry={tree[cur]} crumbs={ancestors(tree, cur).map((a) => tree[a].title)} prev={order[order.indexOf(cur) - 1]} next={order[order.indexOf(cur) + 1]}

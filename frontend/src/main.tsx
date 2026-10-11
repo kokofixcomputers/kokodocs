@@ -38,7 +38,6 @@ import { installZkImages } from './zk/images'
 import './app.css'
 import './editor.css'
 import { paintCachedTheme } from './extensions/runtime'
-import { stopIosFocusZoom } from './ui/iosFocusZoom'
 
 installDesktop()   // the Electron app marks the page so the layout leaves room for its title bar
 installEmojiRecovery()
@@ -66,7 +65,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-stopIosFocusZoom()
 paintCachedTheme()   // the theme an extension set last time, before anything is drawn
 if (!ssoPopupLanding()) ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

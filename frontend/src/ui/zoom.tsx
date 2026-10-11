@@ -11,6 +11,24 @@ const key = (kind: string) => `koko.zoom.${kind}`
 
 export interface Zoom { z: number; set: (z: number) => void; in: () => void; out: () => void; reset: () => void }
 
+const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+
+/** iPhones jump in (and, with a page that is being re-laid-out under the keyboard, can even crash) when you type in text that the page zoom has made smaller than 16 px.
+ *  So on those devices a zoomed-out page is shown at its full size while you are typing, and goes back to your zoom when you stop. */
+export function useTypingZoom(z: number): number {
+  const [typing, setTyping] = useState(false)
+  useEffect(() => {
+    if (!IOS || z >= 1) { setTyping(false); return }
+    let t: number | undefined
+    const field = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA)$/.test(el.tagName))
+    const on = (e: FocusEvent) => { if (field(e.target)) { window.clearTimeout(t); setTyping(true) } }
+    const off = () => { window.clearTimeout(t); t = window.setTimeout(() => setTyping(false), 250) }   // (moving between two fields shouldn't flip back and forth)
+    document.addEventListener('focusin', on); document.addEventListener('focusout', off)
+    return () => { window.clearTimeout(t); document.removeEventListener('focusin', on); document.removeEventListener('focusout', off) }
+  }, [z])
+  return typing && z < 1 ? 1 : z
+}
+
 export function useZoom(kind: string): Zoom {
   const [z, setZ] = useState(() => { try { return clamp(Number(localStorage.getItem(key(kind))) || 1) } catch { return 1 } })
   const set = useCallback((v: number) => { const n = clamp(v); setZ(n); try { n === 1 ? localStorage.removeItem(key(kind)) : localStorage.setItem(key(kind), String(n)) } catch { /* ignore */ } }, [kind])
