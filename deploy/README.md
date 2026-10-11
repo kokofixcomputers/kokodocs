@@ -56,4 +56,10 @@ Edit the script to change:
 
 ## Updating without downtime
 
-Run the app under gunicorn (see `kokodocs.service`, one worker only) and update with `sudo systemctl reload kokodocs`. The gunicorn master keeps the port open, starts a new worker with the new code, then retires the old one; people editing reconnect on their own. Tested here: a reload during a stream of requests dropped none. Saving a document merges with what is already stored when another copy saved in between, so the moment both copies run overlaps safely. `systemctl restart` (and `python run.py`, which has no master process) still stops for a few seconds; Caddy's `lb_try_duration` hides that from visitors.
+`python run.py` (and `gunicorn -c gunicorn_conf.py app.main:app`, as in `kokodocs.service`) runs gunicorn with one worker plus a watcher: whenever a `.py` file under `backend/` changes, it waits two seconds for the changes to stop (an upload of many files takes a moment), checks that every changed file compiles, and then reloads gracefully. The new worker starts before the old one stops, so nothing is refused, and open pages reconnect on their own. If a file doesn't compile it logs `code changed but NOT reloaded` and the site keeps running the old code until you fix it. Set `KOKO_AUTORELOAD=0` to turn the watcher off.
+
+- **Docker or a panel:** nothing to configure beyond installing `gunicorn` (it is in the requirements files) and starting with `python run.py`. Upload the new files into the running container's folder and it reloads itself. Changes baked into a new image still need a container restart. Reload by hand with `docker kill -s HUP <container>` (gunicorn is the container's main process).
+- **systemd:** `sudo systemctl reload kokodocs` also works.
+- Keep it to one worker: open documents live in the process. Saving a document merges with what is already stored when another copy saved in between, so the moment both copies run overlaps safely.
+- Tested: a reload during a stream of requests dropped none; a file with a syntax error was not loaded and the site stayed up; fixing it reloaded.
+- `KOKO_NO_GUNICORN=1` runs plain uvicorn (restarts on every deploy). Windows has no gunicorn, so it always uses uvicorn.

@@ -7,9 +7,11 @@ User=kokodocs
 WorkingDirectory=/opt/kokodocs/backend
 Environment=KOKO_DATA_DIR=/var/lib/kokodocs
 # Optional: Environment=KOKO_SECRET=<long random string>
-# ONE worker (-w 1): open documents live in the process. A reload starts the new worker before the old one stops, so nothing is refused.
-ExecStart=/opt/kokodocs/backend/.venv/bin/gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 1 -b 127.0.0.1:8000 --graceful-timeout 10 --timeout 60 --forwarded-allow-ips 127.0.0.1
-ExecReload=/bin/kill -HUP $MAINPID   # sudo systemctl reload kokodocs: new code, no downtime
+# gunicorn_conf.py: ONE worker (open documents live in the process), reloads by itself when backend/*.py changes, with no downtime.
+Environment=KOKO_BIND=127.0.0.1:8000 KOKO_FORWARDED_ALLOW_IPS=127.0.0.1
+ExecStart=/opt/kokodocs/backend/.venv/bin/gunicorn -c gunicorn_conf.py app.main:app
+# sudo systemctl reload kokodocs  reloads on demand, with no downtime
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=1
 TimeoutStopSec=15
