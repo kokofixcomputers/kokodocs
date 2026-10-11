@@ -1,6 +1,6 @@
 import { isOnline } from '../offline/net'
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, X } from 'lucide-react'
 
 const POLL_MS = 60_000
 const RELOADED_KEY = 'koko.updateReload'
@@ -10,6 +10,8 @@ const RELOADED_KEY = 'koko.updateReload'
  *  online, and offers a reload when the two differ. Pages from before an update would otherwise ask for lazy-loaded files that no
  *  longer exist and break in odd ways. If one of those loads does fail, reloading is the only fix, so that happens at once (once). */
 const TRIED_KEY = 'koko.updateTried'
+const DISMISSED_KEY = 'koko.updateDismissed'   // the build the person closed the notice for; a newer one shows it again
+const dismissedId = () => { try { return sessionStorage.getItem(DISMISSED_KEY) } catch { return null } }
 
 /** Reload so that the new version really arrives. A plain reload can be answered from a cache that still holds the old index page
  *  (a browser, or a proxy/CDN in front of the site that ignores no-cache), which would just bring the pill back. So first the page
@@ -39,7 +41,7 @@ export function UpdateNotice() {
         const r = await fetch(`/version.js?_=${Date.now()}`, { cache: 'no-store' })
         if (!r.ok) return
         const latest = /"([0-9a-f]+)"/.exec(await r.text())?.[1]
-        if (alive && latest && latest !== mine) { latestId.current = latest; setStale(true) }
+        if (alive && latest && latest !== mine) { latestId.current = latest; if (latest !== dismissedId()) setStale(true) }
       } catch { /* offline: try again later */ }
     }
     const visible = () => { if (document.visibilityState === 'visible') void check() }
@@ -61,6 +63,7 @@ export function UpdateNotice() {
     <div className="update-notice" role="status">
       <RefreshCw size={16} /><span>KokoDocs was updated.</span>
       <button type="button" className="update-btn" disabled={busy} onClick={() => { setBusy(true); void reloadForUpdate(latestId.current) }}>{busy ? 'Reloading…' : 'Reload'}</button>
+      <button type="button" className="update-x" aria-label="Dismiss" title="Not now" onClick={() => { try { if (latestId.current) sessionStorage.setItem(DISMISSED_KEY, latestId.current) } catch { /* ignore */ } setStale(false) }}><X size={15} /></button>
     </div>
   )
 }

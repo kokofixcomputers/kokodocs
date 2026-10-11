@@ -666,3 +666,6 @@ a.brand { color: var(--ink); text-decoration: none; }
 .bp-shelf-h { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .bp-tray { display: flex; flex-wrap: wrap; gap: 6px; }
 .bp-tile { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; cursor: grab; color: var(--ink); } .bp-tile:hover { border-color: var(--accent); } .bp-tile svg:last-child { color: var(--muted); } .bp-ico { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+
+.update-notice .update-x { appearance: none; border: 0; background: transparent; color: inherit; opacity: .75; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; margin-right: -6px; touch-action: manipulation; } .update-notice .update-x:hover { opacity: 1; background: rgba(255,255,255,.18); }
+@media (pointer: coarse) { .update-notice .update-x { width: 44px; height: 44px; } }
