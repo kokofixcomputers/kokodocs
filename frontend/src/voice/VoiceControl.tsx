@@ -64,7 +64,10 @@ export function VoiceControl({ voice, editable }: { voice: Voice; editable: bool
 
 /** Phones have no push-to-talk key, so a floating mic button starts and stops dictation with a tap. */
 export function VoiceFab({ voice, editable }: { voice: Voice; editable: boolean }) {
-  if (!editable || voice.phase !== 'idle' || voice.available === false) return null
+  const shown = editable && voice.phase === 'idle' && voice.available !== false
+  // a class on the page, so the zoom pill can move aside (a :has() selector on the root would be re-checked on every keystroke, and has crashed Safari)
+  useEffect(() => { if (!shown) return; const r = document.documentElement; r.classList.add('has-voice-fab'); return () => r.classList.remove('has-voice-fab') }, [shown])
+  if (!shown) return null
   // portalled: React must not insert/remove siblings next to the editor's floating menus, which move their own DOM nodes
   return createPortal(<button type="button" className="voice-fab" aria-label="Start voice typing" onMouseDown={(e) => e.preventDefault()} onClick={() => voice.toggle()}><Mic size={22} /></button>, document.body)
 }

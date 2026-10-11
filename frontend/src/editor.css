@@ -724,5 +724,5 @@ html.embed .ed-body { padding: 0; }
 
 /* phones: the zoom pill sits on the left, level with the microphone button on the right */
 @media (max-width: 720px) {
-  html:has(.voice-fab) .zoom-pill { left: 16px !important; right: auto !important; bottom: calc(86px + var(--kb, 0px) + env(safe-area-inset-bottom)) !important; }
+  html.has-voice-fab .zoom-pill { left: 16px !important; right: auto !important; bottom: calc(86px + var(--kb, 0px) + env(safe-area-inset-bottom)) !important; }
 }
