@@ -53,3 +53,7 @@ Edit the script to change:
 - Empty directories are cleaned up automatically
 - All operations are logged with **color-coded status messages**
 - Works on macOS/Linux terminals with ANSI color support
+
+## Updating without downtime
+
+Run the app under gunicorn (see `kokodocs.service`, one worker only) and update with `sudo systemctl reload kokodocs`. The gunicorn master keeps the port open, starts a new worker with the new code, then retires the old one; people editing reconnect on their own. Tested here: a reload during a stream of requests dropped none. Saving a document merges with what is already stored when another copy saved in between, so the moment both copies run overlaps safely. `systemctl restart` (and `python run.py`, which has no master process) still stops for a few seconds; Caddy's `lb_try_duration` hides that from visitors.

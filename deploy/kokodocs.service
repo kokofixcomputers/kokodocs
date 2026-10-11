@@ -7,7 +7,9 @@ User=kokodocs
 WorkingDirectory=/opt/kokodocs/backend
 Environment=KOKO_DATA_DIR=/var/lib/kokodocs
 # Optional: Environment=KOKO_SECRET=<long random string>
-ExecStart=/opt/kokodocs/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --timeout-graceful-shutdown 5
+# ONE worker (-w 1): open documents live in the process. A reload starts the new worker before the old one stops, so nothing is refused.
+ExecStart=/opt/kokodocs/backend/.venv/bin/gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 1 -b 127.0.0.1:8000 --graceful-timeout 10 --timeout 60 --forwarded-allow-ips 127.0.0.1
+ExecReload=/bin/kill -HUP $MAINPID   # sudo systemctl reload kokodocs: new code, no downtime
 Restart=on-failure
 RestartSec=1
 TimeoutStopSec=15

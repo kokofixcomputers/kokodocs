@@ -108,9 +108,24 @@ def _load(doc_id: str) -> Doc:
     return doc
 
 
+_last_written: dict[str, bytes] = {}   # the checksum of what this process last stored for each document
+
+
 def _write(doc_id: str, update: bytes) -> None:
+    """Store a document. While an update is being rolled out two copies of the server can run for a moment, each holding the same document;
+    if the stored copy is not the one this process wrote last, somebody else saved in between, so their changes are merged in (updates combine
+    in any order) instead of being overwritten."""
+    import hashlib
     with connect() as db:
+        row = db.execute("SELECT ydoc FROM documents WHERE id = ?", (doc_id,)).fetchone()
+        stored = bytes(row["ydoc"]) if row and row["ydoc"] else b""
+        if stored and hashlib.blake2b(stored, digest_size=16).digest() != _last_written.get(doc_id):
+            try:
+                d = Doc(); d.apply_update(stored); d.apply_update(update); update = d.get_update()
+            except Exception:
+                pass
         db.execute("UPDATE documents SET ydoc = ?, updated_at = ? WHERE id = ?", (update, time.time(), doc_id))
+        _last_written[doc_id] = hashlib.blake2b(update, digest_size=16).digest()
         try:
             searchindex.index_doc(db, doc_id, update)
         except Exception:
