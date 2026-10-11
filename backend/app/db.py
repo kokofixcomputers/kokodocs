@@ -369,6 +369,11 @@ def migrate(db: sqlite3.Connection) -> None:
         db.execute("ALTER TABLE folders ADD COLUMN color TEXT")
     if "link_role" not in fcols:
         db.execute("ALTER TABLE folders ADD COLUMN link_role TEXT NOT NULL DEFAULT 'viewer'")
+    if "link_expires_at" not in fcols:
+        db.execute("ALTER TABLE folders ADD COLUMN link_expires_at REAL")
+    dcols = {r["name"] for r in db.execute("PRAGMA table_info(documents)")}
+    if "link_expires_at" not in dcols:
+        db.execute("ALTER TABLE documents ADD COLUMN link_expires_at REAL")
 
 
 @contextmanager

@@ -4,6 +4,7 @@ import { api, type Folder } from '../api'
 import { Avatar } from '../ui/Avatar'
 import { Modal } from '../ui/Modal'
 import { Select } from '../ui/Select'
+import { LinkExpiry, type Expiry } from '../ui/LinkExpiry'
 import { toast } from '../ui/Toast'
 
 type R = 'viewer' | 'editor'
@@ -24,8 +25,11 @@ export function FolderShareDialog({ folder, ownerName, ownerEmail, onClose, onSa
   const [access, setAccess] = useState<'restricted' | 'anyone'>(folder.link_access ?? 'restricted')
   const [linkRole, setLinkRole] = useState<R>(folder.link_role ?? 'viewer')
   const [copied, setCopied] = useState(false)
+  const [expires, setExpires] = useState<Expiry>('keep')
+  const [expAt, setExpAt] = useState<number | null>(null)
+  const [savedAccess, setSavedAccess] = useState('restricted')
 
-  useEffect(() => { api.getFolderSharing(folder.id).then((r) => { setShares(r.shares); setAccess(r.link_access); setLinkRole(r.link_role); setLoaded(true) }).catch((e) => setErr(e.message)) }, [folder.id])
+  useEffect(() => { api.getFolderSharing(folder.id).then((r) => { setShares(r.shares); setAccess(r.link_access); setLinkRole(r.link_role); setExpAt(r.link_expires_at ?? null); setSavedAccess(r.link_access); setLoaded(true) }).catch((e) => setErr(e.message)) }, [folder.id])
 
   const add = () => {
     const e = email.trim().toLowerCase()
@@ -43,7 +47,7 @@ export function FolderShareDialog({ folder, ownerName, ownerEmail, onClose, onSa
     setBusy(true); setErr('')
     try {
       const pending = email.trim() ? [...shares, { email: email.trim().toLowerCase(), role, name: null }] : shares
-      await api.putFolderSharing(folder.id, { shares: pending, link_access: access, link_role: linkRole })
+      await api.putFolderSharing(folder.id, { shares: pending, link_access: access, link_role: linkRole, expires })
       toast(pending.length || access === 'anyone' ? 'Folder sharing saved' : 'Folder is no longer shared')
       onSaved(); onClose()
     } catch (e) { setErr((e as Error).message) } finally { setBusy(false) }
@@ -99,6 +103,7 @@ export function FolderShareDialog({ folder, ownerName, ownerEmail, onClose, onSa
             </div>
           </div>
         )}
+        {access === 'anyone' && <LinkExpiry value={expires} onChange={setExpires} current={savedAccess === access ? expAt : null} />}
         {err && <p className="form-error">{err}</p>}
         <div className="modal-actions">
           <button className="btn btn-pill btn-ghost" onClick={access === 'anyone' ? copy : onClose}>

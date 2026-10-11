@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RequestAccess, useOpenShareFromUrl } from '../editor/RequestAccess'
 import { Link } from 'react-router-dom'
 import * as Y from 'yjs'
 import { ClipboardCheck, ClipboardPaste, Copy, ExternalLink, CopyPlus, Download, Grid3x3, Magnet, History, Maximize2, Minimize2, Layers as LayersIcon, Loader2, LogIn, Maximize, Minus, Moon, Plus, RotateCcw, Share2, Sparkles, Sun, Trash2, X } from 'lucide-react'
@@ -83,6 +84,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
   const [draftText, setDraftText] = useState<El | null>(null)
   const [interactive, setInteractive] = useState<string | null>(null)
   const [share, setShare] = useState(false)
+  useOpenShareFromUrl(info.role === 'owner' || info.role === 'manager', setShare)
   const [initialPrompt] = useState(() => takePrompt(info.id))
   const [panel, setPanel] = useState<'none' | 'layers' | 'history' | 'assistant'>(initialPrompt ? 'assistant' : 'none')
   const [preview, setPreview] = useState<Version | null>(null)
@@ -386,6 +388,7 @@ function Inner({ info, ydoc, model, provider, readOnly }: { info: DocInfo; ydoc:
           {!readOnly && <button className={`icon-btn ${panel === 'history' ? 'active' : ''}`} title="Version history" aria-label="Version history" onClick={() => { setPreview(null); setPanel((p) => (p === 'history' ? 'none' : 'history')) }}><History size={19} /></button>}
           {user && !preview && <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => setPanel((p) => (p === 'assistant' ? 'none' : 'assistant'))}><Sparkles size={17} /><span className="lbl">Koko</span></button>}
           <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{uiTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
+          <RequestAccess info={info} />
           <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
           {user ? (
             <Popover align="end" trigger={({ toggle }) => <button className="avatar-btn" onClick={toggle}><Avatar name={user.name} color={user.color} size={34} /></button>}>

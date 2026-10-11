@@ -57,6 +57,19 @@ async def send_mail_background(to: str, subject: str, plain: str, html: str) -> 
         log.warning("Mention email to %s failed: %s: %s", to, type(e).__name__, str(e)[:200])
 
 
+def access_request_mail(actor: str, actor_email: str, title: str, message: str, url: str) -> tuple[str, str, str]:
+    subject = f"{actor} is asking for edit access to “{title}”"
+    note = f"\n\n  {message}" if message else ""
+    plain = f"{actor} ({actor_email}) can only view “{title}” and would like to edit it.{note}\n\nOpen it and press Share to give them “Can edit”: {url}"
+    esc = lambda t: t.replace("&", "&amp;").replace("<", "&lt;")
+    quote = f'<blockquote style="margin:0 0 18px;padding:10px 14px;border-left:3px solid #111;background:#f4f4f4;border-radius:6px">{esc(message)}</blockquote>' if message else ""
+    html = (f'<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:auto;padding:24px"><h2 style="margin:0 0 6px">KokoDocs</h2>'
+            f'<p style="color:#555;margin:0 0 14px"><b>{esc(actor)}</b> ({esc(actor_email)}) can only view <b>{esc(title)}</b> and would like to edit it.</p>{quote}'
+            f'<a href="{url}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:999px;font-weight:600">Open the document</a>'
+            f'<p style="color:#999;font-size:12px;margin-top:22px">Press Share in the document and give them “Can edit” to say yes. Ignore this email to say no.</p></div>')
+    return subject, plain, html
+
+
 def shared_with(db, doc, email: str) -> bool:
     """Is this address on the file's (or its folder's) share list? Used for people who haven't made an account yet."""
     if db.execute("SELECT 1 FROM shares WHERE doc_id = ? AND email = ?", (doc["id"], email)).fetchone():

@@ -1,5 +1,6 @@
 """Who can do what on a document. Single source of truth for REST and WebSocket."""
 import sqlite3
+import time
 from dataclasses import dataclass
 
 from fastapi import HTTPException
@@ -34,6 +35,10 @@ def is_admin(u) -> bool:
     return bool(u) and (u["email"].lower() in admin_emails() or bool(u["is_admin"]))
 
 
+def expired(at) -> bool:
+    return bool(at) and at <= time.time()
+
+
 def folder_grant(db: sqlite3.Connection, user, fid: str, links: bool = True) -> str | None:
     """Role granted by this one folder (a share for the user, or an 'anyone with the link' setting)."""
     best = None
@@ -42,8 +47,8 @@ def folder_grant(db: sqlite3.Connection, user, fid: str, links: bool = True) -> 
         if row:
             best = row["role"]
     if links:
-        f = db.execute("SELECT link_access, link_role FROM folders WHERE id = ?", (fid,)).fetchone()
-        if f and f["link_access"] == "anyone" and (best is None or RANK[f["link_role"]] > RANK[best]):
+        f = db.execute("SELECT link_access, link_role, link_expires_at FROM folders WHERE id = ?", (fid,)).fetchone()
+        if f and f["link_access"] == "anyone" and not expired(f["link_expires_at"]) and (best is None or RANK[f["link_role"]] > RANK[best]):
             best = f["link_role"]
     return best
 
@@ -92,7 +97,7 @@ def resolve(db: sqlite3.Connection, doc: sqlite3.Row, user, doc_token: str | Non
         bump("viewer")
     link_role = "viewer" if is_form else doc["link_role"]
 
-    mode = doc["link_access"]
+    mode = "restricted" if expired(doc["link_expires_at"]) else doc["link_access"]   # an expired link is just a restricted one
     if mode == "anyone":
         bump(link_role)
     elif mode == "password" and doc_token_valid(doc_token, doc["id"]):

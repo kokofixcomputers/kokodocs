@@ -44,15 +44,15 @@ export interface SharedFolderView {
   docs: DocSummary[]
 }
 export interface FolderSharing {
-  link_access: 'restricted' | 'anyone'; link_role: 'viewer' | 'editor'
+  link_access: 'restricted' | 'anyone'; link_role: 'viewer' | 'editor'; link_expires_at?: number | null
   shares: { email: string; role: 'viewer' | 'editor'; name: string | null }[] }
 export interface Version {
   id: string; created_at: number; kind: 'auto' | 'manual'; label: string | null
   authors: string[]; words: number; preview: string
 }
-export interface DocInfo extends DocSummary { owner_email: string; link: { access: LinkAccess; role: 'viewer' | 'editor' } }
+export interface DocInfo extends DocSummary { owner_email: string; link: { access: LinkAccess; role: 'viewer' | 'editor'; expires_at?: number | null } }
 export interface Sharing {
-  link_access: LinkAccess; link_role: 'viewer' | 'editor'; has_password: boolean
+  link_access: LinkAccess; link_role: 'viewer' | 'editor'; has_password: boolean; link_expires_at?: number | null
   shares: { email: string; role: 'viewer' | 'editor' | 'manager'; name: string | null }[]
 }
 export interface ProofIssue {
@@ -75,7 +75,7 @@ export interface StorageState {
   progress: { running: boolean; phase: 'files' | 'documents' | 'done'; docs_total: number; docs_done: number; files_total: number; files_done: number; bytes_total: number; bytes_done: number; current: string; failed: { what: string; error: string }[]; started_at: number; finished_at: number | null; moved_docs?: number; moved_files?: number } | null
 }
 export interface StorageIn { kind: 's3' | 'webdav' | 'folder'; config: Record<string, string>; enabled: boolean; idle_minutes: number; keep_search: boolean }
-export interface Notice { id: string; kind: 'mention' | 'comment' | 'share'; doc_id: string; doc_title: string; actor: string; text: string; link: string; created_at: number; read: boolean }
+export interface Notice { id: string; kind: 'mention' | 'comment' | 'share' | 'access'; doc_id: string; doc_title: string; actor: string; text: string; link: string; created_at: number; read: boolean }
 export interface MentionSkip { email: string; reason: 'not_shared' }
 export interface Comment { anchor: Record<string, unknown> | null; id: string; parent_id: string | null; body: string; quote: string; resolved: boolean; created_at: number; user_id: string; author: string; mentions: string[] }
 export interface FormFileRef { id: string; name: string; size: number }
@@ -228,7 +228,7 @@ export const api = {
   moveFolder: (id: string, parent_id: string | null) => request<Folder>(`/api/folders/${id}`, { method: 'PATCH', ...json({ move: true, parent_id }) }),
   deleteFolder: (id: string) => request<{ trashed: number }>(`/api/folders/${id}`, { method: 'DELETE' }),
   getFolderSharing: (id: string) => request<FolderSharing>(`/api/folders/${id}/sharing`),
-  putFolderSharing: (id: string, b: { shares: { email: string; role: string }[]; link_access: string; link_role: string }) =>
+  putFolderSharing: (id: string, b: { shares: { email: string; role: string }[]; link_access: string; link_role: string; expires?: string }) =>
     request<FolderSharing>(`/api/folders/${id}/sharing`, { method: 'PUT', ...json(b) }),
   listSharedFolders: () => cached('sfolders', () => request<SharedFolder[]>('/api/shared/folders')),
   openSharedFolder: (id: string) => cached(`sfolder:${id}`, async () => { const r = await request<SharedFolderView>(`/api/shared/folders/${id}`); await decorateAll(r.docs); return r }, (r) => ({ ...r, docs: keepPlain(r.docs) })),
@@ -253,8 +253,10 @@ export const api = {
   },
   deleteDoc: (id: string) => request(`/api/docs/${id}`, { method: 'DELETE' }, id),
   getSharing: (id: string) => request<Sharing>(`/api/docs/${id}/sharing`, {}, id),
-  putSharing: (id: string, b: { link_access: LinkAccess; link_role: string; password?: string; shares: { email: string; role: string }[] }) =>
+  putSharing: (id: string, b: { link_access: LinkAccess; link_role: string; password?: string; expires?: string; shares: { email: string; role: string }[] }) =>
     request<Sharing>(`/api/docs/${id}/sharing`, { method: 'PUT', ...json(b) }, id),
+  requestAccess: (id: string, message: string) =>
+    request<{ ok: true }>(`/api/docs/${id}/request-access`, { method: 'POST', ...json({ message }) }, id),
   unlock: (id: string, password: string) =>
     request<{ token: string }>(`/api/docs/${id}/unlock`, { method: 'POST', ...json({ password }) }, id),
   importImage: async (id: string, url: string) => {

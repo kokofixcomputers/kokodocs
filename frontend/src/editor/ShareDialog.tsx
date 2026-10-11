@@ -4,6 +4,7 @@ import { api, type DocInfo, type LinkAccess, type Sharing } from '../api'
 import { useAuth } from '../auth'
 import { Avatar } from '../ui/Avatar'
 import { Select } from '../ui/Select'
+import { LinkExpiry, type Expiry } from '../ui/LinkExpiry'
 import { Modal } from '../ui/Modal'
 import { toast } from '../ui/Toast'
 import { ZkShareDialog } from '../zk/ZkShareDialog'
@@ -32,6 +33,7 @@ function PlainShareDialog({ info, onClose }: { info: DocInfo; onClose: () => voi
   const [access, setAccess] = useState<LinkAccess>(info.link.access)
   const [linkRole, setLinkRole] = useState<R>(info.link.role)
   const [password, setPassword] = useState('')
+  const [expires, setExpires] = useState<Expiry>('keep')
   const [shares, setShares] = useState<{ email: string; role: R; name: string | null }[]>([])
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<R>(info.kind === 'form' ? 'viewer' : 'editor')
@@ -65,7 +67,7 @@ function PlainShareDialog({ info, onClose }: { info: DocInfo; onClose: () => voi
     try {
       const pending = email.trim() ? [...shares, { email: email.trim().toLowerCase(), role, name: null }] : shares
       const r = await api.putSharing(info.id, {
-        link_access: access, link_role: isForm ? 'viewer' : linkRole, shares: pending,
+        link_access: access, link_role: isForm ? 'viewer' : linkRole, shares: pending, expires,
         ...(access === 'password' && password ? { password } : {}),
       })
       setData(r); toast('Sharing settings saved'); onClose()
@@ -129,6 +131,7 @@ function PlainShareDialog({ info, onClose }: { info: DocInfo; onClose: () => voi
               </div>
             </div>
           )}
+          {access !== 'restricted' && <LinkExpiry value={expires} onChange={setExpires} current={data?.link_access === access ? data.link_expires_at : null} />}
           {access === 'password' && (
             <label className="field rise"><KeyRound size={17} />
               <input type="password" placeholder={data?.has_password ? 'Leave blank to keep the current password' : 'Choose a password'}

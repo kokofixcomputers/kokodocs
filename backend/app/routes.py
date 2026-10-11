@@ -261,7 +261,7 @@ def get_doc(doc_id: str, c=Depends(ctx), db=Depends(get_db)):
     return {
         **doc_summary(doc, acc.role, owner["name"], starred, sealed=(db.execute("SELECT sealed FROM zk_grants WHERE doc_id = ? AND email = ?", (doc_id, acc.user["email"])).fetchone() or {"sealed": None})["sealed"] if acc.user and doc["zk"] else None),
         "owner_email": owner["email"],
-        "link": {"access": doc["link_access"], "role": "viewer" if doc["kind"] == "form" else doc["link_role"]},
+        "link": {"access": "restricted" if access.expired(doc["link_expires_at"]) else doc["link_access"], "expires_at": doc["link_expires_at"], "role": "viewer" if doc["kind"] == "form" else doc["link_role"]},
     }
 
 
@@ -323,6 +323,16 @@ class SharingIn(BaseModel):
     link_role: Literal["viewer", "editor"] = "viewer"
     password: str | None = Field(None, min_length=4, max_length=200)
     shares: list[ShareEntry] = []
+    expires: Literal["never", "7d", "30d", "keep"] = "keep"   # keep = leave the current expiry alone
+
+
+def expiry_value(choice: str, current, link_access: str):
+    """Timestamp the link should stop working at (None = never). Restricted links have nothing to expire."""
+    if link_access == "restricted" or choice == "never":
+        return None
+    if choice == "keep":
+        return current
+    return time.time() + (7 if choice == "7d" else 30) * 86400
 
 
 def sharing_view(db, doc) -> dict:
@@ -335,8 +345,37 @@ def sharing_view(db, doc) -> dict:
         "link_access": doc["link_access"],
         "link_role": doc["link_role"],
         "has_password": bool(doc["link_password_hash"]),
+        "link_expires_at": doc["link_expires_at"],
         "shares": [{"email": r["email"], "role": r["role"], "name": r["name"]} for r in rows],
     }
+
+
+class AccessRequestIn(BaseModel):
+    message: str = Field("", max_length=500)
+
+
+access_request_limiter = RateLimiter(3, 3600)
+
+
+@router.post("/docs/{doc_id}/request-access")
+async def request_access(doc_id: str, body: AccessRequestIn, request: Request, c=Depends(ctx), db=Depends(get_db)):
+    """A view-only person asks the owner for edit access: the owner gets a notification and an email."""
+    doc, acc = access.require(db, doc_id, *c)
+    if not acc.user:
+        raise HTTPException(401, {"code": "login_required", "message": "Sign in to ask for edit access"})
+    if acc.role != "viewer" or doc["kind"] == "form":
+        raise HTTPException(409, "You can already edit this" if acc.role != "viewer" else "Forms can't be edited by link visitors")
+    if not access_request_limiter.allow(f"{acc.user['id']}:{doc_id}"):
+        raise HTTPException(429, "You already asked. The owner has been told.")
+    owner = db.execute("SELECT * FROM users WHERE id = ?", (doc["owner_id"],)).fetchone()
+    from . import notifications
+    from .authx import base_url
+    msg = body.message.strip()
+    notifications.add(db, owner["id"], "access", doc, acc.user["name"], msg, f"/d/{doc_id}?share=1")
+    db.commit()
+    url = base_url(request, db) + f"/d/{doc_id}?share=1"
+    asyncio.create_task(notifications.send_mail_background(owner["email"], *notifications.access_request_mail(acc.user["name"], acc.user["email"], doc["title"], msg, url)))
+    return {"ok": True}
 
 
 @router.get("/docs/{doc_id}/sharing")
@@ -370,8 +409,8 @@ async def put_sharing(doc_id: str, body: SharingIn, c=Depends(ctx), db=Depends(g
     if acc.role == "manager":
         seen[acc.user["email"]] = "manager"   # a manager saving the list can never lock themselves out by accident
     db.execute(
-        "UPDATE documents SET link_access = ?, link_role = ?, link_password_hash = ? WHERE id = ?",
-        (body.link_access, body.link_role, pw_hash, doc_id),
+        "UPDATE documents SET link_access = ?, link_role = ?, link_password_hash = ?, link_expires_at = ? WHERE id = ?",
+        (body.link_access, body.link_role, pw_hash, expiry_value(body.expires, doc["link_expires_at"] if doc["link_access"] == body.link_access else None, body.link_access), doc_id),
     )
     before = {r["email"] for r in db.execute("SELECT email FROM shares WHERE doc_id = ?", (doc_id,))}
     db.execute("DELETE FROM shares WHERE doc_id = ?", (doc_id,))

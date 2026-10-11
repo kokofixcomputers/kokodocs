@@ -187,14 +187,15 @@ class FolderSharingIn(BaseModel):
     shares: list[FolderShareEntry] = []
     link_access: Literal["restricted", "anyone"] = "restricted"
     link_role: Literal["viewer", "editor"] = "viewer"
+    expires: Literal["never", "7d", "30d", "keep"] = "keep"
 
 
 def folder_sharing_view(db, fid: str) -> dict:
     rows = db.execute(
         """SELECT s.email, s.role, u.name FROM folder_shares s LEFT JOIN users u ON u.email = s.email
            WHERE s.folder_id = ? ORDER BY s.created_at""", (fid,)).fetchall()
-    f = db.execute("SELECT link_access, link_role FROM folders WHERE id = ?", (fid,)).fetchone()
-    return {"link_access": f["link_access"], "link_role": f["link_role"],
+    f = db.execute("SELECT link_access, link_role, link_expires_at FROM folders WHERE id = ?", (fid,)).fetchone()
+    return {"link_access": f["link_access"], "link_role": f["link_role"], "link_expires_at": f["link_expires_at"],
             "shares": [{"email": r["email"], "role": r["role"], "name": r["name"]} for r in rows]}
 
 
@@ -215,7 +216,10 @@ async def put_folder_sharing(fid: str, body: FolderSharingIn, user=Depends(must_
             raise HTTPException(422, f"'{s.email}' is not a valid email address")
         if email != user["email"]:
             seen[email] = s.role
-    db.execute("UPDATE folders SET link_access = ?, link_role = ? WHERE id = ?", (body.link_access, body.link_role, fid))
+    from .routes import expiry_value
+    cur = db.execute("SELECT link_access, link_expires_at FROM folders WHERE id = ?", (fid,)).fetchone()
+    db.execute("UPDATE folders SET link_access = ?, link_role = ?, link_expires_at = ? WHERE id = ?",
+               (body.link_access, body.link_role, expiry_value(body.expires, cur["link_expires_at"] if cur["link_access"] == body.link_access else None, body.link_access), fid))
     db.execute("DELETE FROM folder_shares WHERE folder_id = ?", (fid,))
     now = time.time()
     db.executemany("INSERT INTO folder_shares (folder_id, email, role, created_at) VALUES (?,?,?,?)", [(fid, e, r, now) for e, r in seen.items()])

@@ -1,4 +1,5 @@
 import { SavePill } from '../ui/SavePill'
+import { RequestAccess, useOpenShareFromUrl } from './RequestAccess'
 import { yXmlFragmentToProsemirrorJSON } from 'y-prosemirror'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { openSettings } from '../ui/settingsStore'
@@ -129,6 +130,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const [preview, setPreview] = useState<Version | null>(null)
   const [verKey, setVerKey] = useState(0)
   const [share, setShare] = useState(false)
+  useOpenShareFromUrl(info.role === 'owner' || info.role === 'manager', setShare)
   const [hf, setHf] = useState(false)
   const [setup, setSetup] = useState(false)
   const [find, setFindOpen] = useState<{ replace: boolean; n: number } | null>(null)
@@ -376,6 +378,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             {proof.issues.length > 0 && <b className="badge">{proof.issues.length}</b>}
           </button>
           <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
+          <RequestAccess info={info} />
           <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
           {user ? (
             <Popover align="end" trigger={({ toggle }) => <button className="avatar-btn" onClick={toggle}><Avatar name={user.name} color={user.color} size={34} /></button>}>

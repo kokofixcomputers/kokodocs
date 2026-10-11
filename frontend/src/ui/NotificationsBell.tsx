@@ -5,8 +5,8 @@ import { api, type Notice } from '../api'
 import { Popover } from './Popover'
 
 const ago = (t: number) => { const s = Date.now() / 1000 - t; return s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : new Date(t * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' }) }
-const ICON = { mention: AtSign, comment: MessageSquare, share: Share2 }
-const VERB = { mention: 'mentioned you in', comment: 'commented on', share: 'shared' }
+const ICON = { mention: AtSign, comment: MessageSquare, share: Share2, access: Share2 }
+const VERB = { mention: 'mentioned you in', comment: 'commented on', share: 'shared', access: 'asked for edit access to' }
 
 export function NotificationsBell() {
   const nav = useNavigate()

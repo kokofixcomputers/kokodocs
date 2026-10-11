@@ -1,4 +1,5 @@
 import { SavePill } from '../ui/SavePill'
+import { RequestAccess, useOpenShareFromUrl } from '../editor/RequestAccess'
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EncryptionBadge } from '../zk/EncryptionBadge'
 import { Select } from '../ui/Select'
@@ -94,6 +95,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const [pageId, setPageId] = useState<string | null>(() => decodeURIComponent(location.hash.slice(1)) || null)
   const [navOpen, setNavOpen] = useState(() => window.innerWidth > 900)
   const [share, setShare] = useState(false)
+  useOpenShareFromUrl(info.role === 'owner' || info.role === 'manager', setShare)
   const [varsOpen, setVarsOpen] = useState(false)
   const [notion, setNotion] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -311,7 +313,8 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
             </button>}
             <button className="btn btn-pill btn-soft" onClick={() => setVarsOpen(true)} title="Values the request blocks can use, like the server address"><Braces size={17} /><span className="lbl">Variables</span></button>
             <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
-            <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
+            <RequestAccess info={info} />
+          <button className="btn btn-pill btn-primary" onClick={() => setShare(true)}><Share2 size={16} /><span className="lbl">Share</span></button>
             {user ? (
               <Popover align="end" trigger={({ toggle }) => <button className="avatar-btn" onClick={toggle}><Avatar name={user.name} color={user.color} size={34} /></button>}>
                 {(close) => (
