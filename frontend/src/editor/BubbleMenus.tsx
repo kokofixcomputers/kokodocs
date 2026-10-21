@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { BubbleMenu, type Editor } from '@tiptap/react'
 import { Sparkles,
   AlignCenter, AlignLeft, AlignRight, ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, ArrowDownFromLine, ArrowRightFromLine, Combine, Palette,
-  MessageSquarePlus, LayoutGrid, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough as StrikeIcon, Code as CodeIcon, Link as LinkIcon, Highlighter as HighlighterIcon, Shapes, Type, Minus, Plus, Rows3, Columns3, Split, Trash2, TableProperties, Image as ImageIcon,
-} from 'lucide-react'
+  MessageSquarePlus, LayoutGrid, Bold as BoldIcon, Italic as ItalicIcon, Underline as UnderlineIcon, Strikethrough as StrikeIcon, Code as CodeIcon, Link as LinkIcon, Highlighter as HighlighterIcon, Shapes, Type, Minus, Plus, Rows3, Columns3, Split, Trash2, TableProperties, Image as ImageIcon, Grid3x3 } from 'lucide-react'
 import { CellSelection, TableMap, mergeCells, selectionCell } from '@tiptap/pm/tables'
 import { toast } from '../ui/Toast'
 import { usePrefs } from '../prefs'
@@ -41,6 +40,34 @@ function tableRect(editor: Editor): DOMRect {
 }
 
 /** The table design list; it follows the table's own settings as they change. */
+const LINE_WIDTHS: [string, number][] = [['None', 0], ['Thin', 1], ['Medium', 2], ['Thick', 3]]
+/** The lines of the table and of the selected cells: colour and thickness. */
+function TableBordersBody({ editor }: { editor: Editor }) {
+  const [, tick] = useState(0)
+  useEffect(() => { const f = () => tick((n) => n + 1); editor.on('transaction', f); return () => { editor.off('transaction', f) } }, [editor])
+  const t = editor.getAttributes('table') as { tbColor?: string | null; tbWidth?: number | null }
+  const cell = { ...editor.getAttributes('tableHeader'), ...editor.getAttributes('tableCell') } as { borderColor?: string | null; borderWidth?: number | null }
+  const setTable = (p: Record<string, unknown>) => editor.chain().focus().updateAttributes('table', p).run()
+  const setCell = (k: string, v: unknown) => editor.chain().focus().setCellAttribute(k, v).run()
+  const Swatch = ({ value, onPick, none }: { value?: string | null; onPick: (c: string | null) => void; none: string }) => (
+    <Popover trigger={({ toggle }) => <button type="button" className="tbl-colorbtn" onMouseDown={(e) => e.preventDefault()} onClick={toggle}><i style={{ background: value ?? 'var(--ink)', opacity: value ? 1 : .26 }} />{value ? 'Colour' : 'Default'}</button>}>
+      {(close) => <ColorPicker value={value ?? undefined} noneLabel={none} onPick={(c) => { close(); onPick(c) }} />}
+    </Popover>)
+  const Widths = ({ value, onPick }: { value?: number | null; onPick: (w: number) => void }) => (
+    <span className="seg tbl-widths" role="group">{LINE_WIDTHS.map(([l, w]) => <button key={l} type="button" className={(value ?? 1) === w || (value === undefined && w === 1) ? 'on' : ''} onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(w)}>{l}</button>)}</span>)
+  return (
+    <div className="tbl-styles tbl-borders">
+      <b>Lines of the whole table</b>
+      <div className="tbl-row"><span>Colour</span><Swatch value={t.tbColor} none="Default colour" onPick={(c) => setTable({ tbColor: c })} /></div>
+      <div className="tbl-row"><span>Thickness</span><Widths value={t.tbWidth ?? null} onPick={(w) => setTable({ tbWidth: w })} /></div>
+      <b style={{ marginTop: 6 }}>Outline of the selected cells</b>
+      <div className="tbl-row"><span>Colour</span><Swatch value={cell.borderColor} none="No outline" onPick={(c) => { setCell('borderColor', c); if (!c) setCell('borderWidth', null) }} /></div>
+      <div className="tbl-row"><span>Thickness</span><Widths value={cell.borderWidth ?? 2} onPick={(w) => setCell('borderWidth', w || 1)} /></div>
+      <p className="muted" style={{ margin: '4px 6px 2px', fontSize: 12 }}>Drag across cells to select several. Use None to hide the table’s lines.</p>
+    </div>
+  )
+}
+
 function TableStyleBody({ editor }: { editor: Editor }) {
   const [, tick] = useState(0)
   useEffect(() => { const f = () => tick((n) => n + 1); editor.on('transaction', f); return () => { editor.off('transaction', f) } }, [editor])
@@ -80,6 +107,9 @@ export function TableMenu({ editor }: { editor: Editor }) {
         <Btn icon={<TableProperties size={16} />} label="Toggle header row" tip="turn the first row into a bold header, or back" onClick={() => c().toggleHeaderRow().run()} />
         <Popover className="bb-pop tbl-pop" trigger={({ toggle }) => <Btn icon={<LayoutGrid size={16} />} label="Table style" tip="pick a design, alternating row shading, a frozen header row" onClick={toggle} />}>
           {() => <TableStyleBody editor={editor} />}
+        </Popover>
+        <Popover className="bb-pop tbl-pop" trigger={({ toggle }) => <Btn icon={<Grid3x3 size={16} />} label="Borders" tip="colour and thickness of the lines, for the table or the selected cells" onClick={toggle} />}>
+          {() => <TableBordersBody editor={editor} />}
         </Popover>
         <Popover trigger={({ toggle }) => <Btn icon={<Palette size={16} />} label="Cell color" tip="fill the cell background" onClick={toggle} />}>
           {(close) => <ColorPicker noneLabel="No fill" onPick={(col) => { close(); c().setCellAttribute('backgroundColor', col).run() }} />}

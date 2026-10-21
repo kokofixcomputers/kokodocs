@@ -11,7 +11,7 @@ import type { Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, Baseline, Bold, ChevronDown, Code, Highlighter, ImagePlus, Italic,
   FileCog, Search, Info, Link2, List, ListChecks, KeyboardOff, IndentDecrease, IndentIncrease, ListOrdered, Minus, PanelTop, Paintbrush, Plus, Printer, Quote, Redo2, RemoveFormatting, Strikethrough,
-  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow, StickyNote, Sparkles, WandSparkles, Sigma, MoreHorizontal, SlidersHorizontal } from 'lucide-react'
+  Subscript, Superscript, Table2, Underline, Undo2, ScanText, Pilcrow, StickyNote, Sparkles, WandSparkles, Sigma, MoreHorizontal, SlidersHorizontal, ArrowDownUp } from 'lucide-react'
 import { DEFAULT_FONT } from '../fonts'
 import { ShapeButton } from './ShapePicker'
 import { useKeyboardOpen } from '../ui/KeyboardFit'
@@ -23,6 +23,7 @@ import { useFormatPainter } from './FormatPainter'
 import { FontPicker } from './FontPicker'
 import { HeadingPicker } from './headingLinks'
 import { PagePicker, type PageTarget } from './PagePicker'
+import { LINE_HEIGHTS } from './LineSpacing'
 
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72, 96]
 const HEADING_SIZE: Record<number, number> = { 1: 26, 2: 20, 3: 16, 4: 14, 5: 12, 6: 11 }
@@ -163,6 +164,13 @@ export function Toolbar({ pageLinks, editor, onImage, onHeaderFooter, onPageSetu
       <TBtn icon={<AlignRight size={17} />} label="Align right" active={editor.isActive({ textAlign: 'right' })} onClick={() => run().setTextAlign('right').run()} />
       <TBtn icon={<AlignJustify size={17} />} label="Justify" active={editor.isActive({ textAlign: 'justify' })} onClick={() => run().setTextAlign('justify').run()} /></> },
 
+    { id: 'spacing', g: 'align', node: (
+      <Popover className="pop-menu small" trigger={({ toggle }) => <TBtn icon={<ArrowDownUp size={17} />} label="Line spacing" onClick={toggle} />}>
+        {(close) => <>
+          {LINE_HEIGHTS.map((v) => { const cur = (editor.getAttributes('paragraph').lineHeight ?? editor.getAttributes('heading').lineHeight) as number | null | undefined; return <button key={v} className={`menu-row ${cur === v ? 'on' : ''}`} onClick={() => { close(); run().setLineHeight(v).run() }}>{v === 1 ? 'Single (1.0)' : v === 2 ? 'Double (2.0)' : v}</button> })}
+          <button className="menu-row" onClick={() => { close(); run().setLineHeight(null).run() }}>Default</button>
+        </>}
+      </Popover>) },
     { id: 'lists', g: 'lists', node: <>
       <TBtn icon={<List size={17} />} label="Bulleted list" active={editor.isActive('bulletList')} onClick={() => run().toggleBulletList().run()} />
       <TBtn icon={<ListOrdered size={17} />} label="Numbered list" active={editor.isActive('orderedList')} onClick={() => run().toggleOrderedList().run()} />

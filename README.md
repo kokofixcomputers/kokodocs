@@ -710,3 +710,10 @@ The sticky-note button in the spreadsheet toolbar adds a floating note over the 
 ### Hiding (collapsing) columns in spreadsheets
 
 Right-click a column header (or a selection of columns) → **Hide columns**. The columns collapse out of view but keep their data, formulas, formatting and width; a small ◂▸ handle on the boundary shows them again, and the menu also has **Show all hidden columns**. Arrow keys and Tab step over hidden columns, and hidden columns move with their neighbours when columns are inserted or deleted. Hiding is saved in the spreadsheet (`h<column>` in the sheet's dimensions), so everyone sees the same columns; people who can only view it see the same layout but can't unhide. Formulas still use hidden columns, and CSV/Excel exports still include them.
+
+## Line spacing, table lines, font order, suggestions
+
+- **Line spacing** (toolbar button with up/down arrows, in the Standard layout): single, 1.15, 1.5, double, 2.5 or 3 for the paragraphs or headings you select; kept in the document and written into Word exports as the paragraph's spacing (`editor/LineSpacing.ts`).
+- **Table lines**: darker by default and adjustable. The table menu's **Borders** button sets the colour and thickness (None, Thin, Medium, Thick) of the whole table's lines, and the outline colour and thickness of the selected cells (drawn inside each cell, so neighbours don't fight over a shared edge). Both are saved with the table and written into Word exports.
+- **Fonts** are listed A to Z (a clock marks the ones you used lately). Coloured text gets a hair of outline so it doesn't look washed out in light-stroked fonts like Lexend.
+- **On-device suggestions** (SmolLM) were retired: if "Suggestions while you write" is on and uses the on-device model, it is switched off (on every device, as it's an account setting) and a popup says why; pick the AI connection to use suggestions.

@@ -14,7 +14,7 @@ export const TOOLBAR_ITEMS: BarItem[] = [
   { id: 'style', label: 'Text style', level: 1 }, { id: 'font', label: 'Font', level: 1 }, { id: 'size', label: 'Font size', level: 1 },
   { id: 'bold', label: 'Bold', level: 1 }, { id: 'italic', label: 'Italic', level: 1 }, { id: 'underline', label: 'Underline', level: 1 }, { id: 'strike', label: 'Strikethrough', level: 2 },
   { id: 'color', label: 'Text colour', level: 2 }, { id: 'highlight', label: 'Highlight', level: 2 }, { id: 'link', label: 'Link', level: 1 },
-  { id: 'align', label: 'Alignment', level: 2 }, { id: 'lists', label: 'Lists', level: 1 }, { id: 'quote', label: 'Quote', level: 2 },
+  { id: 'align', label: 'Alignment', level: 2 }, { id: 'spacing', label: 'Line spacing', level: 2 }, { id: 'lists', label: 'Lists', level: 1 }, { id: 'quote', label: 'Quote', level: 2 },
   { id: 'table', label: 'Table', level: 2 }, { id: 'image', label: 'Image', level: 1 }, { id: 'scan', label: 'Scan a page', level: 3 }, { id: 'shape', label: 'Shapes', level: 3 },
   { id: 'command', label: 'Do something (AI)', level: 2 }, { id: 'fixfmt', label: 'Fix formatting', level: 3 }, { id: 'sticky', label: 'Sticky note', level: 3 }, { id: 'emoji', label: 'Emoji', level: 2 },
   { id: 'callout', label: 'Callout', level: 2 }, { id: 'equation', label: 'Equation', level: 3 }, { id: 'divider', label: 'Divider', level: 3 }, { id: 'code', label: 'Code', level: 3 },

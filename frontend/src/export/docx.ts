@@ -15,6 +15,8 @@ const hex = (c?: string | null): string | undefined => {
 }
 
 const HEADINGS = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4, HeadingLevel.HEADING_5, HeadingLevel.HEADING_6]
+/** Word's line spacing: 240 is single. A paragraph's own spacing wins over the document default. */
+const lineOf = (n: { attrs?: Record<string, unknown> }, dflt: number) => { const v = Number(n.attrs?.lineHeight); return v > 0 && v < 10 ? Math.round(240 * v) : dflt }
 const ALIGN: Record<string, (typeof AlignmentType)[keyof typeof AlignmentType]> = { left: AlignmentType.LEFT, center: AlignmentType.CENTER, right: AlignmentType.RIGHT, justify: AlignmentType.JUSTIFIED }
 const MAX_IMG = 600 // px (6.25 in), fits inside Letter with 1 in margins
 
@@ -73,7 +75,7 @@ async function blocks(nodes: PMNode[] = [], ctx: Ctx, extra: Partial<IParagraphO
   for (const n of nodes) {
     switch (n.type) {
       case 'paragraph':
-        out.push(new Paragraph({ ...extra, children: await inline(n.content, ctx), alignment: ALIGN[n.attrs?.textAlign ?? ''] ?? extra.alignment, spacing: { after: 140, line: 300, ...(extra.spacing ?? {}) } }))
+        out.push(new Paragraph({ ...extra, children: await inline(n.content, ctx), alignment: ALIGN[n.attrs?.textAlign ?? ''] ?? extra.alignment, spacing: { after: 140, line: lineOf(n, 300), ...(extra.spacing ?? {}) } }))
         break
       case 'heading':
         out.push(new Paragraph({ ...extra, heading: HEADINGS[(n.attrs?.level ?? 1) - 1], children: await inline(n.content, ctx), alignment: ALIGN[n.attrs?.textAlign ?? ''] ?? extra.alignment, spacing: { before: 200, after: 120 } }))
@@ -126,11 +128,14 @@ async function blocks(nodes: PMNode[] = [], ctx: Ctx, extra: Partial<IParagraphO
             const head = c.type === 'tableHeader'
             const kids = (await blocks(c.content, ctx, {}, 0))
             const fill = hex(c.attrs?.backgroundColor) ?? (head ? 'EEEEF2' : undefined)
-            const edge = { style: BorderStyle.SINGLE, size: 4, color: 'D4D4D8' }
+            const ta = (n.attrs ?? {}) as Record<string, unknown>, tw = typeof ta.tbWidth === 'number' ? ta.tbWidth : null
+            const edge = tw === 0 ? { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' } : { style: BorderStyle.SINGLE, size: Math.max(2, Math.round((tw ?? 1) * 6)), color: hex(ta.tbColor as string | undefined) ?? 'A1A1AA' }
+            const own = hex(c.attrs?.borderColor), ow = Number(c.attrs?.borderWidth) || 2
+            const mine = own ? { style: BorderStyle.SINGLE, size: Math.round(ow * 6), color: own } : null
             cells.push(new TableCell({
               children: kids.length ? kids : [new Paragraph({})], columnSpan: (c.attrs?.colspan ?? 1) > 1 ? c.attrs?.colspan : undefined, rowSpan: (c.attrs?.rowspan ?? 1) > 1 ? c.attrs?.rowspan : undefined,
               shading: fill ? { type: ShadingType.CLEAR, fill, color: 'auto' } : undefined, margins: { top: 80, bottom: 80, left: 120, right: 120 },
-              borders: { top: edge, bottom: edge, left: edge, right: edge },
+              borders: { top: mine ?? edge, bottom: mine ?? edge, left: mine ?? edge, right: mine ?? edge },
             }))
           }
           rows.push(new TableRow({ children: cells }))

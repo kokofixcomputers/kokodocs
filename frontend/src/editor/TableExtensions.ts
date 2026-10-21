@@ -13,11 +13,25 @@ const bg = {
   },
 }
 
+/** A cell's own outline: colour and thickness, drawn inside the cell on all four sides (so neighbouring cells don't fight over a shared edge). */
+const cellBorder = {
+  borderColor: {
+    default: null,
+    parseHTML: (el: HTMLElement) => el.getAttribute('data-bordercolor') || null,
+    renderHTML: (a: Record<string, any>) => (a.borderColor ? { 'data-bordercolor': a.borderColor, 'data-borderwidth': String(a.borderWidth ?? 2), style: `box-shadow: inset 0 0 0 ${Number(a.borderWidth ?? 2)}px ${a.borderColor}` } : {}),
+  },
+  borderWidth: {
+    default: null,
+    parseHTML: (el: HTMLElement) => { const v = Number(el.getAttribute('data-borderwidth')); return Number.isFinite(v) && v > 0 ? v : null },
+    renderHTML: () => ({}),
+  },
+}
+
 export const KokoTableCell = TableCell.extend({
-  addAttributes() { return { ...this.parent?.(), ...bg } },
+  addAttributes() { return { ...this.parent?.(), ...bg, ...cellBorder } },
 })
 export const KokoTableHeader = TableHeader.extend({
-  addAttributes() { return { ...this.parent?.(), ...bg } },
+  addAttributes() { return { ...this.parent?.(), ...bg, ...cellBorder } },
 })
 
 export const TABLE_STYLES = [
@@ -38,7 +52,12 @@ export const KokoTable = Table.extend({
       parseHTML: (el: HTMLElement) => { const v = el.getAttribute(`data-${name}`); return v === null ? def : v === 'true' ? true : v === 'false' ? false : v },
       renderHTML: (a: Record<string, any>) => (a[name] === def ? {} : { [`data-${name}`]: String(a[name]) }),
     })
-    return { ...this.parent?.(), tableStyle: keep('tablestyle', 'default'), banded: keep('banded', false), frozen: keep('frozen', false) }
+    return {
+      ...this.parent?.(), tableStyle: keep('tablestyle', 'default'), banded: keep('banded', false), frozen: keep('frozen', false),
+      // the lines of the whole table: a colour and a thickness (0 hides them); the cells read them as CSS variables
+      tbColor: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute('data-tbcolor') || null, renderHTML: (a: Record<string, any>) => (a.tbColor ? { 'data-tbcolor': a.tbColor, style: `--tb-color: ${a.tbColor}` } : {}) },
+      tbWidth: { default: null, parseHTML: (el: HTMLElement) => { const v = el.getAttribute('data-tbwidth'); return v === null ? null : Number(v) }, renderHTML: (a: Record<string, any>) => (a.tbWidth === null || a.tbWidth === undefined ? {} : { 'data-tbwidth': String(a.tbWidth), style: `--tb-width: ${a.tbWidth}px` }) },
+    }
   },
   addProseMirrorPlugins() {
     return [
@@ -50,8 +69,9 @@ export const KokoTable = Table.extend({
             const out: Decoration[] = []
             state.doc.descendants((node, pos) => {
               if (node.type.name !== 'table') return true
-              const a = node.attrs as { tableStyle: string; banded: boolean; frozen: boolean }
-              out.push(Decoration.node(pos, pos + node.nodeSize, { class: `tbl-${a.tableStyle || 'default'}${a.banded ? ' tbl-banded' : ''}${a.frozen ? ' tbl-frozen' : ''}` }))
+              const a = node.attrs as { tableStyle: string; banded: boolean; frozen: boolean; tbColor: string | null; tbWidth: number | null }
+              const vars = `${a.tbColor ? `--tb-color:${a.tbColor};` : ''}${a.tbWidth === null || a.tbWidth === undefined ? '' : `--tb-width:${a.tbWidth}px;`}`
+              out.push(Decoration.node(pos, pos + node.nodeSize, { class: `tbl-${a.tableStyle || 'default'}${a.banded ? ' tbl-banded' : ''}${a.frozen ? ' tbl-frozen' : ''}`, ...(vars ? { style: vars } : {}) }))
               return false
             })
             return out.length ? DecorationSet.create(state.doc, out) : null

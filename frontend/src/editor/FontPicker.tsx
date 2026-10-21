@@ -6,6 +6,7 @@ const ROW = 46
 const HEIGHT = 340
 const RECENT_KEY = 'koko.recentFonts'
 
+const SORTED = [...FONTS].sort((a, b) => a.family.localeCompare(b.family, 'en', { sensitivity: 'base' }))
 const readRecent = (): string[] => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]') } catch { return [] } }
 
 export function FontPicker({ value, onPick, resetLabel, onReset }: { value: string; onPick: (family: string) => void; resetLabel?: string; onReset?: () => void }) {
@@ -17,13 +18,8 @@ export function FontPicker({ value, onPick, resetLabel, onReset }: { value: stri
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    let l = FONTS.filter((f) => (cat === 'all' || f.category === cat) && (!needle || f.family.toLowerCase().includes(needle)))
-    if (!needle && cat === 'all') {
-      const set = new Set(recent)
-      l = [...recent.map((r) => FONTS.find((f) => f.family === r)!).filter(Boolean), ...l.filter((f) => !set.has(f.family))]
-    }
-    return l
-  }, [q, cat, recent])
+    return SORTED.filter((f) => (cat === 'all' || f.category === cat) && (!needle || f.family.toLowerCase().includes(needle)))   // A to Z (a clock marks the ones you used lately)
+  }, [q, cat])
 
   useEffect(() => { scroller.current?.scrollTo({ top: 0 }); setTop(0) }, [q, cat])
 
@@ -54,7 +50,7 @@ export function FontPicker({ value, onPick, resetLabel, onReset }: { value: stri
             <button key={f.family} className={`font-row ${f.family === value ? 'on' : ''}`}
               style={{ top: (start + i) * ROW, height: ROW }} onClick={() => pick(f.family)}>
               <span className="font-name" style={{ fontFamily: fontStack(f.family) }}>{f.family}</span>
-              {!q && cat === 'all' && recent.includes(f.family) && start + i < recent.length ? <Clock size={14} className="muted" /> : null}
+              {recent.includes(f.family) ? <Clock size={14} className="muted" aria-label="Used recently" /> : null}
               {f.family === value && <Check size={16} />}
             </button>
           ))}
