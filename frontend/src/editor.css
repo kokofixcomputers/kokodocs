@@ -745,3 +745,9 @@ html.embed .ed-body { padding: 0; }
 .tbl-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 6px; font-size: 13.5px; }
 .tbl-colorbtn { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 13px; cursor: pointer; } .tbl-colorbtn i { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line); }
 .tbl-widths button { padding: 5px 10px; font-size: 12.5px; }
+
+/* dictation drawn in the page, at the cursor */
+.vt-ghost { color: var(--muted); font-style: italic; pointer-events: none; white-space: pre-wrap; } .vt-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; margin-right: 2px; vertical-align: middle; animation: vt-pulse 1s ease-in-out infinite; } .vt-ghost.busy .vt-dot { background: var(--muted); animation-duration: .6s; }
+@keyframes vt-pulse { 0%, 100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.1); } }
+
+.vc-more { width: 22px !important; min-width: 22px !important; margin-left: -6px; opacity: .8; }

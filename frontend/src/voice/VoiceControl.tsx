@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertCircle, Mic, Keyboard } from 'lucide-react'
+import { AlertCircle, ChevronDown, Mic, Keyboard } from 'lucide-react'
 import { Popover } from '../ui/Popover'
 import { DEFAULT_SHORTCUT, shortcutLabel, type Shortcut, type Voice } from './useVoiceTyping'
 
@@ -36,29 +36,31 @@ export function VoiceControl({ voice, editable }: { voice: Voice; editable: bool
   const on = voice.phase !== 'idle'
   const unavailable = voice.available === false
   return (
-    <Popover className="vc-menu" onOpenChange={(o) => { if (!o) voice.setCapturing(false) }} trigger={({ toggle }) => (
-      <button type="button" className={`tb-btn ${on ? 'on' : ''}`} title={`Voice typing (hold ${shortcutLabel(voice.shortcut)})`} aria-label="Voice typing"
-        disabled={!editable} onMouseDown={(e) => e.preventDefault()} onClick={toggle}><Mic size={17} /></button>)}>
-      {(close) => (
-        <div className="vc-body">
-          <div className="vc-title"><Mic size={18} /><h4>Voice typing</h4></div>
-          {voice.capturing ? (
-            <Capture onDone={(s) => { voice.setShortcut(s); voice.setCapturing(false) }} onCancel={() => voice.setCapturing(false)} />
-          ) : (
-            <>
-              <p className="vc-hint">Hold <kbd>{shortcutLabel(voice.shortcut)}</kbd>, speak, then let go. What you said is typed at the cursor.</p>
-              {unavailable && <p className="vc-warn"><AlertCircle size={16} />Voice typing isn't set up on this server. An admin needs to add a speech provider (see the README).</p>}
-              <button className="btn btn-pill btn-primary btn-sm vc-main" disabled={unavailable} onClick={() => { close(); voice.toggle() }}>{on ? 'Stop and insert' : 'Start dictating'}</button>
-              {voice.serverDraft && (
-                <div className="vc-live"><span><b>Show words while I speak</b><em>A quick preview in the pill. The final text is still the more accurate version.</em></span><button type="button" role="switch" aria-checked={voice.live} aria-label="Show words while I speak" className={`toggle ${voice.live ? 'on' : ''}`} onClick={() => voice.setLive(!voice.live)} /></div>)}
-              <div className="vc-row">
-                <button className="vc-link" onClick={() => voice.setCapturing(true)}>Change shortcut</button>
-                {shortcutLabel(voice.shortcut) !== shortcutLabel(DEFAULT_SHORTCUT) && <button className="vc-link" onClick={() => voice.setShortcut(DEFAULT_SHORTCUT)}>Reset</button>}
-              </div>
-            </>
-          )}
-        </div>)}
-    </Popover>
+    <>
+      <button type="button" className={`tb-btn ${on ? 'on' : ''}`} title={on ? 'Stop dictating' : `Dictate: click and talk (or hold ${shortcutLabel(voice.shortcut)})`} aria-label={on ? 'Stop voice typing' : 'Start voice typing'} aria-pressed={on}
+        disabled={!editable || unavailable} onMouseDown={(e) => e.preventDefault()} onClick={() => voice.toggle()}><Mic size={17} /></button>
+      <Popover className="vc-menu" onOpenChange={(o) => { if (!o) voice.setCapturing(false) }} trigger={({ toggle }) => (
+        <button type="button" className="tb-btn vc-more" title="Voice typing options" aria-label="Voice typing options" disabled={!editable} onMouseDown={(e) => e.preventDefault()} onClick={toggle}><ChevronDown size={14} /></button>)}>
+        {() => (
+          <div className="vc-body">
+            <div className="vc-title"><Mic size={18} /><h4>Voice typing</h4></div>
+            {voice.capturing ? (
+              <Capture onDone={(s) => { voice.setShortcut(s); voice.setCapturing(false) }} onCancel={() => voice.setCapturing(false)} />
+            ) : (
+              <>
+                <p className="vc-hint">Click the microphone and just talk: your words appear in the page at the cursor each time you pause. Click it again (or press Esc) to stop. You can also hold <kbd>{shortcutLabel(voice.shortcut)}</kbd> while you speak.</p>
+                {unavailable && <p className="vc-warn"><AlertCircle size={16} />Voice typing isn't set up on this server. An admin needs to add a speech provider (see the README).</p>}
+                {voice.serverDraft && (
+                  <div className="vc-live"><span><b>Show words as I speak</b><em>Draws a quick guess in the page while you are still talking. Each phrase is replaced by the more accurate text when you pause.</em></span><button type="button" role="switch" aria-checked={voice.live} aria-label="Show words as I speak" className={`toggle ${voice.live ? 'on' : ''}`} onClick={() => voice.setLive(!voice.live)}><i /></button></div>)}
+                <div className="vc-row">
+                  <button className="vc-link" onClick={() => voice.setCapturing(true)}>Change shortcut</button>
+                  {shortcutLabel(voice.shortcut) !== shortcutLabel(DEFAULT_SHORTCUT) && <button className="vc-link" onClick={() => voice.setShortcut(DEFAULT_SHORTCUT)}>Reset</button>}
+                </div>
+              </>
+            )}
+          </div>)}
+      </Popover>
+    </>
   )
 }
 

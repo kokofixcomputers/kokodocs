@@ -33,7 +33,7 @@ export function VoicePill({ voice }: { voice: Voice }) {
 
   const draftRef = useRef<HTMLSpanElement>(null)
   if (voice.phase === 'idle') return null
-  if (voice.canDraft) {   // live preview: the words as they come in, with the waveform shrunk to a thin strip below
+  if (voice.canDraft && !voice.onPage) {   // live preview in the pill (only for plain text boxes: in the document the words are drawn at the cursor): the words as they come in, with the waveform shrunk to a thin strip below
     return createPortal(
       <div className={`voice-pill live ${voice.phase}`} role="status" aria-live="off">
         {listening ? <span className="vp-rec sm" aria-hidden><i /></span> : <Loader2 size={18} className="spin" />}
@@ -43,7 +43,7 @@ export function VoicePill({ voice }: { voice: Voice }) {
             <span className="vp-bars" aria-hidden>{Array.from({ length: BARS }, (_, i) => <span key={i} ref={(el) => { bars.current[i] = el }} />)}</span>
             <span className="vp-actions">
               <button type="button" aria-label="Cancel" onMouseDown={(e) => e.preventDefault()} onClick={voice.cancel}><X size={18} /></button>
-              <button type="button" className="ok" aria-label="Insert" onMouseDown={(e) => e.preventDefault()} onClick={voice.toggle}><Check size={18} /></button>
+              <button type="button" className="ok" aria-label="Done" title="Done" onMouseDown={(e) => e.preventDefault()} onClick={voice.toggle}><Check size={18} /></button>
             </span>
           </>)}
       </div>, document.body)
@@ -54,16 +54,16 @@ export function VoicePill({ voice }: { voice: Voice }) {
         <>
           <span className="vp-rec" aria-hidden><i /></span>
           <span className="vp-bars" aria-hidden>{Array.from({ length: BARS }, (_, i) => <span key={i} ref={(el) => { bars.current[i] = el }} />)}</span>
-          <span className="vp-text"><b>Listening</b><em className="vp-key">Release {shortcutLabel(voice.shortcut)} to insert</em><em className="vp-tap">Tap the tick to insert</em></span>
+          <span className="vp-text"><b>Listening</b>{voice.onPage ? <em>Your words appear in the page when you pause</em> : <><em className="vp-key">Release {shortcutLabel(voice.shortcut)} to insert</em><em className="vp-tap">Tap the tick to insert</em></>}</span>
           <span className="vp-actions">
             <button type="button" aria-label="Cancel" onMouseDown={(e) => e.preventDefault()} onClick={voice.cancel}><X size={18} /></button>
-            <button type="button" className="ok" aria-label="Insert" onMouseDown={(e) => e.preventDefault()} onClick={voice.toggle}><Check size={18} /></button>
+            <button type="button" className="ok" aria-label="Done" title="Done" onMouseDown={(e) => e.preventDefault()} onClick={voice.toggle}><Check size={18} /></button>
           </span>
         </>
       ) : (
         <>
           <Loader2 size={18} className="spin" />
-          <span className="vp-text"><b>Transcribing</b></span>
+          <span className="vp-text"><b>Finishing</b></span>
         </>
       )}
     </div>, document.body)

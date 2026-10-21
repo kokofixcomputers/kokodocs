@@ -12,7 +12,7 @@ export type Phase = 'idle' | 'listening' | 'transcribing'
 const KEY = 'koko.voiceShortcut'
 const LIVE_KEY = 'koko.voiceLive'
 export const loadLive = () => { try { return localStorage.getItem(LIVE_KEY) !== 'off' } catch { return true } }
-const MAX_SECONDS = 120
+const MAX_SECONDS = 600   // ten minutes of continuous dictation
 const MIN_SECONDS = 0.4
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 const MODIFIER_CODES = /^(Control|Alt|Shift|Meta)(Left|Right)$/
@@ -69,6 +69,14 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
   const viaKey = useRef(false)
   const pending = useRef<number | undefined>(undefined)
   const timer = useRef<number | undefined>(undefined)
+  const [onPage, setOnPage] = useState(false)    // the words go into the document (not a plain text box), so they are drawn there as they are heard
+  const [working, setWorking] = useState(0)        // pieces being turned into text right now
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  const session = useRef(0)
+  const inserted = useRef(false)
+  const submitted = useRef(0)
+  const seg = useRef({ spoke: false })
+  const chunkTimer = useRef<number | undefined>(undefined)
   const setP = (p: Phase) => { phaseRef.current = p; setPhase(p); if (p === 'idle') setDraft('') }
 
   // Live preview: every moment or so, send the last few seconds to the small local model and show what it heard.
@@ -105,7 +113,7 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
     el.focus(); el.setSelectionRange(pos, pos)
   }
   const insert = useCallback((text: string) => {
-    const t = target.current; target.current = null
+    const t = target.current   // (kept for the whole dictation: pieces keep arriving)
     if (t && t.isConnected) { insertIntoField(t, text); return }
     if (!editor || editor.isDestroyed) return
     const { from } = editor.state.selection
@@ -114,24 +122,38 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
     editor.chain().focus().insertContent(lead + text + ' ').run()
   }, [editor])
 
+  /** One stretch of speech goes to be written; pieces are written in order and each lands at the cursor as it is done. */
+  const submit = useCallback((wav: Blob, sid: number) => {
+    setWorking((n) => n + 1); submitted.current++
+    queue.current = queue.current.then(async () => {
+      try {
+        if (session.current !== sid) return
+        const text = (await api.transcribe(docId, wav)).trim()
+        if (session.current !== sid) return
+        if (text) { insert(text); inserted.current = true }
+      } catch (e) { if (session.current === sid) toast((e as Error).message || 'Voice typing failed') }
+      finally { setWorking((n) => Math.max(0, n - 1)) }
+    })
+  }, [docId, insert])
+
   const stop = useCallback(async (send = true) => {
     const r = rec.current
     if (!r || phaseRef.current !== 'listening') return
-    window.clearTimeout(timer.current)
+    window.clearTimeout(timer.current); window.clearInterval(chunkTimer.current)
     rec.current = null
-    const secs = r.seconds, peak = r.peak
-    if (!send || secs < MIN_SECONDS) { r.cancel(); setP('idle'); return }
+    const sid = session.current, secs = r.seconds, peak = r.peak
+    if (!send || secs < MIN_SECONDS) { r.cancel(); session.current++; target.current = null; setP('idle'); return }
     setP('transcribing')
     try {
-      const wav = await r.finish()
-      if (peak < 0.01) { toast("Didn't hear anything. Check your microphone."); return }
-      const text = (await api.transcribe(docId, wav)).trim()
-      if (!text) toast("Didn't catch that. Try speaking a little closer to the mic.")
-      else insert(text)
+      const rest = await r.finish()
+      if (seg.current.spoke || (submitted.current === 0 && peak >= 0.01)) submit(rest, sid)   // (a quiet voice that never crossed the pause detector still gets written)
+      seg.current.spoke = false
+      await queue.current
+      if (!inserted.current) toast(peak < 0.01 ? "Didn't hear anything. Check your microphone." : "Didn't catch that. Try speaking a little closer to the mic.")
     } catch (e) {
       toast((e as Error).message || 'Voice typing failed')
-    } finally { setP('idle') }
-  }, [docId, insert])
+    } finally { target.current = null; setP('idle') }
+  }, [submit])
 
   const start = useCallback(async (fromKey: boolean) => {
     if (!enabled || phaseRef.current !== 'idle') return
@@ -141,19 +163,35 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
     const ae = document.activeElement
     target.current = (ae instanceof HTMLTextAreaElement || (ae instanceof HTMLInputElement && /^(text|search|url|)$/.test(ae.type))) && !ae.closest('.ProseMirror') && !ae.readOnly ? ae : null
     if (fieldsOnly && !target.current) { if (!fromKey) toast('Click into a text box first, then dictate.'); return }   // nowhere to put the words
+    setOnPage(!target.current && !!editor && !fieldsOnly)
+    const sid = ++session.current; inserted.current = false; submitted.current = 0; seg.current = { spoke: false }
     setP('listening')
     const r = new Recorder()
     rec.current = r
     try {
       await r.start()
       if ((phaseRef.current as Phase) !== 'listening') { r.cancel(); return } // released before the mic finished opening
-      timer.current = window.setTimeout(() => { toast('Reached the 2 minute limit'); void stop() }, MAX_SECONDS * 1000)
+      timer.current = window.setTimeout(() => { toast('Reached the 10 minute limit'); void stop() }, MAX_SECONDS * 1000)
+      // talk as long as you like: at every pause what was said so far is written into the page, and listening carries on
+      let lastVoice = performance.now(), segStart = lastVoice
+      window.clearInterval(chunkTimer.current)
+      chunkTimer.current = window.setInterval(() => {
+        const rr = rec.current
+        if (!rr || phaseRef.current !== 'listening' || session.current !== sid) return
+        const now = performance.now()
+        if (rr.level() > 0.08) { seg.current.spoke = true; lastVoice = now }
+        const quiet = now - lastVoice, segSecs = (now - segStart) / 1000
+        if (seg.current.spoke && ((quiet > 1000 && segSecs > 0.8) || (segSecs > 22 && quiet > 350))) {
+          const wav = rr.take(); seg.current.spoke = false; segStart = now; lastVoice = now; setDraft('')
+          if (wav) submit(wav, sid)
+        }
+      }, 120)
     } catch (e) {
       rec.current = null; r.cancel(); setP('idle')
       const name = (e as DOMException).name
       toast(name === 'NotAllowedError' ? 'Microphone access is blocked. Allow it in your browser’s site settings.' : name === 'NotFoundError' ? 'No microphone found.' : 'Could not start the microphone.')
     }
-  }, [enabled, available, stop, fieldsOnly, encrypted])
+  }, [enabled, available, stop, fieldsOnly, encrypted, editor, submit])
 
   // push-to-talk: hold the shortcut, speak, release
   useEffect(() => {
@@ -177,13 +215,20 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
     return () => { window.removeEventListener('keydown', down, true); window.removeEventListener('keyup', up, true); window.removeEventListener('blur', blur) }
   }, [enabled, capturing, shortcut, start, stop])
 
-  useEffect(() => () => { window.clearTimeout(timer.current); rec.current?.cancel() }, [])
+  useEffect(() => () => { window.clearTimeout(timer.current); window.clearInterval(chunkTimer.current); rec.current?.cancel() }, [])
+
+  // the words drawn in the page, at the cursor, while you dictate
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return
+    if (onPage && phase !== 'idle') editor.commands.setVoiceGhost({ text: phase === 'listening' ? draft : '', busy: phase === 'transcribing' || (working > 0 && !draft) })
+    else editor.commands.setVoiceGhost(null)
+  }, [editor, onPage, phase, draft, working])
 
   /** Click-to-start / click-to-stop for people who can't hold a key (or on touch devices). */
   const toggle = useCallback(() => { if (phaseRef.current === 'listening') void stop(true); else void start(false) }, [start, stop])
   const cancel = useCallback(() => void stop(false), [stop])
   const setShortcut = useCallback((s: Shortcut) => { setShortcutState(s); try { localStorage.setItem(KEY, JSON.stringify(s)) } catch { /* ignore */ } }, [])
 
-  return { phase, draft, canDraft, serverDraft, live, setLive, shortcut, setShortcut, available, toggle, cancel, capturing, setCapturing, recorder: rec, enabled }
+  return { phase, draft, onPage, working, canDraft, serverDraft, live, setLive, shortcut, setShortcut, available, toggle, cancel, capturing, setCapturing, recorder: rec, enabled }
 }
 export type Voice = ReturnType<typeof useVoiceTyping>

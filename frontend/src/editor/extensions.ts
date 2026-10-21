@@ -2,6 +2,7 @@ import { Callout } from './Callout'
 import { MathBlock, MathInline } from './MathNode'
 import { customBlocks } from './Blocks'
 import { LineSpacing } from './LineSpacing'
+import { VoiceGhost } from './VoiceGhost'
 import { ExtBlock } from '../extensions/ExtBlock'
 import { DocShape } from './ShapeNode'
 import { EmojiNode } from './EmojiNode'
@@ -27,7 +28,7 @@ export const baseExtensions = () => [
   StarterKit.configure({ history: false, heading: false, horizontalRule: false }), AnchorHeading.configure({ levels: [1, 2, 3, 4, 5, 6] }), HeadingLinks,
   Callout, EmojiNode, Underline, TextStyle, Color, FontFamily, FontSize,
   Highlight.configure({ multicolor: true }),
-  TextAlign.configure({ types: ['heading', 'paragraph'] }), LineSpacing,
+  TextAlign.configure({ types: ['heading', 'paragraph'] }), LineSpacing, VoiceGhost,
   Subscript, Superscript,
   DocLink.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' } }),
   TaskList, KokoTaskItem.configure({ nested: true }),
