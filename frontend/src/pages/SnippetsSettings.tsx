@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
 import { api } from '../api'
-import { LOCAL_MODEL, loadLocalModel, localAllowed, removeLocalModel, useLocalModel } from '../editor/ai/local'
 import { aiConnected } from '../editor/ai/model'
 import { Plus, Trash2 } from 'lucide-react'
 import { saveSnippets, saveWriting, usePrefs, type Snippet } from '../prefs'
@@ -61,7 +59,6 @@ function ModelPick({ value, models, onPick, label }: { value: string; models: { 
 /** the writing helpers that use AI, each with its own switch */
 function AiHelpers() {
   const { writing: w } = usePrefs()
-  const lm = useLocalModel()
   const [conn, setConn] = useState<boolean | null>(null)
   const [models, setModels] = useState<{ id: string; label: string; model: string; selected: boolean }[]>([])
   useEffect(() => { void aiConnected().then(setConn); api.aiSettings().then((r) => setModels(r.models.map((m) => ({ id: m.id, label: m.label, model: m.model, selected: m.id === r.selected })))).catch(() => undefined) }, [])
@@ -74,31 +71,6 @@ function AiHelpers() {
           <span className="st-btns">{conn && w.commandBar && <ModelPick value={w.commandModel} models={models} label="Model for the Do something box" onPick={(id) => void save({ commandModel: id })} />}<Toggle on={w.commandBar} label="Do something box" set={(v) => void save({ commandBar: v })} /></span></div>
         <div className="st-row"><div><b>Fix formatting button</b><span>A toolbar button that tidies spacing, turns bold or ALL-CAPS lines into headings, and turns typed “- item” or “1. item” lines into real lists, without changing a word. It works on the selection, or the whole page.</span></div>
           <span className="st-btns"><Toggle on={w.fixFormatting} label="Fix formatting button" set={(v) => void save({ fixFormatting: v })} /></span></div>
-        <div className="st-row"><div><b>Suggestions while you write</b><span>Grey text appears after your cursor with the likely rest of the sentence. Press Tab to take it, Cmd/Ctrl+→ for one word, or keep typing to ignore it. Off by default.</span></div>
-          <span className="st-btns"><Toggle on={w.autocomplete} label="Suggestions while you write" set={(v) => { void save({ autocomplete: v }); if (v && w.engine === 'device' && !lm.downloaded) void loadLocalModel().catch(() => undefined) }} /></span></div>
-        {w.autocomplete && (
-          <div className="st-row" style={{ alignItems: 'flex-start' }}><div><b>Where suggestions come from</b>
-            <span>{w.engine === 'device' && !localAllowed()
-              ? 'This device can’t run the on-device model (it needs more memory than an iPhone or a small phone has), so no suggestions appear here. Pick “AI connection” to get them on this device; the choice is saved with your account, so your computer keeps using the on-device model if you set it that way.'
-              : w.engine === 'device'
-              ? `${LOCAL_MODEL.name}, a small model that runs on this device. Nothing you write leaves it, and it works offline once downloaded (about ${LOCAL_MODEL.mb} MB, kept by the browser). It is modest: expect short, plain continuations.`
-              : conn === false ? 'Uses the AI model connected under Assistant, but none is connected yet. Connect one there first.' : 'Uses an AI model from your connections (pick which below, by default the one Koko uses). The text before your cursor is sent to that provider. It is not used for encrypted documents.'}</span>
-            {w.engine === 'server' && conn && <span className="st-inline" style={{ gap: 10, marginTop: 8 }}>Model: <ModelPick value={w.completionModel} models={models} label="Model for suggestions" onPick={(id) => void save({ completionModel: id })} /></span>}
-            {w.engine === 'device' && (
-              <span className="st-inline" style={{ gap: 10, marginTop: 8 }}>
-                {lm.status === 'loading' ? <><Loader2 size={15} className="spin" /> {lm.downloaded ? 'Starting' : `Downloading ${Math.round(lm.progress * 100)}%`}</>
-                  : lm.status === 'ready' ? <>Ready{lm.device === 'webgpu' ? ' (using the graphics card)' : ' (using the processor)'}</>
-                  : lm.status === 'error' ? <span className="form-error" style={{ margin: 0 }}>{lm.error}</span>
-                  : lm.downloaded ? <>Downloaded</> : null}
-                {lm.status !== 'loading' && !lm.downloaded && <button className="btn btn-pill btn-soft btn-sm" onClick={() => void loadLocalModel().catch(() => undefined)}><Download size={15} />Download now</button>}
-                {lm.status === 'error' && <button className="btn btn-pill btn-soft btn-sm" onClick={() => void loadLocalModel().catch(() => undefined)}>Try again</button>}
-                {lm.downloaded && lm.status !== 'loading' && <button className="btn btn-pill btn-ghost btn-sm" onClick={() => void removeLocalModel()}>Remove the download</button>}
-              </span>)}
-          </div>
-            <span className="seg mini" role="radiogroup" aria-label="Where suggestions come from">
-              <button role="radio" aria-checked={w.engine === 'device'} className={w.engine === 'device' ? 'on' : ''} onClick={() => { void save({ engine: 'device' }); if (!lm.downloaded) void loadLocalModel().catch(() => undefined) }}>This device</button>
-              <button role="radio" aria-checked={w.engine === 'server'} className={w.engine === 'server' ? 'on' : ''} onClick={() => void save({ engine: 'server' })}>AI connection</button>
-            </span></div>)}
       </div>
     </>
   )

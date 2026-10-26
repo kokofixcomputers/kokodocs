@@ -36,7 +36,6 @@ import { UndoPill, useUndoIndicator } from './UndoIndicator'
 import { StickyLayer, addSticky } from './StickyNotes'
 import { FollowPill, PresenceStack, useFollow } from './Follow'
 import { MultiCursor } from './MultiCursor'
-import { Autocomplete } from './Autocomplete'
 import { CommandBar } from './CommandBar'
 import { CalloutMenu, FormatMenu, ImageMenu, ShapeMenu, TableMenu } from './BubbleMenus'
 import { CommentMark } from './CommentMark'
@@ -187,7 +186,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       FindReplace,
       NonPrinting,
       Snippets,
-      TableFill, MultiCursor, Autocomplete.configure({ allowServer: () => !info.zk }),
+      TableFill, MultiCursor,
       SlashCommand,
       EmojiSuggest,
       CommentMark,

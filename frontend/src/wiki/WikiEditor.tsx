@@ -57,7 +57,6 @@ import { UndoPill, useUndoIndicator } from '../editor/UndoIndicator'
 import { StickyLayer, addSticky } from '../editor/StickyNotes'
 import { FollowPill, PresenceStack, useFollow } from '../editor/Follow'
 import { MultiCursor } from '../editor/MultiCursor'
-import { Autocomplete } from '../editor/Autocomplete'
 import { CommandBar } from '../editor/CommandBar'
 import { NotionImport } from './NotionImport'
 import './wiki.css'
@@ -465,7 +464,7 @@ function PageView({ id, entry, crumbs, prev, next, tree, index, go, ydoc, ymeta,
     }),
     SlashCommand.configure({ extra: wikiSlashItems }),
     EmojiSuggest,
-    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets, TableFill, MultiCursor, Autocomplete.configure({ allowServer: () => !info.zk }),
+    ApiRequest, WikiBadge, WikiTabs, WikiTab, ProofreadMarks, ScrollAnchor, NonPrinting, Snippets, TableFill, MultiCursor,
   ], [provider, identity, ydoc, upload, id, info.id])
   const editorProps = useMemo(() => ({ attributes: { spellcheck: 'false', class: 'koko-prose' } }), [])
   const editor = useEditor({ editable: !readOnly, editorProps, extensions, shouldRerenderOnTransaction: false }, [])
