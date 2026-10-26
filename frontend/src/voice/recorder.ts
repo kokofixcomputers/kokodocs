@@ -54,7 +54,7 @@ export class Recorder {
     const all = new Float32Array(total)
     let o = 0
     for (const c of part) { all.set(c, o); o += c.length }
-    return encodeWav(downsample(all.length > want ? all.subarray(all.length - want) : all, rate, 16000), 16000)
+    return speechOnly(all.length > want ? all.subarray(all.length - want) : all, rate)   // (null when there is only quiet: nothing to preview)
   }
 
   /** Everything recorded so far as a 16 kHz WAV, and start again (for captions: one sentence at a time). */
@@ -66,6 +66,30 @@ export class Recorder {
     for (const c of this.chunks) { all.set(c, o); o += c.length }
     this.chunks = []
     return encodeWav(downsample(all, rate, 16000), 16000)
+  }
+
+  /** Everything recorded since the last cut, with the silence (and steady background noise) cut off both ends, and recording carries on.
+   *  Null when there was no speech in it: a speech model asked to "transcribe" quiet or noise makes words up. */
+  takeSpeech(): Blob | null {
+    if (!this.ctx) return null
+    const rate = this.ctx.sampleRate, total = this.chunks.reduce((n, c) => n + c.length, 0)
+    const all = new Float32Array(total)
+    let o = 0
+    for (const c of this.chunks) { all.set(c, o); o += c.length }
+    this.chunks = []
+    return speechOnly(all, rate)
+  }
+
+  /** Stop, and return what was recorded since the last cut with silence trimmed (null when it was only quiet). */
+  async finishSpeech(): Promise<Blob | null> {
+    const rate = this.ctx?.sampleRate ?? 48000
+    this.release()
+    const total = this.chunks.reduce((n, c) => n + c.length, 0)
+    const all = new Float32Array(total)
+    let o = 0
+    for (const c of this.chunks) { all.set(c, o); o += c.length }
+    this.chunks = []
+    return speechOnly(all, rate)
   }
 
   /** Keep only the last `seconds` (so the start of the next word isn't cut off). */
@@ -109,6 +133,22 @@ export class Recorder {
     void this.ctx?.close().catch(() => {})
     this.ctx = null; this.stream = null; this.analyser = null
   }
+}
+
+/** Finds the stretch of speech in a recording: frames clearly louder than the background (which an auto-gain microphone raises during pauses), a little padding either side. */
+export function speechOnly(x: Float32Array, rate: number): Blob | null {
+  const frame = Math.max(1, Math.floor(rate * 0.02)), n = Math.floor(x.length / frame)
+  if (n < 12) return null
+  const rms = new Float32Array(n)
+  for (let f = 0; f < n; f++) { let sum = 0; for (let i = f * frame; i < (f + 1) * frame; i++) sum += x[i] * x[i]; rms[f] = Math.sqrt(sum / frame) }
+  const sorted = [...rms].sort((a, b) => a - b), floor = sorted[Math.floor(n * 0.2)]
+  const th = Math.max(0.012, floor * 3)
+  let first = -1, last = -1, loud = 0
+  for (let f = 0; f < n; f++) if (rms[f] > th) { if (first < 0) first = f; last = f; loud++ }
+  if (loud < 12) return null   // less than a quarter of a second of anything louder than the room
+  const pad = Math.ceil(0.3 / 0.02)
+  const a = Math.max(0, first - pad) * frame, b = Math.min(n, last + pad + 1) * frame
+  return encodeWav(downsample(x.subarray(a, b), rate, 16000), 16000)
 }
 
 /** Box-filter downsample (averaging avoids the harsh aliasing you get from just dropping samples). */

@@ -145,8 +145,8 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
     if (!send || secs < MIN_SECONDS) { r.cancel(); session.current++; target.current = null; setP('idle'); return }
     setP('transcribing')
     try {
-      const rest = await r.finish()
-      if (seg.current.spoke || (submitted.current === 0 && peak >= 0.01)) submit(rest, sid)   // (a quiet voice that never crossed the pause detector still gets written)
+      const rest = await r.finishSpeech()
+      if (rest) submit(rest, sid)   // (silence is trimmed off, and a recording with no speech in it is never sent: speech models make words up from quiet)
       seg.current.spoke = false
       await queue.current
       if (!inserted.current) toast(peak < 0.01 ? "Didn't hear anything. Check your microphone." : "Didn't catch that. Try speaking a little closer to the mic.")
@@ -173,16 +173,18 @@ export function useVoiceTyping({ editor, docId, enabled: wanted, fieldsOnly = fa
       if ((phaseRef.current as Phase) !== 'listening') { r.cancel(); return } // released before the mic finished opening
       timer.current = window.setTimeout(() => { toast('Reached the 10 minute limit'); void stop() }, MAX_SECONDS * 1000)
       // talk as long as you like: at every pause what was said so far is written into the page, and listening carries on
-      let lastVoice = performance.now(), segStart = lastVoice
+      let lastVoice = performance.now(), segStart = lastVoice, floor = 0.02
       window.clearInterval(chunkTimer.current)
       chunkTimer.current = window.setInterval(() => {
         const rr = rec.current
         if (!rr || phaseRef.current !== 'listening' || session.current !== sid) return
         const now = performance.now()
-        if (rr.level() > 0.08) { seg.current.spoke = true; lastVoice = now }
+        const lvl = rr.level()
+        floor = lvl < floor ? lvl : floor + (lvl - floor) * 0.003   // the room's own noise level, which a microphone's auto-gain pushes up in pauses
+        if (lvl > Math.max(0.08, floor * 3)) { seg.current.spoke = true; lastVoice = now }
         const quiet = now - lastVoice, segSecs = (now - segStart) / 1000
         if (seg.current.spoke && ((quiet > 1000 && segSecs > 0.8) || (segSecs > 22 && quiet > 350))) {
-          const wav = rr.take(); seg.current.spoke = false; segStart = now; lastVoice = now; setDraft('')
+          const wav = rr.takeSpeech(); seg.current.spoke = false; segStart = now; lastVoice = now; setDraft('')
           if (wav) submit(wav, sid)
         }
       }, 120)

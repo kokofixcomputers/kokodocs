@@ -142,6 +142,10 @@ _draft_slots = asyncio.Semaphore(2)
 
 
 async def draft(audio: bytes, language: str | None = None, db=None) -> str:
+    return clean_transcript(await _draft(audio, language, db))
+
+
+async def _draft(audio: bytes, language: str | None = None, db=None) -> str:
     """A quick, rough transcript of the audio so far, from the small local model. Never spends API credits."""
     name = draft_model(db)
     if not name:
@@ -210,7 +214,7 @@ async def _cloudflare(c: "Cfg", audio: bytes, language: str | None) -> str:
 
 
 async def _remote(url: str, key: str | None, model: str, audio: bytes, filename: str, content_type: str, language: str | None) -> str:
-    data = {"model": model}
+    data = {"model": model, "temperature": "0"}   # (no random wandering: loops of "bye bye bye" come from sampling noise)
     if language:
         data["language"] = language
     headers = {"Authorization": f"Bearer {key}"} if key else {}
@@ -384,7 +388,59 @@ def _local_transcribe(audio: bytes, language: str | None, name: str) -> str:
     return text
 
 
+# What speech models "hear" in silence and noise, because their training data was subtitles of videos.
+_PHRASES = ("thank you for watching", "thanks for watching", "thank you so much for watching", "thank you very much for watching", "see you in the next video",
+            "see you next time", "see you in the next one", "please subscribe", "like and subscribe", "don't forget to subscribe", "subscribe to my channel",
+            "thank you for your time", "thank you very much for your time", "bye bye", "bye-bye", "i'll see you in the next video", "see you in the next video bye")
+_ALONE = {"thank you", "thanks", "bye", "you", "okay", "ok", "so", "uh", "um", "hmm", "mm", "the end", "thank you so much", "thanks for watching", "thank you very much"}
+
+
+def _norm(t: str) -> str:
+    return re.sub(r"[^\w\s']", "", t.lower()).strip()
+
+
+def clean_transcript(text: str) -> str:
+    """Throw away what a speech model makes up when there is nothing to hear: stock phrases from video outros, and endless repetition."""
+    t = (text or "").strip()
+    if not t:
+        return ""
+    # a stretch of words repeated again and again ("bye, bye, bye, ..."): keep one copy of it
+    toks = t.split()
+    out: list[str] = []
+    i = 0
+    while i < len(toks):
+        hit = False
+        for n in range(1, 7):
+            unit = [_norm(w) for w in toks[i:i + n]]
+            if len(unit) < n or not all(unit):
+                continue
+            reps = 1
+            while [_norm(w) for w in toks[i + reps * n:i + (reps + 1) * n]] == unit:
+                reps += 1
+            if reps >= 4:
+                out.extend(toks[i:i + n]); i += reps * n; hit = True
+                break
+        if not hit:
+            out.append(toks[i]); i += 1
+    t = " ".join(out)
+    if _norm(t) in _ALONE:
+        return ""
+    # a video-outro sentence tacked onto the end (or the start) of real words
+    sentences = re.split(r"(?<=[.!?])\s+", t)
+    def stock(sn: str) -> bool:
+        return any(p in _norm(sn) for p in _PHRASES) and len(_norm(sn).split()) <= 25
+    while sentences and stock(sentences[-1]):
+        sentences.pop()
+    while sentences and stock(sentences[0]):
+        sentences.pop(0)
+    return " ".join(sentences).strip()
+
+
 async def transcribe(audio: bytes, filename: str = "speech.wav", content_type: str = "audio/wav", language: str | None = None, db=None) -> str:
+    return clean_transcript(await _transcribe(audio, filename, content_type, language, db))
+
+
+async def _transcribe(audio: bytes, filename: str = "speech.wav", content_type: str = "audio/wav", language: str | None = None, db=None) -> str:
     c = config(db)
     if c is None or not c.ready:
         raise STTError("Voice typing isn't set up on this server", 503)
