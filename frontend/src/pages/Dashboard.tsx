@@ -380,6 +380,7 @@ export function Dashboard() {
                 <span className="muted doc-access">{f.link_access === 'anyone' ? <><Globe size={14} />Anyone with link</> : f.shared ? <><Users size={14} />Shared with {f.shared}</> : `${childCount(f.id)} item${childCount(f.id) === 1 ? '' : 's'}`}</span>
                 <span className="muted">{ago(f.created_at)}</span>
                 <span className="doc-menu" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" className="btn btn-soft btn-pill btn-sm doc-share" title="Share this folder" aria-label={`Share ${f.name}`} onClick={() => setShareFolder(f)}><Share2 size={15} /><span>Share</span></button>
                   <Popover align="end" trigger={({ toggle }) => <button className="icon-btn sm" onClick={toggle} aria-label="More"><MoreHorizontal size={18} /></button>}>
                     {(close) => (
                       <div className="menu">
@@ -422,6 +423,7 @@ export function Dashboard() {
                   <span className="muted doc-access"><A.icon size={14} />{A.label}</span>
                   <span className="muted">{ago(d.updated_at)}</span>
                   <span className="doc-menu" onClick={(e) => e.stopPropagation()}>
+                    {(mine || d.role === 'manager') && <button type="button" className="btn btn-soft btn-pill btn-sm doc-share" title="Share" aria-label={`Share ${d.title || 'this file'}`} onClick={() => void shareDocument(d)}><Share2 size={15} /><span>Share</span></button>}
                     {mine && (
                       <Popover align="end" trigger={({ toggle }) => <button className="icon-btn sm" onClick={toggle} aria-label="More"><MoreHorizontal size={18} /></button>}>
                         {(close) => (

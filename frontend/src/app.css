@@ -81,15 +81,15 @@ code { background: var(--accent-soft); padding: 1px 6px; border-radius: 6px; fon
 .count { background: var(--accent-soft); border-radius: 999px; padding: 0 8px; font-size: 12px; line-height: 18px; }
 .dash-bar .btn { margin-bottom: 8px; }
 .doc-list { display: grid; }
-.doc-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px 170px 130px 40px; align-items: center; gap: 12px; padding: 0 12px; height: 56px; border-radius: 12px; font-size: 14px; cursor: pointer; }
+.doc-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px 170px 130px 118px; align-items: center; gap: 12px; padding: 0 12px; height: 56px; border-radius: 12px; font-size: 14px; cursor: pointer; }
 .doc-row:not(.head):hover { background: var(--hover); }
 .doc-row.head { height: 40px; cursor: default; color: var(--faint); font-size: 12.5px; font-weight: 500; }
 .doc-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .doc-name { display: flex; align-items: center; gap: 14px; min-width: 0; } .doc-name b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .doc-name i { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); display: grid; place-items: center; flex: none; }
-.doc-access { display: flex; align-items: center; gap: 7px; } .doc-menu { display: flex; justify-content: flex-end; }
+.doc-access { display: flex; align-items: center; gap: 7px; } .doc-menu { display: flex; justify-content: flex-end; align-items: center; gap: 4px; } .doc-share { gap: 6px; flex: none; }
 .empty { padding: 72px 0; text-align: center; } .empty p { margin: 0 0 4px; }
-@media (max-width: 760px) { .doc-row { grid-template-columns: minmax(0, 1fr) 100px 40px; } .doc-row > :nth-child(2), .doc-row > :nth-child(3) { display: none; } .dash-top { padding: 10px 16px; } .dash-main { padding: 16px; } }
+@media (max-width: 760px) { .doc-row { grid-template-columns: minmax(0, 1fr) 100px 88px; } .doc-share span { display: none; } .doc-share { padding: 0 9px; } .doc-row > :nth-child(2), .doc-row > :nth-child(3) { display: none; } .dash-top { padding: 10px 16px; } .dash-main { padding: 16px; } }
 
 /* ── popovers / menus ── */
 .pop-anchor { display: inline-flex; }
