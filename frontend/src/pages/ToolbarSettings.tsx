@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { AlignLeft, ArrowLeft, ArrowRight, Baseline, Bold, Check, Code, FileCog, GitBranch, GitCompareArrows, Highlighter, History, ImagePlus, Info, Italic, Laptop, Link2, List, MessageSquare, Gauge,
   Mic, Minus, MoreHorizontal, PanelTop, Paintbrush, Pilcrow, Plus, Printer, Quote, Redo2, RemoveFormatting, RotateCcw, ScanText, Search, Shapes, Sigma, Smartphone, Smile, Sparkles, SpellCheck, StickyNote,
-  Strikethrough, Subscript, Sun, Superscript, Table2, Underline, Undo2, Volume2, WandSparkles, X, Download } from 'lucide-react'
+  Strikethrough, Subscript, Sun, Superscript, Table2, Underline, Undo2, Volume2, WandSparkles, X, Download, BookOpen } from 'lucide-react'
 import { DEFAULT_BARS, HEADER_ITEMS, PRESETS, TOOLBAR_ITEMS, profileLists, type BarItem, type BarProfile, type Preset } from '../editor/bars'
 import { saveBars, usePrefs } from '../prefs'
 import { Toggle } from '../extensions/Field'
@@ -18,7 +18,7 @@ const LOOK: Record<string, ReactNode> = {
   code: <Code size={I} />, sup: <Superscript size={I} />, sub: <Subscript size={I} />, clear: <RemoveFormatting size={I} />, voice: <Mic size={I} />,
   headerfooter: <><PanelTop size={I} />Header &amp; footer</>, pagesetup: <><FileCog size={I} />Page setup</>,
   comments: <MessageSquare size={I} />, assistant: <><Sparkles size={I} />Assistant</>, export: <Download size={I} />, history: <History size={I} />, proofread: <><SpellCheck size={I} />Proofread</>,
-  compare: <GitCompareArrows size={I} />, branch: <GitBranch size={I} />, insights: <Gauge size={I} />, readaloud: <Volume2 size={I} />, theme: <Sun size={I} />,
+  compare: <GitCompareArrows size={I} />, branch: <GitBranch size={I} />, insights: <Gauge size={I} />, readaloud: <Volume2 size={I} />, reader: <BookOpen size={I} />, theme: <Sun size={I} />,
 }
 const WIDE = new Set(['style', 'font', 'size', 'headerfooter', 'pagesetup', 'assistant', 'proofread'])
 

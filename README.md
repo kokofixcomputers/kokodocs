@@ -572,6 +572,10 @@ A file made by a newer KokoDocs is refused with a message, and a damaged one is 
 
 The ¶ button in the toolbar of a document or wiki (or ⌘⇧8 / Ctrl+Shift+8, Word's own shortcut) shows the characters you can't normally see: ¶ at the end of every paragraph, a dot on every space, → on tabs, ° on non-breaking spaces and ↵ on line breaks. They are only drawn over the text: the document is never changed, they don't print, and they can't be selected or copied. The choice is remembered. A very long document shows them for its first part only, so typing stays quick (typing measured at about 1 ms a key with 19,000 spaces marked). Tests: see `frontend/src/editor/NonPrinting.ts`.
 
+## Reader mode
+
+The book icon in the top bar (Standard layout and up; otherwise under ⋯) hides everything you edit with: the title bar, the formatting bar, the side panels, the word-count pill and the voice and assistant buttons. The page fills the screen and can't be typed in. A small pill at the top right has **Exit reader mode** and a light/dark switch; **Esc** also exits. The zoom pill and Ctrl/⌘ + F stay. Open a document with `?reader=1` on its link to start in reader mode. Documents only for now (wikis, sheets and slides keep their own bars). Code: `reader` in `editor/DocEditor.tsx`, styles at the end of `editor.css`, the button in `editor/bars.ts`.
+
 ## Read aloud (text to speech)
 
 The speaker button in the top bar of a document or wiki reads the page aloud, or just what you have selected. A floating pill (like the voice typing one) has play and pause, a sentence back and forward, and slower and faster (0.75× to 2×); the sentence being read is highlighted and scrolled into view.

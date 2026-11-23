@@ -23,7 +23,7 @@ export const TOOLBAR_ITEMS: BarItem[] = [
 ]
 export const HEADER_ITEMS: BarItem[] = [
   { id: 'comments', label: 'Comments', level: 1 }, { id: 'assistant', label: 'Assistant', level: 1 },
-  { id: 'export', label: 'Download', level: 2 }, { id: 'history', label: 'Version history', level: 2 }, { id: 'proofread', label: 'Proofread', level: 2 },
+  { id: 'export', label: 'Download', level: 2 }, { id: 'reader', label: 'Reader mode', level: 2 }, { id: 'history', label: 'Version history', level: 2 }, { id: 'proofread', label: 'Proofread', level: 2 },
   { id: 'compare', label: 'Compare', level: 3 }, { id: 'branch', label: 'Branch', level: 3 }, { id: 'insights', label: 'Insights', level: 3 }, { id: 'readaloud', label: 'Read aloud', level: 3 }, { id: 'theme', label: 'Light or dark', level: 3 },
 ]
 

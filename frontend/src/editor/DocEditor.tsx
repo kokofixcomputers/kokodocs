@@ -14,7 +14,7 @@ import { EditorContent, useEditor } from '@tiptap/react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import { MoreHorizontal, SlidersHorizontal, Gauge, GitCompareArrows, Cloud, CloudOff, History, LogIn, X, MessageSquare, Moon, PanelLeft, Share2, Sparkles, SpellCheck, Sun, Loader2 } from 'lucide-react'
+import { MoreHorizontal, SlidersHorizontal, Gauge, GitCompareArrows, Cloud, CloudOff, History, LogIn, X, MessageSquare, Moon, PanelLeft, Share2, Sparkles, SpellCheck, Sun, Loader2, BookOpen } from 'lucide-react'
 import { api, ApiError, type DocInfo, type Version } from '../api'
 import { useAuth } from '../auth'
 const AssistantHost = lazy(() => import('../assistant/AssistantHost'))
@@ -138,6 +138,13 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
   const [hf, setHf] = useState(false)
   const [setup, setSetup] = useState(false)
   const [find, setFindOpen] = useState<{ replace: boolean; n: number } | null>(null)
+  const [reader, setReader] = useState(() => new URLSearchParams(window.location.search).has('reader'))   // reader mode: just the page, nothing to edit with
+  useEffect(() => {
+    if (!reader) return
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented && !(e.target as HTMLElement | null)?.closest?.('input, textarea')) setReader(false) }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [reader])
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return
@@ -349,6 +356,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
 
   if (import.meta.env.DEV && editor) (window as any).__koko = editor
 
+  useEffect(() => { editor?.setEditable(!readOnly && !reader) }, [editor, readOnly, reader])
   const barLayout = useBarLayout(), shownHeader = barLayout.header
   if (!editor) return <div className="splash"><span className="spinner" /></div>
 
@@ -366,6 +374,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       { id: 'branch', label: 'Branch', node: () => <BranchButton docId={info.id} title={info.title} icon /> },
     ] : []),
     ...(!preview ? [{ id: 'insights', label: 'Insights', node: (close?: () => void) => <button className={`icon-btn ${panel === 'insights' ? 'active' : ''}`} title="Insights: readability, tone and word count" aria-label="Insights" onClick={() => { close?.(); setPanel((p) => (p === 'insights' ? 'none' : 'insights')) }}><Gauge size={19} /></button> }] : []),
+    { id: 'reader', label: 'Reader mode', node: (close?: () => void) => <button className="icon-btn" title="Reader mode: hide everything but the page" aria-label="Reader mode" onClick={() => { close?.(); setReader(true); setPanel('none') }}><BookOpen size={19} /></button> },
     { id: 'readaloud', label: 'Read aloud', node: () => <ReadAloud plain={!!info.zk} /> },
     ...(user && !preview ? [{ id: 'assistant', label: 'Assistant', node: (close?: () => void) => (
       <button className={`btn btn-pill btn-soft ${panel === 'assistant' ? 'active' : ''}`} onClick={() => { close?.(); setPanel((p) => (p === 'assistant' ? 'none' : 'assistant')) }}><Sparkles size={17} /><span className="lbl">Assistant</span></button>) }] : []),
@@ -377,7 +386,7 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
     { id: 'theme', label: 'Light or dark', node: () => <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button> },
   ]
   return (
-    <div className="editor-shell">
+    <div className={`editor-shell ${reader ? 'reader' : ''}`}>
       <header className="ed-top">
         <div className="ed-left">
           <button className={`icon-btn ${leftOpen ? 'active' : ''}`} onClick={() => setLeftOpen((o) => !o)} aria-label="Toggle document tabs" title="Document tabs"><PanelLeft size={19} /></button>
@@ -418,6 +427,13 @@ function Inner({ info, ydoc, provider, identity, readOnly, theme, toggleTheme, u
       </header>
 
       <div className="ed-toolbar-wrap"><Toolbar voice={voice} docId={info.id} editor={editor} onImage={(f) => upload(f).then((src) => editor.chain().focus().setImage({ src, width: 360 } as any).run()).catch((e) => toast(e.message))} onHeaderFooter={() => setHf(true)} onPageSetup={() => setSetup(true)} onFind={() => setFindOpen((o) => ({ replace: o?.replace ?? false, n: (o?.n ?? 0) + 1 }))} onSticky={readOnly ? undefined : () => addSticky(ydoc, 'stickies')} /></div>
+
+      {reader && (
+        <div className="reader-bar" role="toolbar" aria-label="Reader mode">
+          <button className="btn btn-pill btn-soft btn-sm" onClick={() => setReader(false)} title="Back to editing (Esc)"><X size={15} />Exit reader mode</button>
+          <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme" title="Light or dark">{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
+        </div>
+      )}
 
       <div className="ed-body">
         {find && editor && !preview && <FindBar key={find.n} editor={editor} withReplace={find.replace} onClose={() => setFindOpen(null)} />}

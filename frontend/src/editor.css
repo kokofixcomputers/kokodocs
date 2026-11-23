@@ -751,3 +751,16 @@ html.embed .ed-body { padding: 0; }
 @keyframes vt-pulse { 0%, 100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.1); } }
 
 .vc-more { width: 22px !important; min-width: 22px !important; margin-left: -6px; opacity: .8; }
+
+/* Reader mode: the page and nothing else, plus a small way back */
+.editor-shell.reader .ed-top, .editor-shell.reader .ed-toolbar-wrap, .editor-shell.reader .side, .editor-shell.reader .stats-pill,
+.editor-shell.reader .voice-fab, .editor-shell.reader .voice-pill, .editor-shell.reader .assistant-fab, .editor-shell.reader .undo-pill,
+.editor-shell.reader .ed-body > .sync-banner { display: none !important; }
+.editor-shell.reader .ed-body { padding: 0; }
+.editor-shell.reader .canvas { border-radius: 0; padding-top: 56px; }
+.editor-shell.reader .sheet { box-shadow: none; }
+.editor-shell.reader .ProseMirror { caret-color: transparent; cursor: auto; }
+.reader-bar { position: fixed; top: 10px; right: 14px; z-index: 60; display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface); box-shadow: 0 6px 22px rgba(0, 0, 0, .16), 0 0 0 1px var(--line); opacity: .55; transition: opacity .15s; }
+.reader-bar:hover, .reader-bar:focus-within { opacity: 1; }
+@media (hover: none) { .reader-bar { opacity: 1; } }
+@media print { .reader-bar { display: none !important; } }
