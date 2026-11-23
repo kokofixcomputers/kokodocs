@@ -718,3 +718,9 @@ Click the microphone in the toolbar once (or the floating mic on a phone) and ju
 ### Voice typing and made-up words
 
 Speech models "hear" stock phrases (*Thank you for watching*, *see you in the next video*, endless *bye bye*) in silence and background noise. Three guards: the browser trims silence off every phrase, ignores steady noise (it tracks the room's own level, so a microphone's auto-gain can't turn hiss into speech) and never sends a recording that has no speech in it (`speechOnly` in `voice/recorder.ts`); requests go out with temperature 0; and the server drops outro phrases and collapses any word repeated four or more times in a row (`clean_transcript` in `backend/app/stt.py`, tests in `tests/test_stt_clean.py`). Real sentences that merely contain *thank you* are left alone.
+
+## FAQ page
+
+`/faq` (linked from the top bar, the footer and the home page): how-to answers with real screenshots, as animated accordions (smooth open and close, steps that slide in one by one, a search box, topic filters, *Expand all*, and addresses like `/faq#share-folders` that open that answer). Content is the `ITEMS` list in `frontend/src/pages/Faq.tsx`; add a question there and, if it needs a picture, a shot name.
+
+The screenshots (`frontend/public/shots/faq-*.jpg` with `-dark` twins) are real captures of the app. To retake them after the interface changes: build the frontend, then `cd tools/faq-shots && npm i && node faq-shots.mjs` (or `node faq-shots.mjs faq-share-file` for one). The script starts a fresh local backend, seeds a demo team and files, and captures every shot in light and dark. `BROWSER=/path/to/chromium` picks the browser.

@@ -1,0 +1,1 @@
+{ "name": "faq-shots", "private": true, "type": "module", "description": "Captures the screenshots used on the FAQ page from a seeded local KokoDocs", "dependencies": { "puppeteer-core": "^23.0.0" } }

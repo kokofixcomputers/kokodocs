@@ -159,7 +159,7 @@ export function Home() {
         <div className="mk-faq-list">
           {FAQ.map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}
         </div>
-        <p className="mk-faq-more">Want the details on running it? <Link to="/self-host">Read the self-host guide</Link> or <Link to="/why">see why people choose it</Link>.</p>
+        <p className="mk-faq-more">Looking for how-tos with screenshots? <Link to="/faq">See the FAQ</Link>. Want the details on running it? <Link to="/self-host">Read the self-host guide</Link> or <Link to="/why">see why people choose it</Link>.</p>
       </section>
 
       <section className="home-end">

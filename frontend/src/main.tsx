@@ -9,6 +9,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Home } from './pages/Home'
 import { Features } from './pages/Features'
 import { Why } from './pages/Why'
+import { Faq } from './pages/Faq'
 import { SelfHost } from './pages/SelfHost'
 import { VoiceDemoFrame } from './marketing/VoiceDemo'
 import { EditorPage } from './pages/EditorPage'
@@ -78,6 +79,7 @@ if (!ssoPopupLanding()) ReactDOM.createRoot(document.getElementById('root')!).re
           <Route path="/" element={<Root />} />
           <Route path="/features" element={<Features />} />
           <Route path="/why" element={<Why />} />
+          <Route path="/faq" element={<Faq />} />
           <Route path="/self-host" element={<SelfHost />} />
           {import.meta.env.DEV && <Route path="/__demo/voice" element={<VoiceDemoFrame />} />}
           <Route path="/admin" element={<RequireAuth><AdminPage /></RequireAuth>} />

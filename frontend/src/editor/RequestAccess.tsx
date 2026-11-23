@@ -23,11 +23,13 @@ export function RequestAccess({ info }: { info: DocInfo }) {
       <button className="btn btn-pill btn-soft req-edit" onClick={() => setOpen(true)} disabled={sent}><Pencil size={16} /><span className="lbl">{sent ? 'Requested' : 'Request edit access'}</span></button>
       {open && (
         <Modal title="Request edit access" onClose={() => setOpen(false)} width={440}>
-          <p className="muted">We’ll email {info.owner ?? 'the owner'} that you’d like to edit “{info.title}”. They can say yes from the Share dialog.</p>
-          <label className="field"><textarea rows={3} maxLength={500} placeholder="Add a note (optional)" value={msg} onChange={(e) => setMsg(e.target.value)} style={{ width: '100%', resize: 'vertical', background: 'transparent', border: 0, outline: 0, color: 'inherit', font: 'inherit' }} /></label>
+          <div className="share-body">
+          <p className="muted" style={{ margin: 0 }}>We’ll email {info.owner ?? 'the owner'} that you’d like to edit “{info.title}”. They can say yes from the Share dialog.</p>
+          <label className="field" style={{ height: 'auto', borderRadius: 16, padding: '10px 14px', alignItems: 'flex-start' }}><textarea rows={3} maxLength={500} placeholder="Add a note (optional)" value={msg} onChange={(e) => setMsg(e.target.value)} style={{ width: '100%', resize: 'vertical', background: 'transparent', border: 0, outline: 0, color: 'inherit', font: 'inherit' }} /></label>
           <div className="modal-actions">
             <button className="btn btn-pill btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
             <button className="btn btn-pill btn-primary" disabled={busy} onClick={send}>{busy ? <span className="spinner sm" /> : 'Send request'}</button>
+          </div>
           </div>
         </Modal>
       )}
