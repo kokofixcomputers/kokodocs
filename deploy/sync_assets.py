@@ -4,7 +4,7 @@ SFTP Sync Script for KokoDocs Assets - Fast & Accurate
 
 Syncs:
 - backend/app, backend/main.py and the requirements files (plain overwrite, no scanning or deleting)
-- All files from frontend/dist/assets/ (size comparison)
+- All files from frontend/dist/assets/ and frontend/dist/shots/ (size comparison)
 - Special files: frontend/dist/index.html and frontend/dist/version.js (hash comparison)
 
 To remote: sftp://hosting.kokodev.cc:2022
@@ -93,7 +93,8 @@ BACKEND_FILES = ["main.py", "gunicorn_conf.py", "requirements.txt", "requirement
 ROOT_FILES = ["run.py", "requirements.txt", "requirements-local.txt"]   # the start-up script and requirements next to the backend and frontend folders
 LOCAL_ROOT = "/Users/ct/Documents/kokodocs"
 BACKEND_SKIP_DIRS = {"__pycache__"}
-SPECIAL_FILES = {"index.html", "version.js"}
+SPECIAL_FILES = {"index.html", "version.js", "sw.js", "favicon.svg"}   # (sw.js lists the build's files: a stale one makes browsers hold on to old pages)
+EXTRA_DIRS = ["shots"]   # more folders of frontend/dist that change: the screenshots on the home, features and FAQ pages (compared by size, like assets)
 HASH_ALGORITHM = "sha256"
 MAX_THREADS = 10
 
@@ -322,6 +323,10 @@ def sync_assets():
         
         # Scan remote assets
         remote_assets = list_remote_files(main_sftp, REMOTE_ASSETS)
+        for extra in EXTRA_DIRS:   # keyed "shots/name.jpg" so they sit beside the assets in one comparison
+            rdir = normalize_path(os.path.join(REMOTE_SPECIAL_DIR, extra))
+            for rel, info in list_remote_files(main_sftp, rdir).items():
+                remote_assets[f"{extra}/{rel}"] = info
         p(f"  Found {C.GREEN}{len(remote_assets)}{C.R} remote asset files")
         
         # Scan remote special files
@@ -339,6 +344,10 @@ def sync_assets():
         
         # Scan local assets
         local_assets = list_local_files(LOCAL_ASSETS)
+        for extra in EXTRA_DIRS:
+            for rel, info in list_local_files(os.path.join(LOCAL_SPECIAL_DIR, extra)).items():
+                info['remote'] = normalize_path(os.path.join(REMOTE_SPECIAL_DIR, extra, rel))
+                local_assets[f"{extra}/{rel}"] = info
         p(f"  Found {C.GREEN}{len(local_assets)}{C.R} local asset files")
         
         # Scan local special files
@@ -364,7 +373,7 @@ def sync_assets():
                     continue
                 files_to_upload.append((rel_path, local_info['path'], remote_info['path'], "CHANGED"))
             else:
-                full_remote = normalize_path(os.path.join(REMOTE_ASSETS, rel_path))
+                full_remote = local_info.get('remote') or normalize_path(os.path.join(REMOTE_ASSETS, rel_path))
                 files_to_upload.append((rel_path, local_info['path'], full_remote, "NEW"))
         
         # Compare special files (hash verification)
